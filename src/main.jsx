@@ -21,6 +21,8 @@ const ROCKET_LIFETIME_MS = 12000;
 const ROCKET_RANGE = 640;
 const PLANE_SPRITE_ASPECT = 935 / 1620;
 const BOT_START_X = START_X + 118;
+const BOT_SPAWN_MARGIN = 44;
+const BOT_RESPAWN_MIN_GAP = 120;
 const BOT_WAKE_DISTANCE = 96;
 const BOT_FORGET_DISTANCE = 118;
 const BOT_AVOID_DISTANCE = 42;
@@ -247,9 +249,20 @@ function createInitialPlaneState() {
   };
 }
 
-function createInitialBotState() {
+function getRandomBotSpawnX(previousX = null) {
+  const minX = BOT_SPAWN_MARGIN;
+  const maxX = WORLD_WIDTH - BOT_SPAWN_MARGIN;
+  let x = BOT_START_X;
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    x = minX + Math.random() * (maxX - minX);
+    if (previousX == null || Math.abs(x - previousX) >= BOT_RESPAWN_MIN_GAP) return x;
+  }
+  return previousX == null || previousX < WORLD_WIDTH / 2 ? maxX - Math.random() * 80 : minX + Math.random() * 80;
+}
+
+function createInitialBotState(previousX = null) {
   return {
-    x: BOT_START_X,
+    x: getRandomBotSpawnX(previousX),
     y: 0,
     vx: 0,
     vy: 0,
@@ -456,9 +469,9 @@ function App() {
     setAmmoStatus({ count: MAX_BULLETS, reloading: false });
     setRocketCount(MAX_ROCKETS);
     playerStateRef.current = createInitialPlaneState();
-    botStateRef.current = createInitialBotState();
+    botStateRef.current = createInitialBotState(botStateRef.current?.x);
     if (mapBotDotRef.current) {
-      mapBotDotRef.current.style.left = `${Math.max(2, Math.min(98, (BOT_START_X / WORLD_WIDTH) * 100))}%`;
+      mapBotDotRef.current.style.left = `${Math.max(2, Math.min(98, (botStateRef.current.x / WORLD_WIDTH) * 100))}%`;
       mapBotDotRef.current.style.top = `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`;
     }
     updateCamera({ x: getCameraX(START_X), y: getCameraY(0) });
@@ -839,7 +852,7 @@ function App() {
           ref={mapBotDotRef}
           className="map-bot-dot"
           style={{
-            left: `${Math.max(2, Math.min(98, (BOT_START_X / WORLD_WIDTH) * 100))}%`,
+            left: `${Math.max(2, Math.min(98, (botStateRef.current.x / WORLD_WIDTH) * 100))}%`,
             top: `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`,
           }}
         />
@@ -2269,18 +2282,18 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
     rocketReloadingRef.current = false;
     lastShotRef.current = 0;
     lastRocketRef.current = 0;
-    stateRef.current = createInitialBotState();
+    const nextBot = createInitialBotState(stateRef.current?.x);
+    stateRef.current = nextBot;
     setBotBullets([]);
     setBotRockets([]);
     setBotRocketsRemaining(MAX_ROCKETS);
     setBotDamage(0);
     setBotCrashed(false);
     if (botRef.current) {
-      const next = stateRef.current;
-      botRef.current.style.transform = `translate(${next.x}vw, ${-next.y}vh) rotate(${next.angle}deg)`;
+      botRef.current.style.transform = `translate(${nextBot.x}vw, ${-nextBot.y}vh) rotate(${nextBot.angle}deg)`;
       botRef.current.style.setProperty('--thrust', 0);
     }
-    onBotMove(createInitialBotState());
+    onBotMove(nextBot);
   }, [active, restartSignal, onBotMove]);
 
   useEffect(() => () => {
@@ -2616,7 +2629,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       let next = stateRef.current;
       if (next.crashed) {
         if (now - next.crashTime > 1650) {
-          next = createInitialBotState();
+          next = createInitialBotState(next.x);
           stateRef.current = next;
           rocketCountRef.current = MAX_ROCKETS;
           ammoRef.current = MAX_BULLETS;
@@ -2665,7 +2678,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
         ref={botRef}
         className={`player-plane bot-plane${botCrashed ? ' plane-crashed' : ''}${botDamage > 0 && !botCrashed ? ' plane-damaged' : ''}`}
         style={{
-          transform: `translate(${BOT_START_X}vw, 0vh) rotate(18deg)`,
+          transform: `translate(${stateRef.current.x}vw, ${-stateRef.current.y}vh) rotate(${stateRef.current.angle}deg)`,
           '--thrust': 0,
         }}
       >
