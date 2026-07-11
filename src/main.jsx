@@ -20,6 +20,11 @@ const ROCKET_COOLDOWN_MS = 520;
 const ROCKET_LIFETIME_MS = 12000;
 const ROCKET_RANGE = 640;
 const PLANE_SPRITE_ASPECT = 935 / 1620;
+const BOT_START_X = START_X + 118;
+const BOT_BULLET_COOLDOWN_MS = 280;
+const BOT_ROCKET_COOLDOWN_MS = 3800;
+const BOT_BULLET_RELOAD_MS = 5200;
+const BOT_ROCKET_RELOAD_MS = 11500;
 const MUSIC_TRACKS = [
   'alisiabeats-titanium-170190.mp3',
   'kulakovka-deep-house-273895.mp3',
@@ -53,9 +58,14 @@ const PLANE_COLOR_ASSETS = {
     staticSrc: '/assets/exact-plane-yellow.png',
     noPropSrc: '/assets/exact-plane-no-prop-yellow.png',
   },
+  purple: {
+    label: 'Purple',
+    staticSrc: '/assets/exact-plane-purple.png',
+    noPropSrc: '/assets/exact-plane-no-prop-purple.png',
+  },
 };
 
-const PLANE_COLOR_OPTIONS = Object.entries(PLANE_COLOR_ASSETS).map(([id, asset]) => ({ id, ...asset }));
+const PLANE_COLOR_OPTIONS = ['blue', 'red', 'yellow'].map((id) => ({ id, ...PLANE_COLOR_ASSETS[id] }));
 
 const PLANE_LIGHT_COMBOS = {
   classic: {
@@ -91,9 +101,20 @@ const PLANE_LIGHT_COMBOS = {
     backGlowSoft: 'rgba(215, 255, 56, 0.72)',
     backGlowWide: 'rgba(215, 255, 56, 0.44)',
   },
+  botYellow: {
+    label: 'Yellow and yellow',
+    front: '#ffe53a',
+    back: '#ffe53a',
+    frontGlow: 'rgba(255, 229, 58, 0.98)',
+    frontGlowSoft: 'rgba(255, 229, 58, 0.72)',
+    frontGlowWide: 'rgba(255, 201, 31, 0.48)',
+    backGlow: 'rgba(255, 229, 58, 0.98)',
+    backGlowSoft: 'rgba(255, 229, 58, 0.72)',
+    backGlowWide: 'rgba(255, 201, 31, 0.48)',
+  },
 };
 
-const PLANE_LIGHT_OPTIONS = Object.entries(PLANE_LIGHT_COMBOS).map(([id, combo]) => ({ id, ...combo }));
+const PLANE_LIGHT_OPTIONS = ['classic', 'amberCyan', 'violetLime'].map((id) => ({ id, ...PLANE_LIGHT_COMBOS[id] }));
 
 function seededRandom(seed) {
   const value = Math.sin(seed * 12.9898) * 43758.5453;
@@ -221,6 +242,20 @@ function createInitialPlaneState() {
   };
 }
 
+function createInitialBotState() {
+  return {
+    x: BOT_START_X,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    angle: 18,
+    turnRate: 0,
+    thrust: 0,
+    throttle: 0,
+    airborne: false,
+  };
+}
+
 function getPlanePoint(plane, point) {
   const localX = (point.x + planeModel.visualOffsetX / 100) * planeModel.widthVw;
   const localY = -(point.y + planeModel.visualOffsetY / 100) * planeModel.heightVh;
@@ -243,6 +278,15 @@ function getRenderedPlanePoint(plane, point) {
     x: plane.x + ((localX * Math.cos(rad) - localY * Math.sin(rad)) / viewportWidth) * 100,
     y: plane.y + ((localX * Math.sin(rad) + localY * Math.cos(rad)) / viewportHeight) * 100,
   };
+}
+
+function pointHitsPlane(point, plane, radius = 0.9) {
+  return planeModel.hitPoints.some((hitPoint) => {
+    const targetPoint = getPlanePoint(plane, hitPoint);
+    const dx = (point.x - targetPoint.x) * 1.35;
+    const dy = point.y - targetPoint.y;
+    return Math.hypot(dx, dy) <= radius;
+  });
 }
 
 function getGroundClippedProjectile(startYVh, dxPx, dyPx, fullLifeMs, minLifeMs) {
@@ -309,6 +353,8 @@ function App() {
   const mapPointerRef = useRef(null);
   const mapDotRef = useRef(null);
   const fuelGaugeRef = useRef(null);
+  const playerStateRef = useRef(createInitialPlaneState());
+  const playerApiRef = useRef(null);
   const musicAudioRef = useRef(null);
   const shootingStarTimersRef = useRef([]);
   const startGame = useCallback(() => {
@@ -376,10 +422,14 @@ function App() {
     setDroppings([]);
     setAmmoStatus({ count: MAX_BULLETS, reloading: false });
     setRocketCount(MAX_ROCKETS);
+    playerStateRef.current = createInitialPlaneState();
     updateCamera({ x: getCameraX(START_X), y: getCameraY(0) });
     updateFuelGauge(1);
     setRestartSignal((signal) => signal + 1);
   }, [updateCamera, updateFuelGauge]);
+  const updatePlayerState = useCallback((nextState) => {
+    playerStateRef.current = nextState;
+  }, []);
   const addDropping = useCallback((x) => {
     const id = `${Date.now()}-${Math.random()}`;
     setDroppings((items) => [...items, { id, x }]);
@@ -833,6 +883,8 @@ function App() {
             onFuelChange={updateFuelGauge}
             onAmmoChange={updateAmmoStatus}
             onRocketChange={updateRocketStatus}
+            onPlaneState={updatePlayerState}
+            playerApiRef={playerApiRef}
             controlsEnabled={gameStarted && !paused}
             paused={paused}
             restartSignal={restartSignal}
@@ -841,6 +893,13 @@ function App() {
             planeColor={planeColor}
             planeLightCombo={planeLightCombo}
             sfxMuted={sfxMuted}
+          />
+          <BotPlane
+            active={gameStarted}
+            paused={paused}
+            restartSignal={restartSignal}
+            playerStateRef={playerStateRef}
+            playerApiRef={playerApiRef}
           />
           <div className="grass-plants">
             {mapGrassPlants.map((plant, index) => (
@@ -912,6 +971,8 @@ function PlayablePlane({
   onFuelChange,
   onAmmoChange,
   onRocketChange,
+  onPlaneState,
+  playerApiRef,
   controlsEnabled,
   paused,
   restartSignal,
@@ -973,6 +1034,7 @@ function PlayablePlane({
     onRocketChange(MAX_ROCKETS);
     onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
     onFuelChange(1);
+    onPlaneState(next);
     if (engineAudioRef.current) {
       engineAudioRef.current.master.gain.setTargetAtTime(0, engineAudioRef.current.context.currentTime, 0.025);
     }
@@ -981,7 +1043,40 @@ function PlayablePlane({
       planeRef.current.style.setProperty('--thrust', 0);
       planeRef.current.querySelector('.plane-visual')?.classList.remove('prop-spinning');
     }
-  }, [restartSignal, onAmmoChange, onRocketChange, onMove, onFuelChange]);
+  }, [restartSignal, onAmmoChange, onRocketChange, onMove, onFuelChange, onPlaneState]);
+
+  useEffect(() => {
+    if (!playerApiRef) return undefined;
+    playerApiRef.current = {
+      crash: (impact = 1.2) => {
+        const current = stateRef.current;
+        if (current.crashed) return;
+        const next = {
+          ...current,
+          crashed: true,
+          crashTime: performance.now(),
+          crashImpact: clamp(impact, 0.75, 1.8),
+          thrust: 0,
+          throttle: 0,
+          turnRate: 0,
+          vx: 0,
+          vy: 0,
+        };
+        stateRef.current = next;
+        keysRef.current.clear();
+        crashedRef.current = true;
+        setCrashed(true);
+        crashSoundRef.current?.(next.crashImpact);
+        onPlaneState(next);
+        if (engineAudioRef.current) {
+          engineAudioRef.current.master.gain.setTargetAtTime(0, engineAudioRef.current.context.currentTime, 0.025);
+        }
+      },
+    };
+    return () => {
+      if (playerApiRef.current) playerApiRef.current = null;
+    };
+  }, [playerApiRef, onPlaneState]);
 
   useEffect(() => {
     sfxMutedRef.current = sfxMuted;
@@ -1822,6 +1917,7 @@ function PlayablePlane({
           next = createInitialPlaneState();
           onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
           onFuelChange(next.fuel / FUEL_SECONDS);
+          onPlaneState(next);
           crashedRef.current = false;
           setCrashed(false);
         }
@@ -1845,6 +1941,7 @@ function PlayablePlane({
       stateRef.current = next;
       onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
       onFuelChange(next.fuel / FUEL_SECONDS);
+      onPlaneState(next);
       if (next.crashed !== crashedRef.current) {
         if (next.crashed) crashSoundRef.current?.(next.crashImpact);
         crashedRef.current = next.crashed;
@@ -1880,7 +1977,7 @@ function PlayablePlane({
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [onMove, onFuelChange]);
+  }, [onMove, onFuelChange, onPlaneState]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
@@ -1950,6 +2047,404 @@ function PlayablePlane({
           <i className="smoke smoke-five" />
         </span>
       )}
+    </div>
+  );
+}
+
+function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef }) {
+  const botRef = useRef(null);
+  const stateRef = useRef(createInitialBotState());
+  const bulletsRef = useRef([]);
+  const rocketsRef = useRef([]);
+  const bulletTimeoutsRef = useRef([]);
+  const rocketTimeoutsRef = useRef([]);
+  const ammoRef = useRef(MAX_BULLETS);
+  const reloadingRef = useRef(false);
+  const rocketCountRef = useRef(MAX_ROCKETS);
+  const rocketReloadingRef = useRef(false);
+  const lastShotRef = useRef(0);
+  const lastRocketRef = useRef(0);
+  const [botBullets, setBotBullets] = useState([]);
+  const [botRockets, setBotRockets] = useState([]);
+  const [botRocketsRemaining, setBotRocketsRemaining] = useState(MAX_ROCKETS);
+
+  useEffect(() => {
+    bulletTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    rocketTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    bulletTimeoutsRef.current = [];
+    rocketTimeoutsRef.current = [];
+    bulletsRef.current = [];
+    rocketsRef.current = [];
+    ammoRef.current = MAX_BULLETS;
+    reloadingRef.current = false;
+    rocketCountRef.current = MAX_ROCKETS;
+    rocketReloadingRef.current = false;
+    lastShotRef.current = 0;
+    lastRocketRef.current = 0;
+    stateRef.current = createInitialBotState();
+    setBotBullets([]);
+    setBotRockets([]);
+    setBotRocketsRemaining(MAX_ROCKETS);
+    if (botRef.current) {
+      const next = stateRef.current;
+      botRef.current.style.transform = `translate(${next.x}vw, ${-next.y}vh) rotate(${next.angle}deg)`;
+      botRef.current.style.setProperty('--thrust', 0);
+    }
+  }, [active, restartSignal]);
+
+  useEffect(() => () => {
+    bulletTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    rocketTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+  }, []);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    let frame = 0;
+    let last = performance.now();
+    let accumulator = 0;
+    const step = 1 / 90;
+
+    const removeBullet = (id) => {
+      bulletsRef.current = bulletsRef.current.filter((item) => item.id !== id);
+      setBotBullets(bulletsRef.current);
+    };
+
+    const removeRocket = (id) => {
+      rocketsRef.current = rocketsRef.current.filter((item) => item.id !== id);
+      setBotRockets(rocketsRef.current);
+    };
+
+    const startBulletReload = () => {
+      if (reloadingRef.current) return;
+      reloadingRef.current = true;
+      const timeoutId = window.setTimeout(() => {
+        ammoRef.current = MAX_BULLETS;
+        reloadingRef.current = false;
+        bulletTimeoutsRef.current = bulletTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
+      }, BOT_BULLET_RELOAD_MS);
+      bulletTimeoutsRef.current.push(timeoutId);
+    };
+
+    const startRocketReload = () => {
+      if (rocketReloadingRef.current) return;
+      rocketReloadingRef.current = true;
+      const timeoutId = window.setTimeout(() => {
+        rocketCountRef.current = MAX_ROCKETS;
+        rocketReloadingRef.current = false;
+        setBotRocketsRemaining(MAX_ROCKETS);
+        rocketTimeoutsRef.current = rocketTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
+      }, BOT_ROCKET_RELOAD_MS);
+      rocketTimeoutsRef.current.push(timeoutId);
+    };
+
+    const fireBotBullet = (bot, now) => {
+      if (reloadingRef.current || ammoRef.current <= 0 || now - lastShotRef.current < BOT_BULLET_COOLDOWN_MS) return;
+      lastShotRef.current = now;
+      ammoRef.current -= 1;
+      const rad = (bot.angle * Math.PI) / 180;
+      const forwardX = -Math.cos(rad);
+      const forwardY = Math.sin(rad);
+      const bulletRangePx = window.innerWidth * (BULLET_RANGE / 100);
+      const muzzle = getRenderedPlanePoint(bot, BULLET_MUZZLE_POINT);
+      const fullDx = forwardX * bulletRangePx;
+      const fullDy = -forwardY * bulletRangePx;
+      const travel = getGroundClippedProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 120);
+      const id = `${now}-bot-bullet-${Math.random()}`;
+      const projectile = {
+        id,
+        x: muzzle.x,
+        y: muzzle.y,
+        dx: travel.dx,
+        dy: travel.dy,
+        groundHit: travel.groundHit,
+        life: travel.life,
+        created: now,
+        angle: bot.angle,
+        radius: 0.9,
+        impact: 1.08,
+      };
+      bulletsRef.current = [...bulletsRef.current, projectile];
+      setBotBullets(bulletsRef.current);
+      const timeoutId = window.setTimeout(() => {
+        removeBullet(id);
+        bulletTimeoutsRef.current = bulletTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
+      }, travel.life + (travel.groundHit ? 420 : 0));
+      bulletTimeoutsRef.current.push(timeoutId);
+      if (ammoRef.current <= 0) startBulletReload();
+    };
+
+    const fireBotRocket = (bot, now) => {
+      if (rocketReloadingRef.current || rocketCountRef.current <= 0 || now - lastRocketRef.current < BOT_ROCKET_COOLDOWN_MS) return;
+      lastRocketRef.current = now;
+      const rad = (bot.angle * Math.PI) / 180;
+      const forwardX = -Math.cos(rad);
+      const forwardY = Math.sin(rad);
+      const rocketRangePx = window.innerWidth * (ROCKET_RANGE / 100);
+      const mountPoint = rocketCountRef.current === 2 ? { x: 0.34, y: 0.8 } : { x: 0.52, y: 0.73 };
+      const launchPoint = getPlanePoint(bot, mountPoint);
+      const fullDx = forwardX * rocketRangePx;
+      const fullDy = -forwardY * rocketRangePx;
+      const travel = getGroundClippedProjectile(launchPoint.y, fullDx, fullDy, ROCKET_LIFETIME_MS, 180);
+      const id = `${now}-bot-rocket-${Math.random()}`;
+      const projectile = {
+        id,
+        x: launchPoint.x,
+        y: launchPoint.y,
+        dx: travel.dx,
+        dy: travel.dy,
+        groundHit: travel.groundHit,
+        life: travel.life,
+        created: now,
+        angle: bot.angle,
+        radius: 2.25,
+        impact: 1.72,
+      };
+      rocketsRef.current = [...rocketsRef.current, projectile];
+      setBotRockets(rocketsRef.current);
+      rocketCountRef.current -= 1;
+      setBotRocketsRemaining(rocketCountRef.current);
+      const timeoutId = window.setTimeout(() => {
+        removeRocket(id);
+        rocketTimeoutsRef.current = rocketTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
+      }, travel.life + (travel.groundHit ? 650 : 0));
+      rocketTimeoutsRef.current.push(timeoutId);
+      if (rocketCountRef.current <= 0) startRocketReload();
+    };
+
+    const getShotPoint = (projectile, now) => {
+      const progress = clamp((now - projectile.created) / projectile.life, 0, 1);
+      const viewportWidth = window.innerWidth || 1440;
+      const viewportHeight = window.innerHeight || 900;
+      return {
+        x: projectile.x + (projectile.dx / viewportWidth) * 100 * progress,
+        y: projectile.y - (projectile.dy / viewportHeight) * 100 * progress,
+      };
+    };
+
+    const scanHits = (now) => {
+      const player = playerStateRef.current;
+      if (!player || player.crashed) return;
+      const bulletHit = bulletsRef.current.find((projectile) => pointHitsPlane(getShotPoint(projectile, now), player, projectile.radius));
+      if (bulletHit) {
+        removeBullet(bulletHit.id);
+        playerApiRef.current?.crash(bulletHit.impact);
+        return;
+      }
+      const rocketHit = rocketsRef.current.find((projectile) => pointHitsPlane(getShotPoint(projectile, now), player, projectile.radius));
+      if (rocketHit) {
+        removeRocket(rocketHit.id);
+        playerApiRef.current?.crash(rocketHit.impact);
+      }
+    };
+
+    const angleToPoint = (source, target) => {
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      return normalizeAngle((Math.atan2(dy, -dx) * 180) / Math.PI);
+    };
+
+    const simulateBot = (current, dt, now) => {
+      const next = { ...current };
+      const player = playerStateRef.current || createInitialPlaneState();
+      const liveTarget = !player.crashed;
+      const dx = player.x - next.x;
+      const dy = player.y - next.y;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+      const leadTime = liveTarget ? clamp(distance / 46, 0.45, 2.15) : 1;
+      const target = {
+        x: liveTarget ? player.x + player.vx * leadTime : START_X,
+        y: liveTarget ? player.y + player.vy * leadTime + 2.6 : 34,
+      };
+
+      if (distance < 24) {
+        target.y += 16;
+        target.x += next.x < player.x ? -18 : 18;
+      }
+      if (next.y < 13) target.y = Math.max(target.y, 32);
+      if (next.y > WORLD_HEIGHT - 28) target.y = Math.min(target.y, WORLD_HEIGHT - 65);
+      if (next.x < 34) {
+        target.x = 105;
+        target.y = Math.max(target.y, 38);
+      }
+      if (next.x > WORLD_WIDTH - 34) {
+        target.x = WORLD_WIDTH - 105;
+        target.y = Math.max(target.y, 38);
+      }
+
+      const desiredAngle = angleToPoint(next, target);
+      const angleError = normalizeAngle(desiredAngle - next.angle);
+      const speed = Math.hypot(next.vx, next.vy);
+      const turnLimit = 250 + clamp(speed / 40, 0, 1) * 130;
+      const targetTurnRate = clamp(angleError * 6.3, -turnLimit, turnLimit);
+      next.turnRate += (targetTurnRate - next.turnRate) * Math.min(1, dt * 7.8);
+      next.turnRate *= Math.exp(-dt * 0.85);
+      next.angle = normalizeAngle(next.angle + next.turnRate * dt);
+
+      const rad = (next.angle * Math.PI) / 180;
+      const forwardX = -Math.cos(rad);
+      const forwardY = Math.sin(rad);
+      const normalX = -Math.sin(rad);
+      const normalY = Math.cos(rad);
+      const onRunway = !next.airborne && next.y <= 0.08;
+      next.throttle = Math.min(1, next.throttle + dt * 1.45);
+      next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * 5.8);
+
+      if (onRunway) {
+        next.y = 0;
+        next.vy = 0;
+        next.vx += forwardX * 46 * next.thrust * dt;
+        if (Math.abs(next.vx) > 10.5 && next.thrust > 0.55) {
+          next.airborne = true;
+          next.vy = Math.max(next.vy, 5.5 + Math.max(0, forwardY) * 8);
+        }
+      }
+
+      if (next.airborne) {
+        const thrustForce = 64;
+        next.vx += forwardX * thrustForce * next.thrust * dt;
+        next.vy += forwardY * thrustForce * next.thrust * dt;
+        const updatedSpeed = Math.max(0.001, Math.hypot(next.vx, next.vy));
+        const velocityX = next.vx / updatedSpeed;
+        const velocityY = next.vy / updatedSpeed;
+        const alignment = clamp(velocityX * forwardX + velocityY * forwardY, -1, 1);
+        const slip = Math.abs(forwardX * velocityY - forwardY * velocityX);
+        const liftAuthority = clamp((alignment + 0.25) / 1.25, 0, 1);
+        const liftForce = Math.min(44, updatedSpeed * 0.38 * liftAuthority * Math.min(1, slip * 1.75));
+        next.vx += normalX * liftForce * dt;
+        next.vy += normalY * liftForce * dt;
+        next.vy -= 14.2 * dt;
+        const drag = Math.exp(-(0.018 + updatedSpeed * 0.0032 + slip * slip * 0.28) * dt);
+        next.vx *= drag;
+        next.vy *= drag;
+      }
+
+      const cappedSpeed = Math.hypot(next.vx, next.vy);
+      const maxSpeed = 48;
+      if (cappedSpeed > maxSpeed) {
+        const cap = maxSpeed / cappedSpeed;
+        next.vx *= cap;
+        next.vy *= cap;
+      }
+
+      next.x += next.vx * dt;
+      next.y += next.vy * dt;
+
+      if (next.airborne && next.y < 0.2) {
+        next.y = 0.2;
+        next.vy = Math.max(8, Math.abs(next.vy) * 0.42);
+        next.angle = normalizeAngle(next.angle + normalizeAngle(38 - next.angle) * 0.45);
+      }
+      next.x = clamp(next.x, 5, WORLD_WIDTH - 5);
+      next.y = clamp(next.y, 0, WORLD_HEIGHT - 10);
+
+      if (liveTarget && next.airborne && next.y > 5) {
+        const aimAngle = angleToPoint(next, { x: player.x + player.vx * 0.75, y: player.y + player.vy * 0.65 + 1.2 });
+        const aimError = Math.abs(normalizeAngle(aimAngle - next.angle));
+        const aimRad = (next.angle * Math.PI) / 180;
+        const aimForwardX = -Math.cos(aimRad);
+        const aimForwardY = Math.sin(aimRad);
+        const targetLength = Math.max(1, Math.hypot(player.x - next.x, player.y - next.y));
+        const targetDot = (aimForwardX * (player.x - next.x) + aimForwardY * (player.y - next.y)) / targetLength;
+        if (targetDot > 0.68 && aimError < 11 && distance < 120) fireBotBullet(next, now);
+        if (targetDot > 0.78 && aimError < 7 && distance > 28 && distance < 160) fireBotRocket(next, now);
+      }
+
+      return next;
+    };
+
+    const renderBot = (bot) => {
+      if (!botRef.current) return;
+      botRef.current.style.transform = `translate(${bot.x}vw, ${-bot.y}vh) rotate(${bot.angle}deg)`;
+      botRef.current.style.setProperty('--thrust', bot.thrust);
+      botRef.current.querySelector('.plane-visual')?.classList.toggle('prop-spinning', bot.thrust > 0.05);
+    };
+
+    const update = (now) => {
+      const frameTime = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      if (paused) {
+        renderBot(stateRef.current);
+        frame = requestAnimationFrame(update);
+        return;
+      }
+
+      accumulator += frameTime;
+      let next = stateRef.current;
+      let steps = 0;
+      while (accumulator >= step && steps < 6) {
+        next = simulateBot(next, step, now);
+        accumulator -= step;
+        steps += 1;
+      }
+      if (steps >= 6) accumulator = 0;
+      stateRef.current = next;
+      scanHits(now);
+      renderBot(next);
+      frame = requestAnimationFrame(update);
+    };
+
+    frame = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frame);
+  }, [active, paused, playerApiRef, playerStateRef]);
+
+  if (!active) return null;
+
+  return (
+    <div className="player-plane-layer bot-plane-layer" aria-label="Enemy bot plane">
+      <div
+        ref={botRef}
+        className="player-plane bot-plane"
+        style={{
+          transform: `translate(${BOT_START_X}vw, 0vh) rotate(18deg)`,
+          '--thrust': 0,
+        }}
+      >
+        <BitPlane rocketsRemaining={botRocketsRemaining} planeColor="purple" planeLightCombo="botYellow" />
+      </div>
+      <div className="bullet-projectiles bot-bullet-projectiles" aria-hidden="true">
+        {botBullets.map((projectile) => (
+          <span
+            key={projectile.id}
+            className={`bullet-shot bot-bullet-shot${projectile.groundHit ? ' bullet-ground-hit' : ''}`}
+            style={{
+              left: `${projectile.x}vw`,
+              bottom: `calc(100% - 2px + ${projectile.y}vh)`,
+              '--bullet-dx': `${projectile.dx}px`,
+              '--bullet-dy': `${projectile.dy}px`,
+              '--bullet-angle': `${projectile.angle}deg`,
+              '--bullet-life': `${projectile.life ?? BULLET_LIFETIME_MS}ms`,
+            }}
+          >
+            <i className="bullet-core" />
+            <i className="bullet-impact" />
+          </span>
+        ))}
+      </div>
+      <div className="rocket-projectiles bot-rocket-projectiles" aria-hidden="true">
+        {botRockets.map((rocket) => (
+          <span
+            key={rocket.id}
+            className={`rocket-shot bot-rocket-shot${rocket.groundHit ? ' rocket-ground-hit' : ''}`}
+            style={{
+              left: `${rocket.x}vw`,
+              bottom: `calc(100% - 2px + ${rocket.y}vh)`,
+              '--rocket-dx': `${rocket.dx}px`,
+              '--rocket-dy': `${rocket.dy}px`,
+              '--rocket-angle': `${rocket.angle}deg`,
+              '--rocket-life': `${rocket.life ?? ROCKET_LIFETIME_MS}ms`,
+            }}
+          >
+            <i className="rocket-flame" />
+            <i className="rocket-body" />
+            <i className="rocket-nose" />
+            <i className="rocket-band rocket-band-one" />
+            <i className="rocket-band rocket-band-two" />
+            <i className="rocket-fin rocket-fin-top" />
+            <i className="rocket-fin rocket-fin-bottom" />
+            <i className="rocket-impact" />
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
