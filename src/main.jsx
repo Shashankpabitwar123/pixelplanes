@@ -23,6 +23,8 @@ const PLANE_SPRITE_ASPECT = 935 / 1620;
 const BOT_START_X = START_X + 118;
 const BOT_WAKE_DISTANCE = 96;
 const BOT_FORGET_DISTANCE = 118;
+const BOT_AVOID_DISTANCE = 42;
+const BOT_MIN_FIRE_DISTANCE = 34;
 const BOT_BULLET_COOLDOWN_MS = 280;
 const BOT_ROCKET_COOLDOWN_MS = 3800;
 const BOT_BULLET_RELOAD_MS = 5200;
@@ -2441,6 +2443,10 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       if (liveTarget && !next.engaged && distance <= BOT_WAKE_DISTANCE) next.engaged = true;
       if ((!liveTarget || distance >= BOT_FORGET_DISTANCE) && next.engaged) next.engaged = false;
       const pursuing = liveTarget && next.engaged;
+      const botToPlayerX = dx / distance;
+      const botToPlayerY = dy / distance;
+      const closingSpeed = (next.vx - player.vx) * botToPlayerX + (next.vy - player.vy) * botToPlayerY;
+      const avoidingPlayer = pursuing && distance < BOT_AVOID_DISTANCE;
 
       if (!pursuing && !next.airborne) {
         next.throttle = 0;
@@ -2461,7 +2467,12 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
             y: 34 + Math.sin(now / 1900) * 10,
           };
 
-      if (pursuing && distance < 24) {
+      if (avoidingPlayer) {
+        target.x = next.x - botToPlayerX * 72;
+        target.y = clamp(next.y - botToPlayerY * 46 + 20, 28, WORLD_HEIGHT - 65);
+        if (target.x < 26) target.x = next.x + 72;
+        if (target.x > WORLD_WIDTH - 26) target.x = next.x - 72;
+      } else if (pursuing && distance < 28) {
         target.y += 16;
         target.x += next.x < player.x ? -18 : 18;
       }
@@ -2491,7 +2502,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       const normalX = -Math.sin(rad);
       const normalY = Math.cos(rad);
       const onRunway = !next.airborne && next.y <= 0.08;
-      const targetThrottle = pursuing ? 1 : 0.52;
+      const targetThrottle = pursuing ? (avoidingPlayer && closingSpeed > 0 ? 0.34 : 1) : 0.52;
       next.throttle += (targetThrottle - next.throttle) * Math.min(1, dt * (pursuing ? 1.45 : 1.1));
       next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * 5.8);
 
@@ -2556,8 +2567,8 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
         const aimForwardY = Math.sin(aimRad);
         const targetLength = Math.max(1, Math.hypot(player.x - next.x, player.y - next.y));
         const targetDot = (aimForwardX * (player.x - next.x) + aimForwardY * (player.y - next.y)) / targetLength;
-        if (targetDot > 0.68 && aimError < 11 && distance < 120) fireBotBullet(next, now);
-        if (targetDot > 0.78 && aimError < 7 && distance > 28 && distance < 160) fireBotRocket(next, now);
+        if (targetDot > 0.68 && aimError < 11 && distance > BOT_MIN_FIRE_DISTANCE && distance < 120) fireBotBullet(next, now);
+        if (targetDot > 0.78 && aimError < 7 && distance > BOT_AVOID_DISTANCE && distance < 160) fireBotRocket(next, now);
       }
 
       return next;
