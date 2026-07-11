@@ -297,6 +297,12 @@ function App() {
     setHelpOpen(false);
     setPlaneMenuOpen(false);
   }, []);
+  const armBotStart = useCallback(() => {
+    setStartScreen('bot-ready');
+    setMusicOpen(false);
+    setHelpOpen(false);
+    setPlaneMenuOpen(false);
+  }, []);
   const updateCamera = useCallback((camera) => {
     if (worldRef.current) {
       worldRef.current.style.transform = `translate(${-camera.x}vw, ${camera.y}vh)`;
@@ -534,12 +540,12 @@ function App() {
       )}
       {!gameStarted && (
         <div className="start-overlay" aria-label="Game start menu">
-          <div className="start-card">
+          <div className={`start-card${startScreen === 'bot-ready' ? ' start-card-slim' : ''}`}>
             {startScreen === 'home' && (
               <>
                 <div className="start-title">Bit Planes</div>
                 <div className="start-actions">
-                  <button className="start-option start-primary" type="button" onClick={startGame}>
+                  <button className="start-option start-primary" type="button" onClick={armBotStart}>
                     Start
                   </button>
                   <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
@@ -563,6 +569,15 @@ function App() {
                   Back
                 </button>
               </>
+            )}
+            {startScreen === 'bot-ready' && (
+              <div className="bot-start-prompt">
+                <span>Click</span>
+                <kbd>W</kbd>
+                <span>thrust or</span>
+                <kbd>↑</kbd>
+                <span>to start</span>
+              </div>
             )}
             {startScreen === 'join' && (
               <>
@@ -733,6 +748,8 @@ function App() {
             onAmmoChange={updateAmmoStatus}
             onRocketChange={updateRocketStatus}
             controlsEnabled={gameStarted}
+            startArmed={startScreen === 'bot-ready'}
+            onPowerStart={startGame}
             planeColor={planeColor}
             planeLightCombo={planeLightCombo}
             sfxMuted={sfxMuted}
@@ -802,7 +819,18 @@ function BulletMeter({ count, reloading, rocketCount }) {
   );
 }
 
-function PlayablePlane({ onMove, onFuelChange, onAmmoChange, onRocketChange, controlsEnabled, planeColor, planeLightCombo, sfxMuted }) {
+function PlayablePlane({
+  onMove,
+  onFuelChange,
+  onAmmoChange,
+  onRocketChange,
+  controlsEnabled,
+  startArmed,
+  onPowerStart,
+  planeColor,
+  planeLightCombo,
+  sfxMuted,
+}) {
   const keysRef = useRef(new Set());
   const planeRef = useRef(null);
   const blastRef = useRef(null);
@@ -810,6 +838,8 @@ function PlayablePlane({ onMove, onFuelChange, onAmmoChange, onRocketChange, con
   const crashSoundRef = useRef(null);
   const sfxMutedRef = useRef(sfxMuted);
   const controlsEnabledRef = useRef(controlsEnabled);
+  const startArmedRef = useRef(startArmed);
+  const onPowerStartRef = useRef(onPowerStart);
   const crashedRef = useRef(false);
   const ammoRef = useRef(MAX_BULLETS);
   const reloadingRef = useRef(false);
@@ -855,6 +885,14 @@ function PlayablePlane({ onMove, onFuelChange, onAmmoChange, onRocketChange, con
       engineAudioRef.current.master.gain.setTargetAtTime(0, engineAudioRef.current.context.currentTime, 0.025);
     }
   }, [controlsEnabled]);
+
+  useEffect(() => {
+    startArmedRef.current = startArmed;
+  }, [startArmed]);
+
+  useEffect(() => {
+    onPowerStartRef.current = onPowerStart;
+  }, [onPowerStart]);
 
   useEffect(() => {
     const ensureEngineAudio = () => {
@@ -1406,9 +1444,18 @@ function PlayablePlane({ onMove, onFuelChange, onAmmoChange, onRocketChange, con
 
     const setKey = (event, pressed) => {
       const isEditableTarget = event.target?.closest?.('input, textarea, select, button');
-      if (isEditableTarget || !controlsEnabledRef.current) return;
+      if (isEditableTarget) return;
       const action = event.code === 'Space' ? 'fire' : keyMap[event.key] || keyMap[event.key.toLowerCase?.()];
       if (!action) return;
+      if (!controlsEnabledRef.current) {
+        if (startArmedRef.current && action === 'power' && pressed) {
+          event.preventDefault();
+          onPowerStartRef.current?.();
+          keysRef.current.add('power');
+          ensureEngineAudio();
+        }
+        return;
+      }
       event.preventDefault();
       if (action === 'fire') {
         if (pressed && !event.repeat) fireBullet();
