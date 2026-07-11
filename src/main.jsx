@@ -268,6 +268,10 @@ function normalizeAngle(angle) {
 
 function App() {
   const [theme, setTheme] = useState('dark');
+  const [gameStarted, setGameStarted] = useState(false);
+  const [startScreen, setStartScreen] = useState('home');
+  const [roomCode, setRoomCode] = useState('');
+  const [roomTheme, setRoomTheme] = useState('dark');
   const [droppings, setDroppings] = useState([]);
   const [ammoStatus, setAmmoStatus] = useState({ count: MAX_BULLETS, reloading: false });
   const [rocketCount, setRocketCount] = useState(MAX_ROCKETS);
@@ -286,6 +290,13 @@ function App() {
   const fuelGaugeRef = useRef(null);
   const musicAudioRef = useRef(null);
   const shootingStarTimersRef = useRef([]);
+  const startGame = useCallback(() => {
+    setGameStarted(true);
+    setStartScreen('home');
+    setMusicOpen(false);
+    setHelpOpen(false);
+    setPlaneMenuOpen(false);
+  }, []);
   const updateCamera = useCallback((camera) => {
     if (worldRef.current) {
       worldRef.current.style.transform = `translate(${-camera.x}vw, ${camera.y}vh)`;
@@ -521,6 +532,99 @@ function App() {
           </div>
         </div>
       )}
+      {!gameStarted && (
+        <div className="start-overlay" aria-label="Game start menu">
+          <div className="start-card">
+            {startScreen === 'home' && (
+              <>
+                <div className="start-title">Bit Planes</div>
+                <div className="start-actions">
+                  <button className="start-option start-primary" type="button" onClick={startGame}>
+                    Start
+                  </button>
+                  <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
+                    Room
+                  </button>
+                </div>
+              </>
+            )}
+            {startScreen === 'room' && (
+              <>
+                <div className="start-title">Room</div>
+                <div className="start-actions">
+                  <button className="start-option" type="button" onClick={() => setStartScreen('join')}>
+                    Join
+                  </button>
+                  <button className="start-option start-primary" type="button" onClick={() => setStartScreen('create')}>
+                    Create
+                  </button>
+                </div>
+                <button className="start-back" type="button" onClick={() => setStartScreen('home')}>
+                  Back
+                </button>
+              </>
+            )}
+            {startScreen === 'join' && (
+              <>
+                <div className="start-title">Join Room</div>
+                <input
+                  className="room-code-input"
+                  value={roomCode}
+                  maxLength="8"
+                  placeholder="CODE"
+                  aria-label="Room code"
+                  onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
+                />
+                <div className="start-actions">
+                  <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
+                    Back
+                  </button>
+                  <button className="start-option start-primary" type="button" onClick={startGame}>
+                    Join
+                  </button>
+                </div>
+              </>
+            )}
+            {startScreen === 'create' && (
+              <>
+                <div className="start-title">Create Room</div>
+                <div className="room-rule-row" aria-label="Room theme">
+                  <button
+                    className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
+                    type="button"
+                    aria-pressed={roomTheme === 'dark'}
+                    onClick={() => {
+                      setRoomTheme('dark');
+                      setTheme('dark');
+                    }}
+                  >
+                    Dark
+                  </button>
+                  <button
+                    className={`room-rule-button${roomTheme === 'light' ? ' room-rule-active' : ''}`}
+                    type="button"
+                    aria-pressed={roomTheme === 'light'}
+                    onClick={() => {
+                      setRoomTheme('light');
+                      setTheme('light');
+                    }}
+                  >
+                    Light
+                  </button>
+                </div>
+                <div className="start-actions">
+                  <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
+                    Back
+                  </button>
+                  <button className="start-option start-primary" type="button" onClick={startGame}>
+                    Start
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <div ref={mapPointerRef} className="map-pointer" aria-label="Map position">
         {fuelTankPlacements.map((x, index) => (
@@ -628,6 +732,7 @@ function App() {
             onFuelChange={updateFuelGauge}
             onAmmoChange={updateAmmoStatus}
             onRocketChange={updateRocketStatus}
+            controlsEnabled={gameStarted}
             planeColor={planeColor}
             planeLightCombo={planeLightCombo}
             sfxMuted={sfxMuted}
@@ -697,13 +802,14 @@ function BulletMeter({ count, reloading, rocketCount }) {
   );
 }
 
-function PlayablePlane({ onMove, onFuelChange, onAmmoChange, onRocketChange, planeColor, planeLightCombo, sfxMuted }) {
+function PlayablePlane({ onMove, onFuelChange, onAmmoChange, onRocketChange, controlsEnabled, planeColor, planeLightCombo, sfxMuted }) {
   const keysRef = useRef(new Set());
   const planeRef = useRef(null);
   const blastRef = useRef(null);
   const engineAudioRef = useRef(null);
   const crashSoundRef = useRef(null);
   const sfxMutedRef = useRef(sfxMuted);
+  const controlsEnabledRef = useRef(controlsEnabled);
   const crashedRef = useRef(false);
   const ammoRef = useRef(MAX_BULLETS);
   const reloadingRef = useRef(false);
@@ -740,6 +846,15 @@ function PlayablePlane({ onMove, onFuelChange, onAmmoChange, onRocketChange, pla
     const audio = engineAudioRef.current;
     audio.master.gain.setTargetAtTime(0, audio.context.currentTime, 0.025);
   }, [sfxMuted]);
+
+  useEffect(() => {
+    controlsEnabledRef.current = controlsEnabled;
+    if (controlsEnabled) return;
+    keysRef.current.clear();
+    if (engineAudioRef.current) {
+      engineAudioRef.current.master.gain.setTargetAtTime(0, engineAudioRef.current.context.currentTime, 0.025);
+    }
+  }, [controlsEnabled]);
 
   useEffect(() => {
     const ensureEngineAudio = () => {
@@ -1290,6 +1405,8 @@ function PlayablePlane({ onMove, onFuelChange, onAmmoChange, onRocketChange, pla
     };
 
     const setKey = (event, pressed) => {
+      const isEditableTarget = event.target?.closest?.('input, textarea, select, button');
+      if (isEditableTarget || !controlsEnabledRef.current) return;
       const action = event.code === 'Space' ? 'fire' : keyMap[event.key] || keyMap[event.key.toLowerCase?.()];
       if (!action) return;
       event.preventDefault();
