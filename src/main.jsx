@@ -1489,7 +1489,7 @@ function PlayablePlane({
     };
 
     const setKey = (event, pressed) => {
-      const isEditableTarget = event.target?.closest?.('input, textarea, select, button');
+      const isEditableTarget = event.target?.closest?.('input, textarea, select, [contenteditable="true"]');
       if (isEditableTarget) return;
       const action = event.code === 'Space' ? 'fire' : keyMap[event.key] || keyMap[event.key.toLowerCase?.()];
       if (!action) return;
