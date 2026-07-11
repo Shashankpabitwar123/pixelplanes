@@ -465,6 +465,14 @@ function App() {
         </span>
       </button>
       <button
+        className="theme-icon-toggle"
+        type="button"
+        aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+        onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+      >
+        <img src="/assets/theme-lightbulb-icon.png" alt="" draggable="false" aria-hidden="true" />
+      </button>
+      <button
         className={`sfx-toggle${sfxMuted ? ' sfx-muted' : ''}`}
         type="button"
         aria-label={sfxMuted ? 'Turn game sounds on' : 'Turn game sounds off'}
@@ -718,9 +726,6 @@ function App() {
         <span className="fuel-gauge-hub" />
       </div>
       <BulletMeter count={ammoStatus.count} reloading={ammoStatus.reloading} rocketCount={rocketCount} />
-      <button className="theme-toggle" type="button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
-        {theme === 'light' ? 'Dark mode' : 'Light mode'}
-      </button>
 
       <div ref={worldRef} className="world" style={{ transform: `translate(${-getCameraX(START_X)}vw, 0vh)` }}>
         <div className="stars world-stars" aria-hidden="true">

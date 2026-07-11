@@ -179,24 +179,9 @@ button {
   transform: translateY(-50%);
 }
 
-.theme-toggle {
-  position: absolute;
-  z-index: 20;
-  right: 20px;
-  top: 235px;
-  min-width: 118px;
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  border-radius: 999px;
-  padding: 10px 14px;
-  color: #12303f;
-  background: rgba(255, 255, 255, 0.42);
-  backdrop-filter: blur(10px);
-  cursor: pointer;
-  box-shadow: 0 8px 24px rgba(31, 65, 86, 0.14);
-}
-
 .music-selector,
 .pause-toggle,
+.theme-icon-toggle,
 .sfx-toggle,
 .help-toggle,
 .plane-selector {
@@ -220,6 +205,11 @@ button {
   top: 74px;
 }
 
+.theme-icon-toggle {
+  left: 74px;
+  top: 74px;
+}
+
 .sfx-toggle {
   left: 74px;
 }
@@ -233,6 +223,7 @@ button {
 }
 
 .music-selector img,
+.theme-icon-toggle img,
 .sfx-toggle img,
 .help-toggle img,
 .plane-selector img {
@@ -242,6 +233,13 @@ button {
   object-fit: contain;
   image-rendering: pixelated;
   pointer-events: none;
+}
+
+.theme-icon-toggle img {
+  width: 86%;
+  height: 86%;
+  margin: 7%;
+  mix-blend-mode: multiply;
 }
 
 .pause-button-icon {
@@ -1234,18 +1232,13 @@ button {
   }
 }
 
-.scene-dark .theme-toggle {
-  color: #eaf6ff;
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(10, 20, 38, 0.56);
-}
-
 .scene-dark .map-pointer,
 .scene-dark .fuel-gauge,
 .scene-dark .bullet-meter,
 .scene-dark .rocket-meter,
 .scene-dark .music-selector,
 .scene-dark .pause-toggle,
+.scene-dark .theme-icon-toggle,
 .scene-dark .sfx-toggle,
 .scene-dark .help-toggle,
 .scene-dark .plane-selector,
@@ -2802,14 +2795,6 @@ button {
     min-height: 560px;
   }
 
-  .theme-toggle {
-    right: 12px;
-    top: 224px;
-    min-width: 104px;
-    padding: 8px 11px;
-    font-size: 13px;
-  }
-
   .music-selector {
     left: 12px;
     top: 12px;
@@ -2817,6 +2802,11 @@ button {
 
   .pause-toggle {
     left: 12px;
+    top: 66px;
+  }
+
+  .theme-icon-toggle {
+    left: 66px;
     top: 66px;
   }
 
