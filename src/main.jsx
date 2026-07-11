@@ -470,7 +470,7 @@ function App() {
         aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
         onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
       >
-        <img src="/assets/theme-lightbulb-icon.png" alt="" draggable="false" aria-hidden="true" />
+        <img src="/assets/theme-lightbulb-icon.svg" alt="" draggable="false" aria-hidden="true" />
       </button>
       <button
         className={`sfx-toggle${sfxMuted ? ' sfx-muted' : ''}`}
