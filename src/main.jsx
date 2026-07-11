@@ -27,6 +27,10 @@ const MUSIC_TRACKS = [
   '34910776-for-her-chill-upbeat-summel-travel-vlog-and-ig-music-royalty-free-use-202298.mp3',
   'monume-house-519225.mp3',
   'sunset-house-grooves-deep-house-sunset-538759.mp3',
+  'antipodeanwriter-chilliwave-hourglass-12179.mp3',
+  'dariocoiro-lluvia-en-el-balcon-496768.mp3',
+  'pink_sound-neon-nocturne-background-slap-house-music-for-video-short-version-562689.mp3',
+  'sunset-house-grooves-deep-house-sunset-538759-1.mp3',
 ].map((file, index) => ({
   id: index + 1,
   file,
