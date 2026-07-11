@@ -299,8 +299,8 @@ function getRenderedPlanePoint(plane, point) {
   const localY = -(point.y + planeModel.visualOffsetY / 100) * heightPx;
   const rad = (plane.angle * Math.PI) / 180;
   return {
-    x: plane.x + ((localX * Math.cos(rad) - localY * Math.sin(rad)) / viewportWidth) * 100,
-    y: plane.y + ((localX * Math.sin(rad) + localY * Math.cos(rad)) / viewportHeight) * 100,
+    x: plane.x + ((localX * Math.cos(rad) + localY * Math.sin(rad)) / viewportWidth) * 100,
+    y: plane.y + ((-localX * Math.sin(rad) + localY * Math.cos(rad)) / viewportHeight) * 100,
   };
 }
 
