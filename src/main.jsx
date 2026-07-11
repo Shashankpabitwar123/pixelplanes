@@ -338,6 +338,48 @@ function getProjectilePoint(projectile, now) {
   };
 }
 
+function getProjectileSegment(projectile, now) {
+  const startTime = projectile.lastHitCheck ?? projectile.created;
+  const start = getProjectilePoint(projectile, startTime);
+  const end = getProjectilePoint(projectile, now);
+  projectile.lastHitCheck = now;
+  return { start, end };
+}
+
+function distanceToSegment(point, start, end) {
+  const scaledPoint = { x: point.x * 1.35, y: point.y };
+  const scaledStart = { x: start.x * 1.35, y: start.y };
+  const scaledEnd = { x: end.x * 1.35, y: end.y };
+  const dx = scaledEnd.x - scaledStart.x;
+  const dy = scaledEnd.y - scaledStart.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq <= 0.0001) return Math.hypot(scaledPoint.x - scaledStart.x, scaledPoint.y - scaledStart.y);
+  const t = clamp(((scaledPoint.x - scaledStart.x) * dx + (scaledPoint.y - scaledStart.y) * dy) / lengthSq, 0, 1);
+  const closestX = scaledStart.x + dx * t;
+  const closestY = scaledStart.y + dy * t;
+  return Math.hypot(scaledPoint.x - closestX, scaledPoint.y - closestY);
+}
+
+function segmentHitsPlane(segment, plane, radius = 0.9) {
+  if (!plane || plane.crashed) return false;
+  return planeModel.hitPoints.some((hitPoint) => distanceToSegment(getPlanePoint(plane, hitPoint), segment.start, segment.end) <= radius);
+}
+
+function getSmokeWind(plane) {
+  const rad = (plane.angle * Math.PI) / 180;
+  const velocityX = -plane.vx;
+  const velocityY = plane.vy;
+  const speed = Math.hypot(plane.vx, plane.vy);
+  const sourceX = speed > 1.4 ? velocityX : Math.cos(rad);
+  const sourceY = speed > 1.4 ? velocityY : Math.sin(rad);
+  const sourceLength = Math.max(0.001, Math.hypot(sourceX, sourceY));
+  const strength = clamp(speed * 2.9, 48, 118);
+  return {
+    x: (sourceX / sourceLength) * strength,
+    y: (sourceY / sourceLength) * strength,
+  };
+}
+
 function getGroundClippedWorldProjectile(startYVh, dxVw, dyVh, fullLifeMs, minLifeMs) {
   const groundHit = dyVh > 0 && Math.max(0, startYVh) <= dyVh;
   const ratio = groundHit ? clamp(Math.max(0, startYVh) / dyVh, 0, 1) : 1;
@@ -1495,6 +1537,7 @@ function PlayablePlane({
         created: now,
         angle: plane.angle,
         unit: 'world',
+        radius: 1.05,
       };
 
       projectilesRef.current = [...projectilesRef.current, projectile];
@@ -2031,7 +2074,9 @@ function PlayablePlane({
     const scanBotHits = (now) => {
       const bot = botStateRef.current;
       if (!bot || bot.crashed) return;
-      const bulletHit = projectilesRef.current.find((projectile) => pointHitsPlane(getProjectilePoint(projectile, now), bot, 0.9));
+      const bulletHit = projectilesRef.current.find((projectile) =>
+        segmentHitsPlane(getProjectileSegment(projectile, now), bot, projectile.radius ?? 1.05),
+      );
       if (bulletHit) {
         removeProjectile(bulletHit.id);
         botApiRef.current?.hitByBullet?.();
@@ -2120,9 +2165,13 @@ function PlayablePlane({
 
     const renderPlane = (planeState) => {
       if (planeRef.current) {
+        const smokeWind = getSmokeWind(planeState);
         planeRef.current.style.transform = `translate(${planeState.x}vw, ${-planeState.y}vh) rotate(${planeState.angle}deg)`;
         const visibleThrust = Math.max(planeState.thrust, planeState.throttle);
         planeRef.current.style.setProperty('--thrust', visibleThrust);
+        planeRef.current.style.setProperty('--smoke-counter-angle', `${-planeState.angle}deg`);
+        planeRef.current.style.setProperty('--smoke-dx', `${smokeWind.x}%`);
+        planeRef.current.style.setProperty('--smoke-dy', `${smokeWind.y}%`);
         const visual = planeRef.current.querySelector('.plane-visual');
         visual?.classList.toggle('prop-spinning', visibleThrust > 0.05);
         const audio = engineAudioRef.current;
@@ -2154,6 +2203,9 @@ function PlayablePlane({
         style={{
           transform: `translate(${START_X}vw, 0vh) rotate(16deg)`,
           '--thrust': 0,
+          '--smoke-counter-angle': '-16deg',
+          '--smoke-dx': '58%',
+          '--smoke-dy': '16%',
         }}
       >
         <BitPlane rocketsRemaining={rocketsRemaining} planeColor={planeColor} planeLightCombo={planeLightCombo} />
@@ -2381,7 +2433,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
         created: now,
         angle: bot.angle,
         unit: 'world',
-        radius: 0.9,
+        radius: 1.05,
         impact: 1.08,
       };
       bulletsRef.current = [...bulletsRef.current, projectile];
@@ -2456,7 +2508,9 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
         playerApiRef.current?.crash(1.8);
         return;
       }
-      const bulletHit = bulletsRef.current.find((projectile) => pointHitsPlane(getShotPoint(projectile, now), player, projectile.radius));
+      const bulletHit = bulletsRef.current.find((projectile) =>
+        segmentHitsPlane(getProjectileSegment(projectile, now), player, projectile.radius ?? 1.05),
+      );
       if (bulletHit) {
         removeBullet(bulletHit.id);
         playerApiRef.current?.hitByBullet?.();
@@ -2634,8 +2688,12 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
 
     const renderBot = (bot) => {
       if (!botRef.current) return;
+      const smokeWind = getSmokeWind(bot);
       botRef.current.style.transform = `translate(${bot.x}vw, ${-bot.y}vh) rotate(${bot.angle}deg)`;
       botRef.current.style.setProperty('--thrust', bot.thrust);
+      botRef.current.style.setProperty('--smoke-counter-angle', `${-bot.angle}deg`);
+      botRef.current.style.setProperty('--smoke-dx', `${smokeWind.x}%`);
+      botRef.current.style.setProperty('--smoke-dy', `${smokeWind.y}%`);
       botRef.current.querySelector('.plane-visual')?.classList.toggle('prop-spinning', bot.thrust > 0.05);
       onBotMove(bot);
     };
@@ -2703,6 +2761,9 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
         style={{
           transform: `translate(${stateRef.current.x}vw, ${-stateRef.current.y}vh) rotate(${stateRef.current.angle}deg)`,
           '--thrust': 0,
+          '--smoke-counter-angle': `${-stateRef.current.angle}deg`,
+          '--smoke-dx': '58%',
+          '--smoke-dy': '18%',
         }}
       >
         <BitPlane rocketsRemaining={botRocketsRemaining} planeColor="purple" planeLightCombo="botYellow" />
