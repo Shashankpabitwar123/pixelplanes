@@ -202,6 +202,25 @@ const planeModel = {
   ],
 };
 
+function createInitialPlaneState() {
+  return {
+    x: START_X,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    angle: 16,
+    turnRate: 0,
+    thrust: 0,
+    throttle: 0,
+    airborne: false,
+    hasLifted: false,
+    crashed: false,
+    crashTime: 0,
+    crashImpact: 1,
+    fuel: FUEL_SECONDS,
+  };
+}
+
 function getPlanePoint(plane, point) {
   const localX = (point.x + planeModel.visualOffsetX / 100) * planeModel.widthVw;
   const localY = -(point.y + planeModel.visualOffsetY / 100) * planeModel.heightVh;
@@ -271,6 +290,7 @@ function App() {
   const [gameStarted, setGameStarted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [startScreen, setStartScreen] = useState('home');
+  const [restartSignal, setRestartSignal] = useState(0);
   const [roomCode, setRoomCode] = useState('');
   const [roomTheme, setRoomTheme] = useState('dark');
   const [droppings, setDroppings] = useState([]);
@@ -346,6 +366,20 @@ function App() {
   const updateRocketStatus = useCallback((nextCount) => {
     setRocketCount((current) => (current === nextCount ? current : nextCount));
   }, []);
+  const restartGame = useCallback(() => {
+    setGameStarted(false);
+    setPaused(false);
+    setStartScreen('home');
+    setMusicOpen(false);
+    setHelpOpen(false);
+    setPlaneMenuOpen(false);
+    setDroppings([]);
+    setAmmoStatus({ count: MAX_BULLETS, reloading: false });
+    setRocketCount(MAX_ROCKETS);
+    updateCamera({ x: getCameraX(START_X), y: getCameraY(0) });
+    updateFuelGauge(1);
+    setRestartSignal((signal) => signal + 1);
+  }, [updateCamera, updateFuelGauge]);
   const addDropping = useCallback((x) => {
     const id = `${Date.now()}-${Math.random()}`;
     setDroppings((items) => [...items, { id, x }]);
@@ -439,19 +473,6 @@ function App() {
       <div className="sky-gradient" />
 
       <button
-        className={`music-selector${musicOpen ? ' music-selector-open' : ''}`}
-        type="button"
-        aria-label="Select background music"
-        aria-expanded={musicOpen}
-        onClick={() => {
-          setMusicOpen((open) => !open);
-          setHelpOpen(false);
-          setPlaneMenuOpen(false);
-        }}
-      >
-        <img src="/assets/music-note-icon-transparent.png" alt="" draggable="false" aria-hidden="true" />
-      </button>
-      <button
         className={`pause-toggle${paused ? ' pause-toggle-active' : ''}`}
         type="button"
         aria-label="Pause game"
@@ -465,12 +486,25 @@ function App() {
         </span>
       </button>
       <button
-        className="theme-icon-toggle"
+        className="restart-toggle"
         type="button"
-        aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-        onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+        aria-label="Restart game"
+        onClick={restartGame}
       >
-        <img src="/assets/theme-lightbulb-icon.svg" alt="" draggable="false" aria-hidden="true" />
+        <img src="/assets/restart-icon.svg" alt="" draggable="false" aria-hidden="true" />
+      </button>
+      <button
+        className={`music-selector${musicOpen ? ' music-selector-open' : ''}`}
+        type="button"
+        aria-label="Select background music"
+        aria-expanded={musicOpen}
+        onClick={() => {
+          setMusicOpen((open) => !open);
+          setHelpOpen(false);
+          setPlaneMenuOpen(false);
+        }}
+      >
+        <img src="/assets/music-note-icon-transparent.png" alt="" draggable="false" aria-hidden="true" />
       </button>
       <button
         className={`sfx-toggle${sfxMuted ? ' sfx-muted' : ''}`}
@@ -506,6 +540,14 @@ function App() {
         }}
       >
         <img src={PLANE_COLOR_ASSETS[planeColor].staticSrc} alt="" draggable="false" aria-hidden="true" />
+      </button>
+      <button
+        className="theme-icon-toggle"
+        type="button"
+        aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+        onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+      >
+        <img src="/assets/theme-lightbulb-icon.svg" alt="" draggable="false" aria-hidden="true" />
       </button>
       {musicOpen && (
         <div className="music-panel" aria-label="Background music panel">
@@ -793,6 +835,7 @@ function App() {
             onRocketChange={updateRocketStatus}
             controlsEnabled={gameStarted && !paused}
             paused={paused}
+            restartSignal={restartSignal}
             startArmed={startScreen === 'bot-ready'}
             onPowerStart={startGame}
             planeColor={planeColor}
@@ -871,6 +914,7 @@ function PlayablePlane({
   onRocketChange,
   controlsEnabled,
   paused,
+  restartSignal,
   startArmed,
   onPowerStart,
   planeColor,
@@ -896,26 +940,48 @@ function PlayablePlane({
   const lastRocketRef = useRef(0);
   const projectileTimeoutsRef = useRef([]);
   const rocketTimeoutsRef = useRef([]);
-  const stateRef = useRef({
-    x: START_X,
-    y: 0,
-    vx: 0,
-    vy: 0,
-    angle: 16,
-    turnRate: 0,
-    thrust: 0,
-    throttle: 0,
-    airborne: false,
-    hasLifted: false,
-    crashed: false,
-    crashTime: 0,
-    crashImpact: 1,
-    fuel: FUEL_SECONDS,
-  });
+  const stateRef = useRef(createInitialPlaneState());
   const [projectiles, setProjectiles] = useState([]);
   const [rocketProjectiles, setRocketProjectiles] = useState([]);
   const [rocketsRemaining, setRocketsRemaining] = useState(MAX_ROCKETS);
   const [crashed, setCrashed] = useState(false);
+
+  useEffect(() => {
+    if (restartSignal === 0) return;
+    keysRef.current.clear();
+    if (reloadTimerRef.current) {
+      window.clearTimeout(reloadTimerRef.current);
+      reloadTimerRef.current = null;
+    }
+    projectileTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    projectileTimeoutsRef.current = [];
+    rocketTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    rocketTimeoutsRef.current = [];
+    const next = createInitialPlaneState();
+    stateRef.current = next;
+    ammoRef.current = MAX_BULLETS;
+    reloadingRef.current = false;
+    lastShotRef.current = 0;
+    rocketsRef.current = MAX_ROCKETS;
+    lastRocketRef.current = 0;
+    crashedRef.current = false;
+    setProjectiles([]);
+    setRocketProjectiles([]);
+    setRocketsRemaining(MAX_ROCKETS);
+    setCrashed(false);
+    onAmmoChange({ count: MAX_BULLETS, reloading: false });
+    onRocketChange(MAX_ROCKETS);
+    onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
+    onFuelChange(1);
+    if (engineAudioRef.current) {
+      engineAudioRef.current.master.gain.setTargetAtTime(0, engineAudioRef.current.context.currentTime, 0.025);
+    }
+    if (planeRef.current) {
+      planeRef.current.style.transform = `translate(${next.x}vw, ${-next.y}vh) rotate(${next.angle}deg)`;
+      planeRef.current.style.setProperty('--thrust', 0);
+      planeRef.current.querySelector('.plane-visual')?.classList.remove('prop-spinning');
+    }
+  }, [restartSignal, onAmmoChange, onRocketChange, onMove, onFuelChange]);
 
   useEffect(() => {
     sfxMutedRef.current = sfxMuted;
@@ -1557,23 +1623,6 @@ function PlayablePlane({
     let accumulator = 0;
     const step = 1 / 120;
 
-    const resetPlane = () => ({
-      x: START_X,
-      y: 0,
-      vx: 0,
-      vy: 0,
-      angle: 16,
-      turnRate: 0,
-      thrust: 0,
-      throttle: 0,
-      airborne: false,
-      hasLifted: false,
-      crashed: false,
-      crashTime: 0,
-      crashImpact: 1,
-      fuel: FUEL_SECONDS,
-    });
-
     const simulate = (current, keys, dt, now) => {
       const next = { ...current };
       const preStepGroundPoint = Math.min(...planeModel.groundPoints.map((point) => getPlanePoint(next, point).y));
@@ -1770,7 +1819,7 @@ function PlayablePlane({
 
       if (next.crashed) {
         if (now - next.crashTime > 1450) {
-          next = resetPlane();
+          next = createInitialPlaneState();
           onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
           onFuelChange(next.fuel / FUEL_SECONDS);
           crashedRef.current = false;

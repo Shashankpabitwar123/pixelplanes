@@ -181,6 +181,7 @@ button {
 
 .music-selector,
 .pause-toggle,
+.restart-toggle,
 .theme-icon-toggle,
 .sfx-toggle,
 .help-toggle,
@@ -202,27 +203,46 @@ button {
 }
 
 .pause-toggle {
-  top: 74px;
+  left: 20px;
+  top: 20px;
+  width: 78px;
+  height: 58px;
+}
+
+.restart-toggle {
+  left: 106px;
+  top: 20px;
+  width: 78px;
+  height: 58px;
+}
+
+.music-selector {
+  left: 20px;
+  top: 90px;
 }
 
 .theme-icon-toggle {
-  left: 74px;
-  top: 74px;
+  left: 20px;
+  top: 144px;
 }
 
 .sfx-toggle {
   left: 74px;
+  top: 90px;
 }
 
 .help-toggle {
   left: 128px;
+  top: 90px;
 }
 
 .plane-selector {
   left: 182px;
+  top: 90px;
 }
 
 .music-selector img,
+.restart-toggle img,
 .theme-icon-toggle img,
 .sfx-toggle img,
 .help-toggle img,
@@ -241,9 +261,18 @@ button {
   margin: 7%;
 }
 
+.restart-toggle img {
+  width: 78%;
+  height: 78%;
+  margin: 11%;
+}
+
 .pause-button-icon {
   position: absolute;
-  inset: 7px;
+  left: 50%;
+  top: 50%;
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
   border: 3px solid #050505;
@@ -255,6 +284,7 @@ button {
     inset -4px -5px 0 rgba(169, 57, 0, 0.3),
     inset 3px 3px 0 rgba(255, 181, 49, 0.38);
   image-rendering: pixelated;
+  transform: translate(-50%, -50%);
 }
 
 .pause-button-icon i,
@@ -383,7 +413,7 @@ button {
   position: absolute;
   z-index: 22;
   left: 20px;
-  top: 74px;
+  top: 198px;
   width: 156px;
   padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.48);
@@ -434,7 +464,7 @@ button {
   position: absolute;
   z-index: 22;
   left: 20px;
-  top: 74px;
+  top: 198px;
   width: 206px;
   padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.48);
@@ -495,7 +525,7 @@ button {
   position: absolute;
   z-index: 22;
   left: 20px;
-  top: 74px;
+  top: 198px;
   width: 222px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1237,6 +1267,7 @@ button {
 .scene-dark .rocket-meter,
 .scene-dark .music-selector,
 .scene-dark .pause-toggle,
+.scene-dark .restart-toggle,
 .scene-dark .theme-icon-toggle,
 .scene-dark .sfx-toggle,
 .scene-dark .help-toggle,
@@ -2796,47 +2827,61 @@ button {
 
   .music-selector {
     left: 12px;
-    top: 12px;
+    top: 76px;
   }
 
   .pause-toggle {
     left: 12px;
-    top: 66px;
+    top: 12px;
+    width: 68px;
+    height: 52px;
+  }
+
+  .restart-toggle {
+    left: 88px;
+    top: 12px;
+    width: 68px;
+    height: 52px;
+  }
+
+  .pause-button-icon {
+    width: 38px;
+    height: 38px;
   }
 
   .theme-icon-toggle {
-    left: 66px;
-    top: 66px;
+    left: 12px;
+    top: 130px;
   }
 
   .sfx-toggle {
     left: 66px;
-    top: 12px;
+    top: 76px;
   }
 
   .help-toggle {
     left: 120px;
-    top: 12px;
+    top: 76px;
   }
 
   .plane-selector {
     left: 174px;
-    top: 12px;
+    top: 76px;
   }
 
   .music-panel {
     left: 12px;
-    top: 66px;
+    top: 184px;
   }
 
   .help-panel {
     left: 12px;
-    top: 66px;
+    top: 184px;
   }
 
   .plane-color-panel {
     left: 12px;
-    top: 66px;
+    top: 184px;
   }
 
   .start-card {
