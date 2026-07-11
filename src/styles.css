@@ -2186,19 +2186,16 @@ button {
 .plane-damage-smoke {
   position: absolute;
   z-index: 2;
-  left: -20%;
-  top: 49%;
-  width: 98%;
-  height: 70%;
+  left: -23%;
+  top: 48%;
+  width: 126%;
+  height: 88%;
   opacity: 0;
   pointer-events: none;
   transform: translate(-8%, -50%) rotate(var(--smoke-counter-angle, 0deg));
   transform-origin: 8% 50%;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 18% 52%, rgba(246, 249, 249, 0.72) 0 10%, rgba(128, 139, 142, 0.52) 18% 38%, rgba(39, 45, 48, 0.28) 46% 62%, transparent 72%),
-    radial-gradient(circle at 40% 38%, rgba(218, 226, 226, 0.54) 0 12%, rgba(92, 101, 105, 0.4) 22% 46%, transparent 66%);
-  filter: blur(0.28px);
+  background: transparent;
+  filter: blur(0.34px);
 }
 
 .plane-damage-smoke::before,
@@ -2206,27 +2203,31 @@ button {
   content: "";
   position: absolute;
   display: block;
-  border-radius: 50%;
+  border-radius: 999px;
   background:
-    radial-gradient(circle at 38% 48%, rgba(248, 251, 251, 0.92) 0 12%, rgba(150, 161, 164, 0.68) 16% 42%, rgba(47, 54, 57, 0.42) 46% 66%, transparent 72%);
-  filter: blur(0.42px);
+    radial-gradient(ellipse 12% 18% at 18% 52%, rgba(246, 249, 249, 0.34) 0 30%, rgba(116, 126, 130, 0.28) 42%, transparent 72%),
+    radial-gradient(ellipse 20% 28% at 34% 44%, rgba(236, 241, 241, 0.76) 0 22%, rgba(126, 137, 141, 0.58) 38%, rgba(37, 43, 46, 0.24) 58%, transparent 76%),
+    radial-gradient(ellipse 26% 32% at 58% 57%, rgba(220, 228, 228, 0.7) 0 24%, rgba(98, 108, 112, 0.5) 40%, rgba(29, 34, 36, 0.2) 62%, transparent 80%),
+    radial-gradient(ellipse 22% 30% at 78% 42%, rgba(205, 215, 216, 0.5) 0 28%, rgba(74, 82, 86, 0.34) 48%, transparent 78%);
+  filter: blur(0.5px);
 }
 
 .plane-damage-smoke::before {
-  left: -2%;
-  top: 16%;
-  width: 82%;
-  height: 80%;
-  animation: planeDamageSmoke 1.16s ease-out infinite;
+  left: 0;
+  top: 6%;
+  width: 112%;
+  height: 88%;
+  animation: planeDamageSmoke 1.26s ease-out infinite;
 }
 
 .plane-damage-smoke::after {
-  left: 18%;
-  top: -6%;
-  width: 78%;
-  height: 76%;
-  animation: planeDamageSmoke 1.16s ease-out infinite;
-  animation-delay: -580ms;
+  left: 10%;
+  top: -10%;
+  width: 118%;
+  height: 96%;
+  opacity: 0.78;
+  animation: planeDamageSmoke 1.26s ease-out infinite;
+  animation-delay: -630ms;
 }
 
 .plane-damaged .plane-damage-smoke {
@@ -2776,21 +2777,22 @@ button {
 @keyframes planeDamageSmoke {
   0% {
     opacity: 0;
-    transform: translate(0, 0) scale(0.28);
+    transform: translate(7%, -3%) scale(0.48);
   }
 
-  22% {
-    opacity: 0.94;
-    transform: translate(10%, -2%) scale(0.72);
+  18% {
+    opacity: 0.86;
+    transform: translate(18%, -4%) scale(0.82);
   }
 
   56% {
-    opacity: 0.72;
+    opacity: 0.58;
+    transform: translate(38%, -8%) scale(1.18);
   }
 
   100% {
     opacity: 0;
-    transform: translate(var(--smoke-dx, 60%), var(--smoke-dy, -18%)) scale(1.78);
+    transform: translate(var(--smoke-dx, 60%), var(--smoke-dy, -18%)) scale(1.72);
   }
 }
 
