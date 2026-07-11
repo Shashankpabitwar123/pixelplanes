@@ -238,6 +238,7 @@ function createInitialPlaneState() {
     crashed: false,
     crashTime: 0,
     crashImpact: 1,
+    damage: 0,
     fuel: FUEL_SECONDS,
   };
 }
@@ -253,6 +254,10 @@ function createInitialBotState() {
     thrust: 0,
     throttle: 0,
     airborne: false,
+    crashed: false,
+    crashTime: 0,
+    crashImpact: 1,
+    damage: 0,
   };
 }
 
@@ -281,12 +286,31 @@ function getRenderedPlanePoint(plane, point) {
 }
 
 function pointHitsPlane(point, plane, radius = 0.9) {
+  if (!plane || plane.crashed) return false;
   return planeModel.hitPoints.some((hitPoint) => {
     const targetPoint = getPlanePoint(plane, hitPoint);
     const dx = (point.x - targetPoint.x) * 1.35;
     const dy = point.y - targetPoint.y;
     return Math.hypot(dx, dy) <= radius;
   });
+}
+
+function planesCollide(planeA, planeB) {
+  if (!planeA || !planeB || planeA.crashed || planeB.crashed) return false;
+  return (
+    planeModel.hitPoints.some((point) => pointHitsPlane(getPlanePoint(planeA, point), planeB, 0.74)) ||
+    planeModel.hitPoints.some((point) => pointHitsPlane(getPlanePoint(planeB, point), planeA, 0.74))
+  );
+}
+
+function getProjectilePoint(projectile, now) {
+  const progress = clamp((now - projectile.created) / projectile.life, 0, 1);
+  const viewportWidth = window.innerWidth || 1440;
+  const viewportHeight = window.innerHeight || 900;
+  return {
+    x: projectile.x + (projectile.dx / viewportWidth) * 100 * progress,
+    y: projectile.y - (projectile.dy / viewportHeight) * 100 * progress,
+  };
 }
 
 function getGroundClippedProjectile(startYVh, dxPx, dyPx, fullLifeMs, minLifeMs) {
@@ -355,7 +379,9 @@ function App() {
   const mapBotDotRef = useRef(null);
   const fuelGaugeRef = useRef(null);
   const playerStateRef = useRef(createInitialPlaneState());
+  const botStateRef = useRef(createInitialBotState());
   const playerApiRef = useRef(null);
+  const botApiRef = useRef(null);
   const musicAudioRef = useRef(null);
   const shootingStarTimersRef = useRef([]);
   const startGame = useCallback(() => {
@@ -424,6 +450,7 @@ function App() {
     setAmmoStatus({ count: MAX_BULLETS, reloading: false });
     setRocketCount(MAX_ROCKETS);
     playerStateRef.current = createInitialPlaneState();
+    botStateRef.current = createInitialBotState();
     if (mapBotDotRef.current) {
       mapBotDotRef.current.style.left = `${Math.max(2, Math.min(98, (BOT_START_X / WORLD_WIDTH) * 100))}%`;
       mapBotDotRef.current.style.top = `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`;
@@ -436,6 +463,7 @@ function App() {
     playerStateRef.current = nextState;
   }, []);
   const updateBotLocator = useCallback((botState) => {
+    botStateRef.current = botState;
     if (!mapBotDotRef.current) return;
     mapBotDotRef.current.style.left = `${Math.max(2, Math.min(98, (botState.x / WORLD_WIDTH) * 100))}%`;
     mapBotDotRef.current.style.top = `${Math.max(2, Math.min(98, 100 - ((botState.y + 50) / WORLD_HEIGHT) * 100))}%`;
@@ -903,6 +931,8 @@ function App() {
             onRocketChange={updateRocketStatus}
             onPlaneState={updatePlayerState}
             playerApiRef={playerApiRef}
+            botStateRef={botStateRef}
+            botApiRef={botApiRef}
             controlsEnabled={gameStarted && !paused}
             paused={paused}
             restartSignal={restartSignal}
@@ -918,6 +948,7 @@ function App() {
             restartSignal={restartSignal}
             playerStateRef={playerStateRef}
             playerApiRef={playerApiRef}
+            botApiRef={botApiRef}
             onBotMove={updateBotLocator}
           />
           <div className="grass-plants">
@@ -992,6 +1023,8 @@ function PlayablePlane({
   onRocketChange,
   onPlaneState,
   playerApiRef,
+  botStateRef,
+  botApiRef,
   controlsEnabled,
   paused,
   restartSignal,
@@ -1018,6 +1051,8 @@ function PlayablePlane({
   const lastShotRef = useRef(0);
   const rocketsRef = useRef(MAX_ROCKETS);
   const lastRocketRef = useRef(0);
+  const projectilesRef = useRef([]);
+  const rocketProjectilesRef = useRef([]);
   const projectileTimeoutsRef = useRef([]);
   const rocketTimeoutsRef = useRef([]);
   const stateRef = useRef(createInitialPlaneState());
@@ -1025,6 +1060,7 @@ function PlayablePlane({
   const [rocketProjectiles, setRocketProjectiles] = useState([]);
   const [rocketsRemaining, setRocketsRemaining] = useState(MAX_ROCKETS);
   const [crashed, setCrashed] = useState(false);
+  const [damageLevel, setDamageLevel] = useState(0);
 
   useEffect(() => {
     if (restartSignal === 0) return;
@@ -1037,6 +1073,8 @@ function PlayablePlane({
     projectileTimeoutsRef.current = [];
     rocketTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
     rocketTimeoutsRef.current = [];
+    projectilesRef.current = [];
+    rocketProjectilesRef.current = [];
     const next = createInitialPlaneState();
     stateRef.current = next;
     ammoRef.current = MAX_BULLETS;
@@ -1049,6 +1087,7 @@ function PlayablePlane({
     setRocketProjectiles([]);
     setRocketsRemaining(MAX_ROCKETS);
     setCrashed(false);
+    setDamageLevel(0);
     onAmmoChange({ count: MAX_BULLETS, reloading: false });
     onRocketChange(MAX_ROCKETS);
     onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
@@ -1066,31 +1105,51 @@ function PlayablePlane({
 
   useEffect(() => {
     if (!playerApiRef) return undefined;
+    const crashPlayer = (impact = 1.2) => {
+      const current = stateRef.current;
+      if (current.crashed) return;
+      const next = {
+        ...current,
+        crashed: true,
+        crashTime: performance.now(),
+        crashImpact: clamp(impact, 0.75, 1.8),
+        damage: Math.max(2, current.damage ?? 0),
+        thrust: 0,
+        throttle: 0,
+        turnRate: 0,
+        vx: 0,
+        vy: 0,
+      };
+      stateRef.current = next;
+      keysRef.current.clear();
+      crashedRef.current = true;
+      setDamageLevel(next.damage);
+      setCrashed(true);
+      crashSoundRef.current?.(next.crashImpact);
+      onPlaneState(next);
+      if (engineAudioRef.current) {
+        engineAudioRef.current.master.gain.setTargetAtTime(0, engineAudioRef.current.context.currentTime, 0.025);
+      }
+    };
+
     playerApiRef.current = {
-      crash: (impact = 1.2) => {
+      hitByBullet: () => {
         const current = stateRef.current;
         if (current.crashed) return;
+        const nextDamage = (current.damage ?? 0) + 1;
+        if (nextDamage >= 2) {
+          crashPlayer(1.18);
+          return;
+        }
         const next = {
           ...current,
-          crashed: true,
-          crashTime: performance.now(),
-          crashImpact: clamp(impact, 0.75, 1.8),
-          thrust: 0,
-          throttle: 0,
-          turnRate: 0,
-          vx: 0,
-          vy: 0,
+          damage: nextDamage,
         };
         stateRef.current = next;
-        keysRef.current.clear();
-        crashedRef.current = true;
-        setCrashed(true);
-        crashSoundRef.current?.(next.crashImpact);
+        setDamageLevel(nextDamage);
         onPlaneState(next);
-        if (engineAudioRef.current) {
-          engineAudioRef.current.master.gain.setTargetAtTime(0, engineAudioRef.current.context.currentTime, 0.025);
-        }
       },
+      crash: crashPlayer,
     };
     return () => {
       if (playerApiRef.current) playerApiRef.current = null;
@@ -1389,23 +1448,24 @@ function PlayablePlane({
       const fullDy = -forwardY * bulletRangePx;
       const travel = getGroundClippedProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 120);
       const id = `${now}-${Math.random()}`;
+      const projectile = {
+        id,
+        x: muzzle.x,
+        y: muzzle.y,
+        dx: travel.dx,
+        dy: travel.dy,
+        groundHit: travel.groundHit,
+        life: travel.life,
+        created: now,
+        angle: plane.angle,
+      };
 
-      setProjectiles((items) => [
-        ...items,
-        {
-          id,
-          x: muzzle.x,
-          y: muzzle.y,
-          dx: travel.dx,
-          dy: travel.dy,
-          groundHit: travel.groundHit,
-          life: travel.life,
-          angle: plane.angle,
-        },
-      ]);
+      projectilesRef.current = [...projectilesRef.current, projectile];
+      setProjectiles(projectilesRef.current);
 
       const timeoutId = window.setTimeout(() => {
-        setProjectiles((items) => items.filter((item) => item.id !== id));
+        projectilesRef.current = projectilesRef.current.filter((item) => item.id !== id);
+        setProjectiles(projectilesRef.current);
         projectileTimeoutsRef.current = projectileTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
       }, travel.life + (travel.groundHit ? 420 : 0));
       projectileTimeoutsRef.current.push(timeoutId);
@@ -1432,20 +1492,20 @@ function PlayablePlane({
       const fullDy = -forwardY * rocketRangePx;
       const travel = getGroundClippedProjectile(launchPoint.y, fullDx, fullDy, ROCKET_LIFETIME_MS, 180);
       const id = `${now}-rocket-${Math.random()}`;
+      const rocket = {
+        id,
+        x: launchPoint.x,
+        y: launchPoint.y,
+        dx: travel.dx,
+        dy: travel.dy,
+        groundHit: travel.groundHit,
+        life: travel.life,
+        created: now,
+        angle: plane.angle,
+      };
 
-      setRocketProjectiles((items) => [
-        ...items,
-        {
-          id,
-          x: launchPoint.x,
-          y: launchPoint.y,
-          dx: travel.dx,
-          dy: travel.dy,
-          groundHit: travel.groundHit,
-          life: travel.life,
-          angle: plane.angle,
-        },
-      ]);
+      rocketProjectilesRef.current = [...rocketProjectilesRef.current, rocket];
+      setRocketProjectiles(rocketProjectilesRef.current);
 
       const nextRockets = rocketsRef.current - 1;
       rocketsRef.current = nextRockets;
@@ -1453,7 +1513,8 @@ function PlayablePlane({
       onRocketChange(nextRockets);
 
       const timeoutId = window.setTimeout(() => {
-        setRocketProjectiles((items) => items.filter((item) => item.id !== id));
+        rocketProjectilesRef.current = rocketProjectilesRef.current.filter((item) => item.id !== id);
+        setRocketProjectiles(rocketProjectilesRef.current);
         rocketTimeoutsRef.current = rocketTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
       }, travel.life + (travel.groundHit ? 650 : 0));
       rocketTimeoutsRef.current.push(timeoutId);
@@ -1721,6 +1782,8 @@ function PlayablePlane({
       projectileTimeoutsRef.current = [];
       rocketTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
       rocketTimeoutsRef.current = [];
+      projectilesRef.current = [];
+      rocketProjectilesRef.current = [];
       const audio = engineAudioRef.current;
       crashSoundRef.current = null;
       if (audio) {
@@ -1918,6 +1981,32 @@ function PlayablePlane({
       return next;
     };
 
+    const removeProjectile = (id) => {
+      projectilesRef.current = projectilesRef.current.filter((item) => item.id !== id);
+      setProjectiles(projectilesRef.current);
+    };
+
+    const removeRocketProjectile = (id) => {
+      rocketProjectilesRef.current = rocketProjectilesRef.current.filter((item) => item.id !== id);
+      setRocketProjectiles(rocketProjectilesRef.current);
+    };
+
+    const scanBotHits = (now) => {
+      const bot = botStateRef.current;
+      if (!bot || bot.crashed) return;
+      const bulletHit = projectilesRef.current.find((projectile) => pointHitsPlane(getProjectilePoint(projectile, now), bot, 0.9));
+      if (bulletHit) {
+        removeProjectile(bulletHit.id);
+        botApiRef.current?.hitByBullet?.();
+        return;
+      }
+      const rocketHit = rocketProjectilesRef.current.find((projectile) => pointHitsPlane(getProjectilePoint(projectile, now), bot, 2.25));
+      if (rocketHit) {
+        removeRocketProjectile(rocketHit.id);
+        botApiRef.current?.crash?.(1.72);
+      }
+    };
+
     const update = (now) => {
       const frameTime = Math.min((now - last) / 1000, 0.05);
       last = now;
@@ -1938,6 +2027,7 @@ function PlayablePlane({
           onFuelChange(next.fuel / FUEL_SECONDS);
           onPlaneState(next);
           crashedRef.current = false;
+          setDamageLevel(0);
           setCrashed(false);
         }
         stateRef.current = next;
@@ -1958,6 +2048,7 @@ function PlayablePlane({
       }
 
       stateRef.current = next;
+      scanBotHits(now);
       onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
       onFuelChange(next.fuel / FUEL_SECONDS);
       onPlaneState(next);
@@ -1996,13 +2087,13 @@ function PlayablePlane({
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [onMove, onFuelChange, onPlaneState]);
+  }, [onMove, onFuelChange, onPlaneState, botStateRef, botApiRef]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
       <div
         ref={planeRef}
-        className={`player-plane${crashed ? ' plane-crashed' : ''}`}
+        className={`player-plane${crashed ? ' plane-crashed' : ''}${damageLevel > 0 && !crashed ? ' plane-damaged' : ''}`}
         style={{
           transform: `translate(${START_X}vw, 0vh) rotate(16deg)`,
           '--thrust': 0,
@@ -2070,7 +2161,7 @@ function PlayablePlane({
   );
 }
 
-function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef, onBotMove }) {
+function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef, botApiRef, onBotMove }) {
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
@@ -2086,6 +2177,57 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
   const [botBullets, setBotBullets] = useState([]);
   const [botRockets, setBotRockets] = useState([]);
   const [botRocketsRemaining, setBotRocketsRemaining] = useState(MAX_ROCKETS);
+  const [botDamage, setBotDamage] = useState(0);
+  const [botCrashed, setBotCrashed] = useState(false);
+
+  const crashBot = useCallback((impact = 1.2) => {
+    const current = stateRef.current;
+    if (current.crashed) return;
+    const next = {
+      ...current,
+      crashed: true,
+      crashTime: performance.now(),
+      crashImpact: clamp(impact, 0.75, 1.8),
+      damage: Math.max(2, current.damage ?? 0),
+      thrust: 0,
+      throttle: 0,
+      turnRate: 0,
+      vx: 0,
+      vy: 0,
+    };
+    stateRef.current = next;
+    setBotDamage(next.damage);
+    setBotCrashed(true);
+    onBotMove(next);
+  }, [onBotMove]);
+
+  const damageBotByBullet = useCallback(() => {
+    const current = stateRef.current;
+    if (current.crashed) return;
+    const nextDamage = (current.damage ?? 0) + 1;
+    if (nextDamage >= 2) {
+      crashBot(1.18);
+      return;
+    }
+    const next = {
+      ...current,
+      damage: nextDamage,
+    };
+    stateRef.current = next;
+    setBotDamage(nextDamage);
+    onBotMove(next);
+  }, [crashBot, onBotMove]);
+
+  useEffect(() => {
+    if (!botApiRef) return undefined;
+    botApiRef.current = {
+      hitByBullet: damageBotByBullet,
+      crash: crashBot,
+    };
+    return () => {
+      if (botApiRef.current) botApiRef.current = null;
+    };
+  }, [botApiRef, damageBotByBullet, crashBot]);
 
   useEffect(() => {
     bulletTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
@@ -2104,6 +2246,8 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
     setBotBullets([]);
     setBotRockets([]);
     setBotRocketsRemaining(MAX_ROCKETS);
+    setBotDamage(0);
+    setBotCrashed(false);
     if (botRef.current) {
       const next = stateRef.current;
       botRef.current.style.transform = `translate(${next.x}vw, ${-next.y}vh) rotate(${next.angle}deg)`;
@@ -2241,13 +2385,18 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       };
     };
 
-    const scanHits = (now) => {
+    const scanHits = (now, bot) => {
       const player = playerStateRef.current;
       if (!player || player.crashed) return;
+      if (!bot.crashed && planesCollide(bot, player)) {
+        crashBot(1.8);
+        playerApiRef.current?.crash(1.8);
+        return;
+      }
       const bulletHit = bulletsRef.current.find((projectile) => pointHitsPlane(getShotPoint(projectile, now), player, projectile.radius));
       if (bulletHit) {
         removeBullet(bulletHit.id);
-        playerApiRef.current?.crash(bulletHit.impact);
+        playerApiRef.current?.hitByBullet?.();
         return;
       }
       const rocketHit = rocketsRef.current.find((projectile) => pointHitsPlane(getShotPoint(projectile, now), player, projectile.radius));
@@ -2389,8 +2538,26 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
         return;
       }
 
-      accumulator += frameTime;
       let next = stateRef.current;
+      if (next.crashed) {
+        if (now - next.crashTime > 1650) {
+          next = createInitialBotState();
+          stateRef.current = next;
+          rocketCountRef.current = MAX_ROCKETS;
+          ammoRef.current = MAX_BULLETS;
+          reloadingRef.current = false;
+          rocketReloadingRef.current = false;
+          setBotDamage(0);
+          setBotCrashed(false);
+          setBotRocketsRemaining(MAX_ROCKETS);
+          onBotMove(next);
+        }
+        renderBot(stateRef.current);
+        frame = requestAnimationFrame(update);
+        return;
+      }
+
+      accumulator += frameTime;
       let steps = 0;
       while (accumulator >= step && steps < 6) {
         next = simulateBot(next, step, now);
@@ -2399,14 +2566,14 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       }
       if (steps >= 6) accumulator = 0;
       stateRef.current = next;
-      scanHits(now);
-      renderBot(next);
+      scanHits(now, next);
+      renderBot(stateRef.current);
       frame = requestAnimationFrame(update);
     };
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [active, paused, playerApiRef, playerStateRef, onBotMove]);
+  }, [active, paused, playerApiRef, playerStateRef, onBotMove, crashBot]);
 
   if (!active) return null;
 
@@ -2414,7 +2581,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
     <div className="player-plane-layer bot-plane-layer" aria-label="Enemy bot plane">
       <div
         ref={botRef}
-        className="player-plane bot-plane"
+        className={`player-plane bot-plane${botCrashed ? ' plane-crashed' : ''}${botDamage > 0 && !botCrashed ? ' plane-damaged' : ''}`}
         style={{
           transform: `translate(${BOT_START_X}vw, 0vh) rotate(18deg)`,
           '--thrust': 0,
@@ -2466,6 +2633,25 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
           </span>
         ))}
       </div>
+      {botCrashed && (
+        <span
+          className="blast bot-blast"
+          style={{
+            left: `${stateRef.current.x}vw`,
+            bottom: `calc(100% - 2px + ${Math.max(0, stateRef.current.y)}vh)`,
+          }}
+          aria-hidden="true"
+        >
+          <i className="blast-flash" />
+          <i className="blast-core" />
+          <i className="blast-sparks" />
+          <i className="smoke smoke-one" />
+          <i className="smoke smoke-two" />
+          <i className="smoke smoke-three" />
+          <i className="smoke smoke-four" />
+          <i className="smoke smoke-five" />
+        </span>
+      )}
     </div>
   );
 }
@@ -2492,6 +2678,7 @@ function BitPlane({ rocketsRemaining, planeColor, planeLightCombo }) {
       <span className="plane-propeller" aria-hidden="true" />
       <span className="plane-nav-light plane-nav-light-front" aria-hidden="true" />
       <span className="plane-nav-light plane-nav-light-back" aria-hidden="true" />
+      <span className="plane-damage-smoke" aria-hidden="true" />
       <span className={`plane-rocket-loadout plane-rocket-one${rocketsRemaining < 2 ? ' plane-rocket-spent' : ''}`} aria-hidden="true">
         <i className="plane-rocket-tip" />
         <i className="plane-rocket-body" />
