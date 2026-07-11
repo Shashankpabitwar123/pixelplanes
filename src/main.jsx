@@ -352,6 +352,7 @@ function App() {
   const worldRef = useRef(null);
   const mapPointerRef = useRef(null);
   const mapDotRef = useRef(null);
+  const mapBotDotRef = useRef(null);
   const fuelGaugeRef = useRef(null);
   const playerStateRef = useRef(createInitialPlaneState());
   const playerApiRef = useRef(null);
@@ -423,12 +424,21 @@ function App() {
     setAmmoStatus({ count: MAX_BULLETS, reloading: false });
     setRocketCount(MAX_ROCKETS);
     playerStateRef.current = createInitialPlaneState();
+    if (mapBotDotRef.current) {
+      mapBotDotRef.current.style.left = `${Math.max(2, Math.min(98, (BOT_START_X / WORLD_WIDTH) * 100))}%`;
+      mapBotDotRef.current.style.top = `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`;
+    }
     updateCamera({ x: getCameraX(START_X), y: getCameraY(0) });
     updateFuelGauge(1);
     setRestartSignal((signal) => signal + 1);
   }, [updateCamera, updateFuelGauge]);
   const updatePlayerState = useCallback((nextState) => {
     playerStateRef.current = nextState;
+  }, []);
+  const updateBotLocator = useCallback((botState) => {
+    if (!mapBotDotRef.current) return;
+    mapBotDotRef.current.style.left = `${Math.max(2, Math.min(98, (botState.x / WORLD_WIDTH) * 100))}%`;
+    mapBotDotRef.current.style.top = `${Math.max(2, Math.min(98, 100 - ((botState.y + 50) / WORLD_HEIGHT) * 100))}%`;
   }, []);
   const addDropping = useCallback((x) => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -791,6 +801,14 @@ function App() {
           />
         ))}
         <span
+          ref={mapBotDotRef}
+          className={`map-bot-dot${gameStarted ? ' map-bot-dot-active' : ''}`}
+          style={{
+            left: `${Math.max(2, Math.min(98, (BOT_START_X / WORLD_WIDTH) * 100))}%`,
+            top: `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`,
+          }}
+        />
+        <span
           ref={mapDotRef}
           className="map-pointer-dot"
           style={{
@@ -900,6 +918,7 @@ function App() {
             restartSignal={restartSignal}
             playerStateRef={playerStateRef}
             playerApiRef={playerApiRef}
+            onBotMove={updateBotLocator}
           />
           <div className="grass-plants">
             {mapGrassPlants.map((plant, index) => (
@@ -2051,7 +2070,7 @@ function PlayablePlane({
   );
 }
 
-function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef }) {
+function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef, onBotMove }) {
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
@@ -2090,7 +2109,8 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef 
       botRef.current.style.transform = `translate(${next.x}vw, ${-next.y}vh) rotate(${next.angle}deg)`;
       botRef.current.style.setProperty('--thrust', 0);
     }
-  }, [active, restartSignal]);
+    onBotMove(createInitialBotState());
+  }, [active, restartSignal, onBotMove]);
 
   useEffect(() => () => {
     bulletTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
@@ -2357,6 +2377,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef 
       botRef.current.style.transform = `translate(${bot.x}vw, ${-bot.y}vh) rotate(${bot.angle}deg)`;
       botRef.current.style.setProperty('--thrust', bot.thrust);
       botRef.current.querySelector('.plane-visual')?.classList.toggle('prop-spinning', bot.thrust > 0.05);
+      onBotMove(bot);
     };
 
     const update = (now) => {
@@ -2385,7 +2406,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef 
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [active, paused, playerApiRef, playerStateRef]);
+  }, [active, paused, playerApiRef, playerStateRef, onBotMove]);
 
   if (!active) return null;
 
