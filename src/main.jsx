@@ -21,6 +21,8 @@ const ROCKET_LIFETIME_MS = 12000;
 const ROCKET_RANGE = 640;
 const PLANE_SPRITE_ASPECT = 935 / 1620;
 const BOT_START_X = START_X + 118;
+const BOT_WAKE_DISTANCE = 96;
+const BOT_FORGET_DISTANCE = 160;
 const BOT_BULLET_COOLDOWN_MS = 280;
 const BOT_ROCKET_COOLDOWN_MS = 3800;
 const BOT_BULLET_RELOAD_MS = 5200;
@@ -258,6 +260,7 @@ function createInitialBotState() {
     crashTime: 0,
     crashImpact: 1,
     damage: 0,
+    engaged: false,
   };
 }
 
@@ -467,7 +470,8 @@ function App() {
     if (!mapBotDotRef.current) return;
     mapBotDotRef.current.style.left = `${Math.max(2, Math.min(98, (botState.x / WORLD_WIDTH) * 100))}%`;
     mapBotDotRef.current.style.top = `${Math.max(2, Math.min(98, 100 - ((botState.y + 50) / WORLD_HEIGHT) * 100))}%`;
-  }, []);
+    mapBotDotRef.current.classList.toggle('map-bot-dot-active', gameStarted && Boolean(botState.engaged));
+  }, [gameStarted]);
   const addDropping = useCallback((x) => {
     const id = `${Date.now()}-${Math.random()}`;
     setDroppings((items) => [...items, { id, x }]);
@@ -830,7 +834,7 @@ function App() {
         ))}
         <span
           ref={mapBotDotRef}
-          className={`map-bot-dot${gameStarted ? ' map-bot-dot-active' : ''}`}
+          className="map-bot-dot"
           style={{
             left: `${Math.max(2, Math.min(98, (BOT_START_X / WORLD_WIDTH) * 100))}%`,
             top: `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`,
@@ -2419,13 +2423,30 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       const dx = player.x - next.x;
       const dy = player.y - next.y;
       const distance = Math.max(1, Math.hypot(dx, dy));
-      const leadTime = liveTarget ? clamp(distance / 46, 0.45, 2.15) : 1;
-      const target = {
-        x: liveTarget ? player.x + player.vx * leadTime : START_X,
-        y: liveTarget ? player.y + player.vy * leadTime + 2.6 : 34,
-      };
+      if (liveTarget && !next.engaged && distance <= BOT_WAKE_DISTANCE) next.engaged = true;
+      if ((!liveTarget || distance >= BOT_FORGET_DISTANCE) && next.engaged) next.engaged = false;
+      const pursuing = liveTarget && next.engaged;
 
-      if (distance < 24) {
+      if (!pursuing && !next.airborne) {
+        next.throttle = 0;
+        next.thrust += (0 - next.thrust) * Math.min(1, dt * 5.8);
+        next.turnRate *= Math.exp(-dt * 4);
+        next.angle = normalizeAngle(next.angle + normalizeAngle(18 - next.angle) * Math.min(1, dt * 3));
+        return next;
+      }
+
+      const leadTime = pursuing ? clamp(distance / 46, 0.45, 2.15) : 1;
+      const target = pursuing
+        ? {
+            x: player.x + player.vx * leadTime,
+            y: player.y + player.vy * leadTime + 2.6,
+          }
+        : {
+            x: BOT_START_X + Math.sin(now / 2600) * 24,
+            y: 34 + Math.sin(now / 1900) * 10,
+          };
+
+      if (pursuing && distance < 24) {
         target.y += 16;
         target.x += next.x < player.x ? -18 : 18;
       }
@@ -2455,7 +2476,8 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       const normalX = -Math.sin(rad);
       const normalY = Math.cos(rad);
       const onRunway = !next.airborne && next.y <= 0.08;
-      next.throttle = Math.min(1, next.throttle + dt * 1.45);
+      const targetThrottle = pursuing ? 1 : 0.62;
+      next.throttle += (targetThrottle - next.throttle) * Math.min(1, dt * (pursuing ? 1.45 : 1.1));
       next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * 5.8);
 
       if (onRunway) {
@@ -2506,7 +2528,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       next.x = clamp(next.x, 5, WORLD_WIDTH - 5);
       next.y = clamp(next.y, 0, WORLD_HEIGHT - 10);
 
-      if (liveTarget && next.airborne && next.y > 5) {
+      if (pursuing && next.airborne && next.y > 5) {
         const aimAngle = angleToPoint(next, { x: player.x + player.vx * 0.75, y: player.y + player.vy * 0.65 + 1.2 });
         const aimError = Math.abs(normalizeAngle(aimAngle - next.angle));
         const aimRad = (next.angle * Math.PI) / 180;

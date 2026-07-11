@@ -828,15 +828,14 @@ button {
   border-radius: 50%;
   background: #ff2638;
   border: 1px solid rgba(84, 7, 14, 0.82);
-  opacity: 0;
+  opacity: 1;
   transform: translate(-50%, -50%);
   box-shadow: 0 0 5px rgba(255, 38, 56, 0.58);
   pointer-events: none;
 }
 
 .map-bot-dot-active {
-  opacity: 1;
-  animation: mapBotIntroPulse 4.2s ease-out 1 forwards;
+  animation: mapBotHuntPulse 0.82s ease-in-out infinite;
 }
 
 .fuel-gauge {
@@ -1249,6 +1248,22 @@ button {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
     box-shadow: 0 0 5px rgba(255, 38, 56, 0.58);
+  }
+}
+
+@keyframes mapBotHuntPulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 5px rgba(255, 38, 56, 0.58);
+  }
+
+  50% {
+    transform: translate(-50%, -50%) scale(1.7);
+    box-shadow:
+      0 0 0 2px rgba(255, 38, 56, 0.42),
+      0 0 11px rgba(255, 38, 56, 1),
+      0 0 20px rgba(255, 38, 56, 0.78);
   }
 }
 
