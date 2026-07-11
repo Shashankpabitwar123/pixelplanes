@@ -22,7 +22,7 @@ const ROCKET_RANGE = 640;
 const PLANE_SPRITE_ASPECT = 935 / 1620;
 const BOT_START_X = START_X + 118;
 const BOT_WAKE_DISTANCE = 96;
-const BOT_FORGET_DISTANCE = 160;
+const BOT_FORGET_DISTANCE = 118;
 const BOT_BULLET_COOLDOWN_MS = 280;
 const BOT_ROCKET_COOLDOWN_MS = 3800;
 const BOT_BULLET_RELOAD_MS = 5200;
@@ -256,6 +256,7 @@ function createInitialBotState() {
     thrust: 0,
     throttle: 0,
     airborne: false,
+    hasLifted: false,
     crashed: false,
     crashTime: 0,
     crashImpact: 1,
@@ -2416,6 +2417,20 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       return normalizeAngle((Math.atan2(dy, -dx) * 180) / Math.PI);
     };
 
+    const crashBotState = (bot, impact, now) => ({
+      ...bot,
+      crashed: true,
+      crashTime: now,
+      crashImpact: clamp(impact, 0.75, 1.8),
+      damage: Math.max(2, bot.damage ?? 0),
+      engaged: false,
+      thrust: 0,
+      throttle: 0,
+      turnRate: 0,
+      vx: 0,
+      vy: 0,
+    });
+
     const simulateBot = (current, dt, now) => {
       const next = { ...current };
       const player = playerStateRef.current || createInitialPlaneState();
@@ -2476,7 +2491,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       const normalX = -Math.sin(rad);
       const normalY = Math.cos(rad);
       const onRunway = !next.airborne && next.y <= 0.08;
-      const targetThrottle = pursuing ? 1 : 0.62;
+      const targetThrottle = pursuing ? 1 : 0.52;
       next.throttle += (targetThrottle - next.throttle) * Math.min(1, dt * (pursuing ? 1.45 : 1.1));
       next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * 5.8);
 
@@ -2520,10 +2535,15 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       next.x += next.vx * dt;
       next.y += next.vy * dt;
 
-      if (next.airborne && next.y < 0.2) {
-        next.y = 0.2;
-        next.vy = Math.max(8, Math.abs(next.vy) * 0.42);
-        next.angle = normalizeAngle(next.angle + normalizeAngle(38 - next.angle) * 0.45);
+      const shapePoints = planeModel.hitPoints.map((point) => getPlanePoint(next, point));
+      const groundLowestPoint = Math.min(...planeModel.groundPoints.map((point) => getPlanePoint(next, point).y));
+      if (next.y > 2 || (next.airborne && groundLowestPoint > 0.55)) next.hasLifted = true;
+
+      const hitWorldEdge = shapePoints.some((point) => point.x <= 0 || point.x >= WORLD_WIDTH);
+      const hitGround = next.hasLifted && groundLowestPoint <= 0;
+      if (hitGround || hitWorldEdge) {
+        if (groundLowestPoint < 0) next.y -= groundLowestPoint;
+        return crashBotState(next, Math.max(1.05, Math.hypot(next.vx, next.vy) / 28), now);
       }
       next.x = clamp(next.x, 5, WORLD_WIDTH - 5);
       next.y = clamp(next.y, 0, WORLD_HEIGHT - 10);
@@ -2588,6 +2608,13 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       }
       if (steps >= 6) accumulator = 0;
       stateRef.current = next;
+      if (next.crashed) {
+        setBotDamage(next.damage ?? 2);
+        setBotCrashed(true);
+        renderBot(stateRef.current);
+        frame = requestAnimationFrame(update);
+        return;
+      }
       scanHits(now, next);
       renderBot(stateRef.current);
       frame = requestAnimationFrame(update);
