@@ -12,8 +12,8 @@ const FUEL_GAUGE_ZONE_SIZE = FUEL_GAUGE_SWEEP / 4;
 const MAX_BULLETS = 7;
 const BULLET_RELOAD_MS = 7000;
 const BULLET_COOLDOWN_MS = 120;
-const BULLET_LIFETIME_MS = 2000;
-const BULLET_RANGE = 85;
+const BULLET_LIFETIME_MS = 1200;
+const BULLET_RANGE = 102;
 const BULLET_MUZZLE_POINT = { x: 0.051, y: 0.505 };
 const MAX_ROCKETS = 2;
 const ROCKET_COOLDOWN_MS = 520;
@@ -324,11 +324,28 @@ function planesCollide(planeA, planeB) {
 
 function getProjectilePoint(projectile, now) {
   const progress = clamp((now - projectile.created) / projectile.life, 0, 1);
+  if (projectile.unit === 'world') {
+    return {
+      x: projectile.x + projectile.dx * progress,
+      y: projectile.y - projectile.dy * progress,
+    };
+  }
   const viewportWidth = window.innerWidth || 1440;
   const viewportHeight = window.innerHeight || 900;
   return {
     x: projectile.x + (projectile.dx / viewportWidth) * 100 * progress,
     y: projectile.y - (projectile.dy / viewportHeight) * 100 * progress,
+  };
+}
+
+function getGroundClippedWorldProjectile(startYVh, dxVw, dyVh, fullLifeMs, minLifeMs) {
+  const groundHit = dyVh > 0 && Math.max(0, startYVh) <= dyVh;
+  const ratio = groundHit ? clamp(Math.max(0, startYVh) / dyVh, 0, 1) : 1;
+  return {
+    dx: dxVw * ratio,
+    dy: dyVh * ratio,
+    groundHit,
+    life: groundHit ? Math.max(minLifeMs, fullLifeMs * ratio) : fullLifeMs,
   };
 }
 
@@ -1462,11 +1479,10 @@ function PlayablePlane({
       const rad = (plane.angle * Math.PI) / 180;
       const forwardX = -Math.cos(rad);
       const forwardY = Math.sin(rad);
-      const bulletRangePx = window.innerWidth * (BULLET_RANGE / 100);
       const muzzle = getRenderedPlanePoint(plane, BULLET_MUZZLE_POINT);
-      const fullDx = forwardX * bulletRangePx;
-      const fullDy = -forwardY * bulletRangePx;
-      const travel = getGroundClippedProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 120);
+      const fullDx = forwardX * BULLET_RANGE;
+      const fullDy = -forwardY * BULLET_RANGE;
+      const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
       const id = `${now}-${Math.random()}`;
       const projectile = {
         id,
@@ -1478,6 +1494,7 @@ function PlayablePlane({
         life: travel.life,
         created: now,
         angle: plane.angle,
+        unit: 'world',
       };
 
       projectilesRef.current = [...projectilesRef.current, projectile];
@@ -2149,8 +2166,8 @@ function PlayablePlane({
             style={{
               left: `${projectile.x}vw`,
               bottom: `calc(100% - 2px + ${projectile.y}vh)`,
-              '--bullet-dx': `${projectile.dx}px`,
-              '--bullet-dy': `${projectile.dy}px`,
+              '--bullet-dx': `${projectile.dx}${projectile.unit === 'world' ? 'vw' : 'px'}`,
+              '--bullet-dy': `${projectile.dy}${projectile.unit === 'world' ? 'vh' : 'px'}`,
               '--bullet-angle': `${projectile.angle}deg`,
               '--bullet-life': `${projectile.life ?? BULLET_LIFETIME_MS}ms`,
             }}
@@ -2348,11 +2365,10 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       const rad = (bot.angle * Math.PI) / 180;
       const forwardX = -Math.cos(rad);
       const forwardY = Math.sin(rad);
-      const bulletRangePx = window.innerWidth * (BULLET_RANGE / 100);
       const muzzle = getRenderedPlanePoint(bot, BULLET_MUZZLE_POINT);
-      const fullDx = forwardX * bulletRangePx;
-      const fullDy = -forwardY * bulletRangePx;
-      const travel = getGroundClippedProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 120);
+      const fullDx = forwardX * BULLET_RANGE;
+      const fullDy = -forwardY * BULLET_RANGE;
+      const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
       const id = `${now}-bot-bullet-${Math.random()}`;
       const projectile = {
         id,
@@ -2364,6 +2380,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
         life: travel.life,
         created: now,
         angle: bot.angle,
+        unit: 'world',
         radius: 0.9,
         impact: 1.08,
       };
@@ -2417,6 +2434,12 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
 
     const getShotPoint = (projectile, now) => {
       const progress = clamp((now - projectile.created) / projectile.life, 0, 1);
+      if (projectile.unit === 'world') {
+        return {
+          x: projectile.x + projectile.dx * progress,
+          y: projectile.y - projectile.dy * progress,
+        };
+      }
       const viewportWidth = window.innerWidth || 1440;
       const viewportHeight = window.innerHeight || 900;
       return {
@@ -2692,8 +2715,8 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
             style={{
               left: `${projectile.x}vw`,
               bottom: `calc(100% - 2px + ${projectile.y}vh)`,
-              '--bullet-dx': `${projectile.dx}px`,
-              '--bullet-dy': `${projectile.dy}px`,
+              '--bullet-dx': `${projectile.dx}${projectile.unit === 'world' ? 'vw' : 'px'}`,
+              '--bullet-dy': `${projectile.dy}${projectile.unit === 'world' ? 'vh' : 'px'}`,
               '--bullet-angle': `${projectile.angle}deg`,
               '--bullet-life': `${projectile.life ?? BULLET_LIFETIME_MS}ms`,
             }}
