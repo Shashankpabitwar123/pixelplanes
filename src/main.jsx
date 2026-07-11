@@ -365,11 +365,14 @@ function segmentHitsPlane(segment, plane, radius = 0.9) {
   return planeModel.hitPoints.some((hitPoint) => distanceToSegment(getPlanePoint(plane, hitPoint), segment.start, segment.end) <= radius);
 }
 
-function getSmokeWind(plane) {
+function getSmokeWind(plane, previousPlane = null) {
   const rad = (plane.angle * Math.PI) / 180;
   const speed = Math.hypot(plane.vx, plane.vy);
-  const screenX = speed > 1.4 ? -plane.vx : Math.cos(rad);
-  const screenY = speed > 1.4 ? plane.vy : -Math.sin(rad);
+  const deltaX = previousPlane ? plane.x - previousPlane.x : 0;
+  const deltaY = previousPlane ? plane.y - previousPlane.y : 0;
+  const moved = Math.hypot(deltaX, deltaY);
+  const screenX = moved > 0.002 ? -deltaX : speed > 1.4 ? -plane.vx : Math.cos(rad);
+  const screenY = moved > 0.002 ? deltaY : speed > 1.4 ? plane.vy : -Math.sin(rad);
   const sourceLength = Math.max(0.001, Math.hypot(screenX, screenY));
   const strength = clamp(speed * 2.9, 48, 118);
   return {
@@ -1121,6 +1124,7 @@ function PlayablePlane({
   const pausedRef = useRef(paused);
   const startArmedRef = useRef(startArmed);
   const onPowerStartRef = useRef(onPowerStart);
+  const smokePreviousPlaneRef = useRef(null);
   const crashedRef = useRef(false);
   const ammoRef = useRef(MAX_BULLETS);
   const reloadingRef = useRef(false);
@@ -1154,6 +1158,7 @@ function PlayablePlane({
     rocketProjectilesRef.current = [];
     const next = createInitialPlaneState();
     stateRef.current = next;
+    smokePreviousPlaneRef.current = null;
     ammoRef.current = MAX_BULLETS;
     reloadingRef.current = false;
     lastShotRef.current = 0;
@@ -2103,6 +2108,7 @@ function PlayablePlane({
       if (next.crashed) {
         if (now - next.crashTime > 1450) {
           next = createInitialPlaneState();
+          smokePreviousPlaneRef.current = null;
           if (reloadTimerRef.current) {
             window.clearTimeout(reloadTimerRef.current);
             reloadTimerRef.current = null;
@@ -2163,7 +2169,8 @@ function PlayablePlane({
 
     const renderPlane = (planeState) => {
       if (planeRef.current) {
-        const smokeWind = getSmokeWind(planeState);
+        const smokeWind = getSmokeWind(planeState, smokePreviousPlaneRef.current);
+        smokePreviousPlaneRef.current = { x: planeState.x, y: planeState.y };
         planeRef.current.style.transform = `translate(${planeState.x}vw, ${-planeState.y}vh) rotate(${planeState.angle}deg)`;
         const visibleThrust = Math.max(planeState.thrust, planeState.throttle);
         planeRef.current.style.setProperty('--thrust', visibleThrust);
@@ -2281,6 +2288,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
   const rocketReloadingRef = useRef(false);
   const lastShotRef = useRef(0);
   const lastRocketRef = useRef(0);
+  const smokePreviousBotRef = useRef(null);
   const [botBullets, setBotBullets] = useState([]);
   const [botRockets, setBotRockets] = useState([]);
   const [botRocketsRemaining, setBotRocketsRemaining] = useState(MAX_ROCKETS);
@@ -2351,6 +2359,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
     lastRocketRef.current = 0;
     const nextBot = createInitialBotState(stateRef.current?.x);
     stateRef.current = nextBot;
+    smokePreviousBotRef.current = null;
     setBotBullets([]);
     setBotRockets([]);
     setBotRocketsRemaining(MAX_ROCKETS);
@@ -2686,7 +2695,8 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
 
     const renderBot = (bot) => {
       if (!botRef.current) return;
-      const smokeWind = getSmokeWind(bot);
+      const smokeWind = getSmokeWind(bot, smokePreviousBotRef.current);
+      smokePreviousBotRef.current = { x: bot.x, y: bot.y };
       botRef.current.style.transform = `translate(${bot.x}vw, ${-bot.y}vh) rotate(${bot.angle}deg)`;
       botRef.current.style.setProperty('--thrust', bot.thrust);
       botRef.current.style.setProperty('--smoke-counter-angle', `${-bot.angle}deg`);
@@ -2710,6 +2720,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
         if (now - next.crashTime > 1650) {
           next = createInitialBotState(next.x);
           stateRef.current = next;
+          smokePreviousBotRef.current = null;
           rocketCountRef.current = MAX_ROCKETS;
           ammoRef.current = MAX_BULLETS;
           reloadingRef.current = false;
