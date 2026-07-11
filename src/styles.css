@@ -371,10 +371,15 @@ button {
     0 0 34px rgba(31, 65, 86, 0.22),
     inset 0 -5px 0 rgba(40, 55, 67, 0.12);
   backdrop-filter: blur(10px);
+  animation: pauseCenterPulse 1.05s ease-in-out infinite !important;
 }
 
 .scene-paused * {
   animation-play-state: paused !important;
+}
+
+.scene-paused .pause-center-icon {
+  animation-play-state: running !important;
 }
 
 .music-panel {
@@ -1205,6 +1210,27 @@ button {
       0 0 0 2px rgba(255, 42, 58, 0.58),
       0 0 20px rgba(255, 42, 58, 0.9),
       0 8px 28px rgba(255, 42, 58, 0.52);
+  }
+}
+
+@keyframes pauseCenterPulse {
+  0%,
+  100% {
+    border-color: rgba(255, 225, 63, 0.46);
+    box-shadow:
+      0 0 0 1px rgba(255, 225, 63, 0.26),
+      0 0 16px rgba(255, 211, 54, 0.44),
+      0 0 34px rgba(31, 65, 86, 0.22),
+      inset 0 -5px 0 rgba(40, 55, 67, 0.12);
+  }
+
+  50% {
+    border-color: rgba(255, 235, 79, 0.98);
+    box-shadow:
+      0 0 0 3px rgba(255, 225, 63, 0.36),
+      0 0 20px rgba(255, 225, 63, 0.8),
+      0 0 44px rgba(255, 179, 31, 0.52),
+      inset 0 -5px 0 rgba(40, 55, 67, 0.12);
   }
 }
 

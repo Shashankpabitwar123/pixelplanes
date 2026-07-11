@@ -301,7 +301,7 @@ function App() {
   }, []);
   const pauseGame = useCallback(() => {
     if (!gameStarted) return;
-    setPaused(true);
+    setPaused((current) => !current);
   }, [gameStarted]);
   const armBotStart = useCallback(() => {
     setStartScreen('bot-ready');
