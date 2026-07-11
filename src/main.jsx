@@ -491,7 +491,7 @@ function App() {
         aria-label="Restart game"
         onClick={restartGame}
       >
-        <img src="/assets/restart-icon.svg" alt="" draggable="false" aria-hidden="true" />
+        <img src="/assets/restart-icon.png" alt="" draggable="false" aria-hidden="true" />
       </button>
       <button
         className={`music-selector${musicOpen ? ' music-selector-open' : ''}`}
