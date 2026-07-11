@@ -367,16 +367,16 @@ function segmentHitsPlane(segment, plane, radius = 0.9) {
 
 function getSmokeWind(plane) {
   const rad = (plane.angle * Math.PI) / 180;
-  const velocityX = -plane.vx;
-  const velocityY = plane.vy;
   const speed = Math.hypot(plane.vx, plane.vy);
-  const sourceX = speed > 1.4 ? velocityX : Math.cos(rad);
-  const sourceY = speed > 1.4 ? velocityY : Math.sin(rad);
-  const sourceLength = Math.max(0.001, Math.hypot(sourceX, sourceY));
+  const worldX = speed > 1.4 ? -plane.vx : Math.cos(rad);
+  const worldY = speed > 1.4 ? plane.vy : Math.sin(rad);
+  const sourceLength = Math.max(0.001, Math.hypot(worldX, worldY));
   const strength = clamp(speed * 2.9, 48, 118);
+  const normalizedX = (worldX / sourceLength) * strength;
+  const normalizedY = (worldY / sourceLength) * strength;
   return {
-    x: (sourceX / sourceLength) * strength,
-    y: (sourceY / sourceLength) * strength,
+    x: normalizedX * Math.cos(rad) - normalizedY * Math.sin(rad),
+    y: normalizedX * Math.sin(rad) + normalizedY * Math.cos(rad),
   };
 }
 
