@@ -196,6 +196,7 @@ button {
 }
 
 .music-selector,
+.pause-toggle,
 .sfx-toggle,
 .help-toggle,
 .plane-selector {
@@ -213,6 +214,10 @@ button {
   box-shadow: 0 8px 20px rgba(31, 65, 86, 0.12);
   backdrop-filter: blur(10px);
   cursor: pointer;
+}
+
+.pause-toggle {
+  top: 74px;
 }
 
 .sfx-toggle {
@@ -237,6 +242,51 @@ button {
   object-fit: contain;
   image-rendering: pixelated;
   pointer-events: none;
+}
+
+.pause-button-icon {
+  position: absolute;
+  inset: 7px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #050505;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 24%, rgba(255, 205, 76, 0.72) 0 9%, transparent 10%),
+    linear-gradient(135deg, #ff911f 0 34%, #ff6a00 35% 100%);
+  box-shadow:
+    inset -4px -5px 0 rgba(169, 57, 0, 0.3),
+    inset 3px 3px 0 rgba(255, 181, 49, 0.38);
+  image-rendering: pixelated;
+}
+
+.pause-button-icon i,
+.pause-center-icon i {
+  display: block;
+  width: 22%;
+  height: 44%;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.pause-button-icon i {
+  position: absolute;
+  top: 28%;
+  color: #fffdf2;
+}
+
+.pause-button-icon i:first-child {
+  left: 29%;
+}
+
+.pause-button-icon i:last-child {
+  right: 29%;
+}
+
+.pause-toggle-active {
+  box-shadow:
+    0 0 0 2px rgba(255, 215, 56, 0.28),
+    0 8px 20px rgba(31, 65, 86, 0.12);
 }
 
 .help-toggle img {
@@ -288,12 +338,43 @@ button {
 }
 
 .music-selector-open,
+.pause-toggle-active,
 .sfx-muted,
 .help-toggle-open,
 .plane-selector-open {
   box-shadow:
     0 0 0 2px rgba(255, 215, 56, 0.2),
     0 8px 20px rgba(31, 65, 86, 0.12);
+}
+
+.pause-overlay {
+  position: absolute;
+  z-index: 39;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.pause-center-icon {
+  width: clamp(112px, 10vw, 158px);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12%;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 50%;
+  color: #6d7782;
+  background: rgba(216, 222, 226, 0.72);
+  box-shadow:
+    0 0 34px rgba(31, 65, 86, 0.22),
+    inset 0 -5px 0 rgba(40, 55, 67, 0.12);
+  backdrop-filter: blur(10px);
+}
+
+.scene-paused * {
+  animation-play-state: paused !important;
 }
 
 .music-panel {
@@ -1138,6 +1219,7 @@ button {
 .scene-dark .bullet-meter,
 .scene-dark .rocket-meter,
 .scene-dark .music-selector,
+.scene-dark .pause-toggle,
 .scene-dark .sfx-toggle,
 .scene-dark .help-toggle,
 .scene-dark .plane-selector,
@@ -1147,6 +1229,15 @@ button {
 .scene-dark .start-card {
   border-color: rgba(255, 255, 255, 0.14);
   background: rgba(180, 190, 198, 0.42);
+}
+
+.scene-dark .pause-center-icon {
+  color: #9aa5b2;
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(180, 190, 198, 0.42);
+  box-shadow:
+    0 0 34px rgba(6, 12, 24, 0.38),
+    inset 0 -5px 0 rgba(255, 255, 255, 0.08);
 }
 
 .scene-dark .music-track-button,
@@ -2696,6 +2787,11 @@ button {
   .music-selector {
     left: 12px;
     top: 12px;
+  }
+
+  .pause-toggle {
+    left: 12px;
+    top: 66px;
   }
 
   .sfx-toggle {

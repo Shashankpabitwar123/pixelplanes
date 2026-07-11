@@ -269,6 +269,7 @@ function normalizeAngle(angle) {
 function App() {
   const [theme, setTheme] = useState('dark');
   const [gameStarted, setGameStarted] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [startScreen, setStartScreen] = useState('home');
   const [roomCode, setRoomCode] = useState('');
   const [roomTheme, setRoomTheme] = useState('dark');
@@ -292,11 +293,16 @@ function App() {
   const shootingStarTimersRef = useRef([]);
   const startGame = useCallback(() => {
     setGameStarted(true);
+    setPaused(false);
     setStartScreen('home');
     setMusicOpen(false);
     setHelpOpen(false);
     setPlaneMenuOpen(false);
   }, []);
+  const pauseGame = useCallback(() => {
+    if (!gameStarted) return;
+    setPaused(true);
+  }, [gameStarted]);
   const armBotStart = useCallback(() => {
     setStartScreen('bot-ready');
     setMusicOpen(false);
@@ -416,8 +422,20 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const resumeFromPause = (event) => {
+      if (!paused || event.code !== 'Space') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPaused(false);
+    };
+
+    window.addEventListener('keydown', resumeFromPause, true);
+    return () => window.removeEventListener('keydown', resumeFromPause, true);
+  }, [paused]);
+
   return (
-    <main className={`scene scene-${theme}`} aria-label="Animated Bitplanes background">
+    <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}`} aria-label="Animated Bitplanes background">
       <div className="sky-gradient" />
 
       <button
@@ -432,6 +450,19 @@ function App() {
         }}
       >
         <img src="/assets/music-note-icon-transparent.png" alt="" draggable="false" aria-hidden="true" />
+      </button>
+      <button
+        className={`pause-toggle${paused ? ' pause-toggle-active' : ''}`}
+        type="button"
+        aria-label="Pause game"
+        aria-pressed={paused}
+        aria-disabled={!gameStarted}
+        onClick={pauseGame}
+      >
+        <span className="pause-button-icon" aria-hidden="true">
+          <i />
+          <i />
+        </span>
       </button>
       <button
         className={`sfx-toggle${sfxMuted ? ' sfx-muted' : ''}`}
@@ -640,6 +671,14 @@ function App() {
           </div>
         </div>
       )}
+      {paused && (
+        <div className="pause-overlay" aria-label="Game paused">
+          <div className="pause-center-icon" aria-hidden="true">
+            <i />
+            <i />
+          </div>
+        </div>
+      )}
 
       <div ref={mapPointerRef} className="map-pointer" aria-label="Map position">
         {fuelTankPlacements.map((x, index) => (
@@ -747,7 +786,8 @@ function App() {
             onFuelChange={updateFuelGauge}
             onAmmoChange={updateAmmoStatus}
             onRocketChange={updateRocketStatus}
-            controlsEnabled={gameStarted}
+            controlsEnabled={gameStarted && !paused}
+            paused={paused}
             startArmed={startScreen === 'bot-ready'}
             onPowerStart={startGame}
             planeColor={planeColor}
@@ -825,6 +865,7 @@ function PlayablePlane({
   onAmmoChange,
   onRocketChange,
   controlsEnabled,
+  paused,
   startArmed,
   onPowerStart,
   planeColor,
@@ -838,6 +879,7 @@ function PlayablePlane({
   const crashSoundRef = useRef(null);
   const sfxMutedRef = useRef(sfxMuted);
   const controlsEnabledRef = useRef(controlsEnabled);
+  const pausedRef = useRef(paused);
   const startArmedRef = useRef(startArmed);
   const onPowerStartRef = useRef(onPowerStart);
   const crashedRef = useRef(false);
@@ -885,6 +927,10 @@ function PlayablePlane({
       engineAudioRef.current.master.gain.setTargetAtTime(0, engineAudioRef.current.context.currentTime, 0.025);
     }
   }, [controlsEnabled]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     startArmedRef.current = startArmed;
@@ -1709,6 +1755,13 @@ function PlayablePlane({
       last = now;
       const keys = keysRef.current;
       let next = stateRef.current;
+
+      if (pausedRef.current) {
+        accumulator = 0;
+        renderPlane(next);
+        frame = requestAnimationFrame(update);
+        return;
+      }
 
       if (next.crashed) {
         if (now - next.crashTime > 1450) {
