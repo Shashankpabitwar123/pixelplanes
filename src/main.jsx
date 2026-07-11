@@ -2030,6 +2030,26 @@ function PlayablePlane({
       if (next.crashed) {
         if (now - next.crashTime > 1450) {
           next = createInitialPlaneState();
+          if (reloadTimerRef.current) {
+            window.clearTimeout(reloadTimerRef.current);
+            reloadTimerRef.current = null;
+          }
+          projectileTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+          projectileTimeoutsRef.current = [];
+          rocketTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+          rocketTimeoutsRef.current = [];
+          projectilesRef.current = [];
+          rocketProjectilesRef.current = [];
+          ammoRef.current = MAX_BULLETS;
+          reloadingRef.current = false;
+          lastShotRef.current = 0;
+          rocketsRef.current = MAX_ROCKETS;
+          lastRocketRef.current = 0;
+          setProjectiles([]);
+          setRocketProjectiles([]);
+          setRocketsRemaining(MAX_ROCKETS);
+          onAmmoChange({ count: MAX_BULLETS, reloading: false });
+          onRocketChange(MAX_ROCKETS);
           onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
           onFuelChange(next.fuel / FUEL_SECONDS);
           onPlaneState(next);
@@ -2094,7 +2114,7 @@ function PlayablePlane({
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [onMove, onFuelChange, onPlaneState, botStateRef, botApiRef]);
+  }, [onMove, onFuelChange, onAmmoChange, onRocketChange, onPlaneState, botStateRef, botApiRef]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
@@ -2457,14 +2477,16 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       }
 
       const leadTime = pursuing ? clamp(distance / 46, 0.45, 2.15) : 1;
+      const roamDirection = Math.abs(next.vx) > 1 ? Math.sign(next.vx) : next.x < WORLD_WIDTH / 2 ? 1 : -1;
+      const roamPhase = now / 1900 + next.x * 0.025;
       const target = pursuing
         ? {
             x: player.x + player.vx * leadTime,
             y: player.y + player.vy * leadTime + 2.6,
           }
         : {
-            x: BOT_START_X + Math.sin(now / 2600) * 24,
-            y: 34 + Math.sin(now / 1900) * 10,
+            x: clamp(next.x + roamDirection * (74 + Math.sin(roamPhase) * 16), 34, WORLD_WIDTH - 34),
+            y: clamp(next.y + Math.sin(roamPhase) * 30 + 6, 30, WORLD_HEIGHT - 65),
           };
 
       if (avoidingPlayer) {
