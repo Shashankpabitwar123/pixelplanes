@@ -34,3 +34,40 @@ npm run dev
 ```bash
 npm run build
 ```
+
+## Multiplayer Backend
+
+The repo now includes a Node WebSocket server in `server/index.js`.
+
+Run it locally:
+
+```bash
+npm run server:start
+```
+
+Useful local endpoints:
+
+```text
+GET  http://127.0.0.1:4000/health
+WS   ws://127.0.0.1:4000/rooms
+POST http://127.0.0.1:4000/voice/token
+```
+
+Frontend multiplayer env vars:
+
+```bash
+VITE_WS_URL=wss://your-render-service.onrender.com/rooms
+VITE_API_URL=https://your-render-service.onrender.com
+```
+
+Backend env vars:
+
+```bash
+CLIENT_ORIGIN=https://pixelplanes.app
+DATABASE_URL=your_neon_postgres_url
+LIVEKIT_URL=your_livekit_cloud_ws_url
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
+```
+
+Rooms work without LiveKit. Voice tokens require the three LiveKit values.

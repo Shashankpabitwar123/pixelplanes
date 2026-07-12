@@ -61,6 +61,8 @@ const MUSIC_TRACKS = [
 
 const HIGH_SCORE_STORAGE_KEY = 'bitplanes-high-score';
 const ROOM_MAX_PLAYERS = 6;
+const MULTIPLAYER_WS_URL = import.meta.env.VITE_WS_URL || '';
+const MULTIPLAYER_API_URL = import.meta.env.VITE_API_URL || '';
 
 function readStoredHighScore() {
   try {
@@ -114,6 +116,28 @@ function generateRoomCode() {
 
 function pickRoomPlaneColor() {
   return PLANE_COLOR_IDS[Math.floor(Math.random() * PLANE_COLOR_IDS.length)];
+}
+
+function createLocalRoomLobby(name, theme) {
+  const hostColor = pickRoomPlaneColor();
+  return {
+    code: generateRoomCode(),
+    theme,
+    hostId: 'host',
+    started: false,
+    maxPlayers: ROOM_MAX_PLAYERS,
+    players: [
+      {
+        id: 'host',
+        name: name.trim() || 'Player 1',
+        color: hostColor,
+        role: 'Host',
+        kills: 0,
+        micEnabled: true,
+        speakerEnabled: true,
+      },
+    ],
+  };
 }
 
 function RoomMicIcon({ className }) {
@@ -1011,6 +1035,9 @@ function App() {
   const [roomTheme, setRoomTheme] = useState('dark');
   const [roomPlayerName, setRoomPlayerName] = useState('');
   const [roomLobby, setRoomLobby] = useState(null);
+  const [localRoomPlayerId, setLocalRoomPlayerId] = useState('');
+  const [roomConnectionStatus, setRoomConnectionStatus] = useState('idle');
+  const [roomError, setRoomError] = useState('');
   const [roomVoiceEnabled, setRoomVoiceEnabled] = useState(true);
   const [roomSpeakerEnabled, setRoomSpeakerEnabled] = useState(true);
   const [roomMutedPlayers, setRoomMutedPlayers] = useState({});
@@ -1038,6 +1065,7 @@ function App() {
   const botStateRefs = useRef(createInitialBotStates());
   const playerApiRef = useRef(null);
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
+  const roomSocketRef = useRef(null);
   const musicAudioRef = useRef(null);
   const rainAudioRef = useRef(null);
   const rainSoundStartTimerRef = useRef(0);
@@ -1052,6 +1080,106 @@ function App() {
     setPlaneMenuOpen(false);
     setKillCount(0);
   }, []);
+  const disconnectRoomSocket = useCallback(() => {
+    if (roomSocketRef.current) {
+      roomSocketRef.current.close();
+      roomSocketRef.current = null;
+    }
+    setLocalRoomPlayerId('');
+    setRoomConnectionStatus('idle');
+  }, []);
+  const sendRoomMessage = useCallback((message) => {
+    const socket = roomSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    socket.send(JSON.stringify(message));
+    return true;
+  }, []);
+  const applyServerRoomState = useCallback((room, playerId = localRoomPlayerId) => {
+    if (!room) return;
+    setRoomLobby(room);
+    setRoomTheme(room.theme || 'dark');
+    setTheme(room.theme || 'dark');
+    if (playerId) {
+      setLocalRoomPlayerId(playerId);
+      const localPlayer = room.players?.find((player) => player.id === playerId);
+      if (localPlayer?.color) setPlaneColor(localPlayer.color);
+      if (typeof localPlayer?.micEnabled === 'boolean') setRoomVoiceEnabled(localPlayer.micEnabled);
+      if (typeof localPlayer?.speakerEnabled === 'boolean') setRoomSpeakerEnabled(localPlayer.speakerEnabled);
+    }
+    setRoomError('');
+    setStartScreen('room-waiting');
+  }, [localRoomPlayerId]);
+  const connectRoomSocket = useCallback(() => new Promise((resolve, reject) => {
+    if (!MULTIPLAYER_WS_URL) {
+      reject(new Error('Multiplayer server is not configured yet.'));
+      return;
+    }
+
+    const existing = roomSocketRef.current;
+    if (existing?.readyState === WebSocket.OPEN) {
+      resolve(existing);
+      return;
+    }
+
+    setRoomConnectionStatus('connecting');
+    const socket = new WebSocket(MULTIPLAYER_WS_URL);
+    roomSocketRef.current = socket;
+    let settled = false;
+
+    socket.addEventListener('open', () => {
+      settled = true;
+      setRoomConnectionStatus('connected');
+      resolve(socket);
+    });
+    socket.addEventListener('message', (event) => {
+      let message;
+      try {
+        message = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      if (message.type === 'room_state') {
+        applyServerRoomState(message.room, message.localPlayerId);
+      }
+      if (message.type === 'room_started') {
+        applyServerRoomState(message.room, localRoomPlayerId);
+        setGameMode('room');
+        startGame();
+      }
+      if (message.type === 'room_deleted') {
+        setRoomLobby(null);
+        setRoomMutedPlayers({});
+        setRoomError('Room was deleted by the host.');
+        setStartScreen('room');
+      }
+      if (message.type === 'room_left') {
+        setRoomLobby(null);
+        setRoomMutedPlayers({});
+        setStartScreen('room');
+      }
+      if (message.type === 'room_error') {
+        setRoomError(message.message || 'Room error.');
+      }
+    });
+    socket.addEventListener('close', () => {
+      if (roomSocketRef.current === socket) {
+        roomSocketRef.current = null;
+      }
+      setRoomConnectionStatus('idle');
+      if (!settled) {
+        reject(new Error('Could not connect to multiplayer server.'));
+      }
+    });
+    socket.addEventListener('error', () => {
+      setRoomConnectionStatus('idle');
+      if (!settled) {
+        reject(new Error('Could not connect to multiplayer server.'));
+      }
+    });
+  }), [applyServerRoomState, localRoomPlayerId, startGame]);
   const pauseGame = useCallback(() => {
     if (!gameStarted) return;
     setPaused((current) => !current);
@@ -1070,26 +1198,67 @@ function App() {
     setHelpOpen(false);
     setPlaneMenuOpen(false);
   }, []);
-  const createRoomLobby = useCallback(() => {
-    const hostName = roomPlayerName.trim() || 'Player 1';
-    const hostColor = pickRoomPlaneColor();
-    setPlaneColor(hostColor);
+  const createRoomLobby = useCallback(async () => {
+    setRoomError('');
     setKillCount(0);
     setRoomMutedPlayers({});
-    setRoomLobby({
-      code: generateRoomCode(),
-      players: [
-        {
-          id: 'host',
-          name: hostName,
-          color: hostColor,
-          role: 'Host',
-        },
-      ],
-    });
+
+    if (MULTIPLAYER_WS_URL) {
+      try {
+        const socket = await connectRoomSocket();
+        socket.send(JSON.stringify({
+          type: 'create_room',
+          name: roomPlayerName,
+          theme: roomTheme,
+          micEnabled: roomVoiceEnabled,
+          speakerEnabled: roomSpeakerEnabled,
+        }));
+      } catch (error) {
+        setRoomError(error.message);
+      }
+      return;
+    }
+
+    const localLobby = createLocalRoomLobby(roomPlayerName, roomTheme);
+    setPlaneColor(localLobby.players[0].color);
+    setLocalRoomPlayerId('host');
+    setRoomLobby(localLobby);
     setStartScreen('room-waiting');
-  }, [roomPlayerName]);
+  }, [connectRoomSocket, roomPlayerName, roomSpeakerEnabled, roomTheme, roomVoiceEnabled]);
+  const joinRoomLobby = useCallback(async () => {
+    setRoomError('');
+    if (!roomCode.trim()) {
+      setRoomError('Enter a room code.');
+      return;
+    }
+
+    if (!MULTIPLAYER_WS_URL) {
+      setRoomError('Multiplayer server is not connected yet.');
+      return;
+    }
+
+    try {
+      const socket = await connectRoomSocket();
+      socket.send(JSON.stringify({
+        type: 'join_room',
+        code: roomCode,
+        name: roomPlayerName,
+        micEnabled: roomVoiceEnabled,
+        speakerEnabled: roomSpeakerEnabled,
+      }));
+    } catch (error) {
+      setRoomError(error.message);
+    }
+  }, [connectRoomSocket, roomCode, roomPlayerName, roomSpeakerEnabled, roomVoiceEnabled]);
   const leaveRoomLobby = useCallback(() => {
+    if (sendRoomMessage({ type: 'leave_room' })) {
+      disconnectRoomSocket();
+      setRoomLobby(null);
+      setRoomMutedPlayers({});
+      setStartScreen('room');
+      return;
+    }
+
     if (!roomLobby) {
       setStartScreen('room');
       return;
@@ -1111,12 +1280,42 @@ function App() {
     ];
     setRoomLobby({ ...roomLobby, players: nextPlayers });
     setStartScreen('room');
-  }, [roomLobby]);
+  }, [disconnectRoomSocket, roomLobby, sendRoomMessage]);
   const deleteRoomLobby = useCallback(() => {
+    if (sendRoomMessage({ type: 'delete_room' })) {
+      disconnectRoomSocket();
+    }
     setRoomLobby(null);
     setRoomMutedPlayers({});
     setStartScreen('room');
-  }, []);
+  }, [disconnectRoomSocket, sendRoomMessage]);
+  const applyRoomTheme = useCallback((nextTheme) => {
+    setRoomTheme(nextTheme);
+    setTheme(nextTheme);
+    sendRoomMessage({ type: 'update_room_settings', theme: nextTheme });
+  }, [sendRoomMessage]);
+  const toggleRoomVoice = useCallback(() => {
+    setRoomVoiceEnabled((enabled) => {
+      const nextEnabled = !enabled;
+      sendRoomMessage({
+        type: 'update_audio_settings',
+        micEnabled: nextEnabled,
+        speakerEnabled: roomSpeakerEnabled,
+      });
+      return nextEnabled;
+    });
+  }, [roomSpeakerEnabled, sendRoomMessage]);
+  const toggleRoomSpeaker = useCallback(() => {
+    setRoomSpeakerEnabled((enabled) => {
+      const nextEnabled = !enabled;
+      sendRoomMessage({
+        type: 'update_audio_settings',
+        micEnabled: roomVoiceEnabled,
+        speakerEnabled: nextEnabled,
+      });
+      return nextEnabled;
+    });
+  }, [roomVoiceEnabled, sendRoomMessage]);
   const updateCamera = useCallback((camera) => {
     if (worldRef.current) {
       worldRef.current.style.transform = `translate(${-camera.x}vw, ${camera.y}vh)`;
@@ -1199,6 +1398,7 @@ function App() {
     setRoomMutedPlayers((current) => ({ ...current, [playerId]: !current[playerId] }));
   }, []);
   const restartGame = useCallback(() => {
+    disconnectRoomSocket();
     setGameStarted(false);
     setPaused(false);
     setStartScreen('home');
@@ -1228,7 +1428,7 @@ function App() {
     updateCamera({ x: getCameraX(START_X), y: getCameraY(0) });
     updateFuelGauge(1);
     setRestartSignal((signal) => signal + 1);
-  }, [updateCamera, updateFuelGauge]);
+  }, [disconnectRoomSocket, updateCamera, updateFuelGauge]);
   const updatePlayerState = useCallback((nextState) => {
     playerStateRef.current = nextState;
   }, []);
@@ -1405,19 +1605,26 @@ function App() {
     return () => window.removeEventListener('keydown', resumeFromPause, true);
   }, [paused]);
 
+  useEffect(() => () => disconnectRoomSocket(), [disconnectRoomSocket]);
+
+  useEffect(() => {
+    if (gameMode !== 'room' || !gameStarted) return;
+    sendRoomMessage({ type: 'update_kills', kills: killCount });
+  }, [gameMode, gameStarted, killCount, sendRoomMessage]);
+
   const roomPlayers = roomLobby?.players ?? [];
   const roomSlots = Array.from({ length: ROOM_MAX_PLAYERS }, (_, index) => roomPlayers[index] ?? null);
-  const roomIsHost = roomPlayers[0]?.id === 'host';
+  const roomIsHost = roomLobby?.hostId ? roomLobby.hostId === localRoomPlayerId : roomPlayers[0]?.id === 'host';
   const isRoomGame = gameStarted && gameMode === 'room';
   const roomLeaderboardRows = (roomPlayers.length ? roomPlayers : [{ id: 'host', name: 'Player 1', color: planeColor, role: 'Host' }])
     .map((player) => {
-      const isLocalPlayer = player.id === 'host';
-      const micEnabled = isLocalPlayer ? roomVoiceEnabled : true;
-      const speakerEnabled = isLocalPlayer ? roomSpeakerEnabled : !roomMutedPlayers[player.id];
+      const isLocalPlayer = localRoomPlayerId ? player.id === localRoomPlayerId : player.id === 'host';
+      const micEnabled = isLocalPlayer ? roomVoiceEnabled : player.micEnabled !== false;
+      const speakerEnabled = isLocalPlayer ? roomSpeakerEnabled : !roomMutedPlayers[player.id] && player.speakerEnabled !== false;
       const voiceLevel = 0;
       return {
         ...player,
-        kills: player.id === 'host' ? killCount : 0,
+        kills: isLocalPlayer ? killCount : player.kills ?? 0,
         isLocalPlayer,
         micEnabled,
         speakerEnabled,
@@ -1715,11 +1922,13 @@ function App() {
                   aria-label="Room code"
                   onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
                 />
+                {(roomError || roomConnectionStatus === 'connecting') && (
+                  <div className={`room-status-line${roomError ? ' room-status-error' : ''}`}>
+                    {roomError || 'Connecting...'}
+                  </div>
+                )}
                 <div className="start-actions start-actions-single">
-                  <button className="start-option start-primary" type="button" onClick={() => {
-                    setGameMode('room');
-                    startGame();
-                  }}>
+                  <button className="start-option start-primary" type="button" onClick={joinRoomLobby}>
                     Join
                   </button>
                 </div>
@@ -1745,10 +1954,7 @@ function App() {
                       className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
                       type="button"
                       aria-pressed={roomTheme === 'dark'}
-                      onClick={() => {
-                        setRoomTheme('dark');
-                        setTheme('dark');
-                      }}
+                      onClick={() => applyRoomTheme('dark')}
                     >
                       Dark
                     </button>
@@ -1756,10 +1962,7 @@ function App() {
                       className={`room-rule-button${roomTheme === 'light' ? ' room-rule-active' : ''}`}
                       type="button"
                       aria-pressed={roomTheme === 'light'}
-                      onClick={() => {
-                        setRoomTheme('light');
-                        setTheme('light');
-                      }}
+                      onClick={() => applyRoomTheme('light')}
                     >
                       Light
                     </button>
@@ -1768,6 +1971,11 @@ function App() {
                     Create
                   </button>
                 </div>
+                {(roomError || roomConnectionStatus === 'connecting') && (
+                  <div className={`room-status-line${roomError ? ' room-status-error' : ''}`}>
+                    {roomError || 'Connecting...'}
+                  </div>
+                )}
                 <button className="start-back" type="button" onClick={() => setStartScreen('room')}>
                   Back
                 </button>
@@ -1794,10 +2002,7 @@ function App() {
                       className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
                       type="button"
                       aria-pressed={roomTheme === 'dark'}
-                      onClick={() => {
-                        setRoomTheme('dark');
-                        setTheme('dark');
-                      }}
+                      onClick={() => applyRoomTheme('dark')}
                     >
                       Dark
                     </button>
@@ -1805,10 +2010,7 @@ function App() {
                       className={`room-rule-button${roomTheme === 'light' ? ' room-rule-active' : ''}`}
                       type="button"
                       aria-pressed={roomTheme === 'light'}
-                      onClick={() => {
-                        setRoomTheme('light');
-                        setTheme('light');
-                      }}
+                      onClick={() => applyRoomTheme('light')}
                     >
                       Light
                     </button>
@@ -1819,7 +2021,7 @@ function App() {
                       type="button"
                       aria-pressed={roomVoiceEnabled}
                       aria-label={roomVoiceEnabled ? 'Microphone enabled' : 'Microphone disabled'}
-                      onClick={() => setRoomVoiceEnabled((enabled) => !enabled)}
+                      onClick={toggleRoomVoice}
                     >
                       <span className="room-audio-icon-wrap">
                         <RoomMicIcon className="room-voice-icon" />
@@ -1831,7 +2033,7 @@ function App() {
                       type="button"
                       aria-pressed={roomSpeakerEnabled}
                       aria-label={roomSpeakerEnabled ? 'Speaker enabled' : 'Speaker disabled'}
-                      onClick={() => setRoomSpeakerEnabled((enabled) => !enabled)}
+                      onClick={toggleRoomSpeaker}
                     >
                       <span className="room-audio-icon-wrap">
                         <RoomSpeakerIcon className="room-speaker-icon" />
@@ -1885,8 +2087,10 @@ function App() {
                     type="button"
                     disabled={!roomIsHost}
                     onClick={() => {
-                      setGameMode('room');
-                      startGame();
+                      if (!sendRoomMessage({ type: 'start_room' })) {
+                        setGameMode('room');
+                        startGame();
+                      }
                     }}
                   >
                     Start

@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: pixelplanes-realtime
+    runtime: node
+    plan: free
+    region: ohio
+    autoDeploy: true
+    buildCommand: npm install
+    startCommand: npm run server:start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CLIENT_ORIGIN
+        value: https://pixelplanes.app
+      - key: DATABASE_URL
+        sync: false
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
