@@ -943,7 +943,7 @@ button {
 }
 
 .start-card-room-lobby {
-  width: min(640px, calc(100vw - 32px));
+  width: min(760px, calc(100vw - 32px));
   min-height: 480px;
   align-items: stretch;
   justify-content: flex-start;
@@ -1106,7 +1106,7 @@ button {
 
 .room-settings-row {
   display: grid;
-  grid-template-columns: minmax(340px, 1fr) minmax(620px, 1.55fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -1125,11 +1125,13 @@ button {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .room-audio-controls .room-voice-toggle {
+  min-width: 0;
   gap: 12px;
-  padding-inline: 16px;
+  padding-inline: 12px;
   font-size: 16px;
 }
 
@@ -1140,6 +1142,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: 10px;
+  width: 100%;
   border: 1px solid rgba(255, 81, 72, 0.36);
   border-radius: 7px;
   color: #ff5148;
