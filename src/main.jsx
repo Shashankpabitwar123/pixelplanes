@@ -402,42 +402,49 @@ function getPlaneForwardVector(plane) {
   };
 }
 
-function createBulletProjectile(plane, now, idPrefix = 'bullet') {
+function getBulletTrajectory(plane) {
   const forward = getPlaneForwardVector(plane);
   const muzzle = getRenderedPlanePoint(plane, BULLET_MUZZLE_POINT);
   const fullDx = forward.x * BULLET_RANGE;
   const fullDy = -forward.y * BULLET_RANGE;
   const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
   return {
-    id: `${now}-${idPrefix}-${Math.random()}`,
     x: muzzle.x,
     y: muzzle.y,
-    renderX: muzzle.x,
-    renderY: muzzle.y,
     dx: travel.dx,
     dy: travel.dy,
     groundHit: travel.groundHit,
     life: travel.life,
-    created: now,
     angle: plane.angle,
+  };
+}
+
+function createBulletProjectile(plane, now, idPrefix = 'bullet', trajectory = getBulletTrajectory(plane)) {
+  return {
+    id: `${now}-${idPrefix}-${Math.random()}`,
+    x: trajectory.x,
+    y: trajectory.y,
+    renderX: trajectory.x,
+    renderY: trajectory.y,
+    dx: trajectory.dx,
+    dy: trajectory.dy,
+    groundHit: trajectory.groundHit,
+    life: trajectory.life,
+    created: now,
+    angle: trajectory.angle,
     unit: 'world',
     radius: 1.05,
   };
 }
 
-function getBulletGuidePoints(plane) {
-  const forward = getPlaneForwardVector(plane);
-  const muzzle = getRenderedPlanePoint(plane, BULLET_MUZZLE_POINT);
-  const fullDx = forward.x * BULLET_RANGE;
-  const fullDy = -forward.y * BULLET_RANGE;
-  const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
-  const travelDistance = Math.max(0.001, Math.hypot(travel.dx, travel.dy));
+function getBulletGuidePoints(trajectory) {
+  const travelDistance = Math.max(0.001, Math.hypot(trajectory.dx, trajectory.dy));
   return Array.from({ length: AIM_GUIDE_DOT_COUNT }, (_, index) => {
     const dotDistance = Math.min(travelDistance, AIM_GUIDE_FIRST_DOT_DISTANCE + AIM_GUIDE_DOT_SPACING * index);
     const progress = Math.min(1, dotDistance / travelDistance);
     return {
-      x: muzzle.x + travel.dx * progress,
-      y: muzzle.y - travel.dy * progress,
+      x: trajectory.x + trajectory.dx * progress,
+      y: trajectory.y - trajectory.dy * progress,
     };
   });
 }
@@ -1631,6 +1638,7 @@ function PlayablePlane({
   const damageSmokeParticlesRef = useRef([]);
   const damageSmokeLastEmitRef = useRef(0);
   const fuelRefillFeedbackRef = useRef({ stationIndex: -1, time: 0 });
+  const bulletTrajectoryRef = useRef(getBulletTrajectory(createInitialPlaneState()));
   const crashedRef = useRef(false);
   const ammoRef = useRef(MAX_BULLETS);
   const reloadingRef = useRef(false);
@@ -1665,6 +1673,7 @@ function PlayablePlane({
     rocketProjectilesRef.current = [];
     const next = createInitialPlaneState();
     stateRef.current = next;
+    bulletTrajectoryRef.current = getBulletTrajectory(next);
     smokePreviousPlaneRef.current = null;
     damageLevelRef.current = 0;
     damageSmokeParticlesRef.current = [];
@@ -2043,7 +2052,8 @@ function PlayablePlane({
       lastShotRef.current = now;
       playBulletSound();
 
-      const projectile = createBulletProjectile(stateRef.current, now, 'player-bullet');
+      const trajectory = bulletTrajectoryRef.current ?? getBulletTrajectory(stateRef.current);
+      const projectile = createBulletProjectile(stateRef.current, now, 'player-bullet', trajectory);
 
       projectilesRef.current = [...projectilesRef.current, projectile];
       setProjectiles(projectilesRef.current);
@@ -2632,6 +2642,7 @@ function PlayablePlane({
       if (next.crashed) {
         if (now - next.crashTime > 1450) {
           next = createInitialPlaneState();
+          bulletTrajectoryRef.current = getBulletTrajectory(next);
           smokePreviousPlaneRef.current = null;
           damageLevelRef.current = 0;
           damageSmokeParticlesRef.current = [];
@@ -2744,7 +2755,9 @@ function PlayablePlane({
             if (dot) dot.style.opacity = 0;
           });
         } else {
-          getBulletGuidePoints(planeState).forEach((point, index) => {
+          const bulletTrajectory = getBulletTrajectory(planeState);
+          bulletTrajectoryRef.current = bulletTrajectory;
+          getBulletGuidePoints(bulletTrajectory).forEach((point, index) => {
             const dot = aimGuideDotRefs.current[index];
             if (!dot) return;
             dot.style.left = `${point.x}vw`;
