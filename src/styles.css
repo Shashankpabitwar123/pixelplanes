@@ -1593,6 +1593,67 @@ button {
   stroke-width: 8;
 }
 
+.fog-layer {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: auto;
+  bottom: 5vh;
+  width: 700vw;
+  height: 178vh;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1500ms ease;
+  -webkit-mask-image: linear-gradient(to top, #000 0%, rgba(0, 0, 0, 0.86) 68%, transparent 100%);
+  mask-image: linear-gradient(to top, #000 0%, rgba(0, 0, 0, 0.86) 68%, transparent 100%);
+}
+
+.fog-layer-active {
+  opacity: 1;
+}
+
+.fog-layer::before {
+  content: "";
+  position: absolute;
+  inset: 18vh 0 0;
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(239, 248, 248, 0.16) 11%, transparent 24%, rgba(232, 243, 244, 0.13) 38%, transparent 54%, rgba(235, 246, 246, 0.14) 76%, transparent 100%),
+    radial-gradient(ellipse at 30% 78%, rgba(241, 248, 248, 0.18), transparent 34%),
+    radial-gradient(ellipse at 68% 72%, rgba(218, 232, 233, 0.14), transparent 38%);
+  filter: blur(7px);
+  animation: fogSheetDrift 34s ease-in-out infinite alternate;
+}
+
+.fog-bank {
+  position: absolute;
+  width: clamp(160px, calc(18vw * var(--fog-scale)), 480px);
+  height: clamp(38px, calc(4.2vw * var(--fog-scale)), 110px);
+  border-radius: 999px;
+  opacity: var(--fog-opacity);
+  background:
+    radial-gradient(ellipse at 22% 48%, rgba(255, 255, 255, 0.48), transparent 52%),
+    radial-gradient(ellipse at 56% 50%, rgba(227, 239, 239, 0.42), transparent 58%),
+    radial-gradient(ellipse at 82% 54%, rgba(210, 226, 228, 0.3), transparent 56%);
+  filter: blur(7px);
+  transform: scale(var(--fog-scale));
+  animation: fogBankDrift var(--fog-speed) ease-in-out infinite alternate;
+}
+
+.scene-dark .fog-layer::before {
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(165, 188, 198, 0.22) 11%, transparent 24%, rgba(128, 155, 170, 0.16) 38%, transparent 54%, rgba(158, 183, 192, 0.18) 76%, transparent 100%),
+    radial-gradient(ellipse at 30% 78%, rgba(161, 187, 198, 0.19), transparent 34%),
+    radial-gradient(ellipse at 68% 72%, rgba(112, 143, 160, 0.16), transparent 38%);
+}
+
+.scene-dark .fog-bank {
+  background:
+    radial-gradient(ellipse at 22% 48%, rgba(205, 222, 226, 0.34), transparent 52%),
+    radial-gradient(ellipse at 56% 50%, rgba(145, 169, 178, 0.28), transparent 58%),
+    radial-gradient(ellipse at 82% 54%, rgba(92, 122, 140, 0.24), transparent 56%);
+}
+
 .forest {
   left: -2%;
   right: -2%;
@@ -2348,7 +2409,39 @@ button {
   transform: translate(-50%, -50%);
 }
 
+.plane-search-light {
+  position: absolute;
+  z-index: 0;
+  left: 3%;
+  top: 48%;
+  width: clamp(86px, 11vw, 220px);
+  height: clamp(24px, 3.9vw, 74px);
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-96%, -50%) scaleX(0.96);
+  transform-origin: 100% 50%;
+  background:
+    radial-gradient(ellipse at 98% 50%, rgba(255, 247, 174, 0.78) 0%, rgba(255, 225, 91, 0.36) 20%, rgba(255, 235, 132, 0.16) 48%, transparent 76%),
+    linear-gradient(to left, rgba(255, 236, 126, 0.3), rgba(255, 244, 176, 0.06) 56%, transparent 100%);
+  filter: blur(1.3px);
+  mix-blend-mode: screen;
+}
+
+.search-light-active .plane-search-light {
+  opacity: 0.72;
+  animation: searchLightFlicker 1.35s ease-in-out infinite;
+}
+
+.scene-dark .search-light-active .plane-search-light,
+.search-light-active.search-light-fog .plane-search-light {
+  opacity: 0.92;
+  filter: blur(1.1px) drop-shadow(0 0 10px rgba(255, 235, 130, 0.46));
+}
+
 .plane-sprite {
+  position: relative;
+  z-index: 2;
   display: block;
   width: 100%;
   height: auto;
@@ -2755,6 +2848,37 @@ button {
   }
   to {
     margin-left: 9vw;
+  }
+}
+
+@keyframes fogSheetDrift {
+  from {
+    transform: translateX(-4vw);
+  }
+  to {
+    transform: translateX(7vw);
+  }
+}
+
+@keyframes fogBankDrift {
+  from {
+    transform: translateX(-2.5vw) scale(var(--fog-scale));
+  }
+  to {
+    transform: translateX(3.5vw) scale(var(--fog-scale));
+  }
+}
+
+@keyframes searchLightFlicker {
+  0%,
+  100% {
+    transform: translate(-96%, -50%) scaleX(0.96);
+    filter: blur(1.2px) brightness(1);
+  }
+
+  45% {
+    transform: translate(-96%, -50%) scaleX(1.04);
+    filter: blur(1.1px) brightness(1.16);
   }
 }
 

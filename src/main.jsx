@@ -156,6 +156,15 @@ const clouds = Array.from({ length: 56 }, (_, index) => ({
   variant: Math.floor(seededRandom(index + 409) * 3),
 })).sort((a, b) => a.x - b.x);
 
+const fogBanks = Array.from({ length: 68 }, (_, index) => ({
+  x: 2 + index * (WORLD_WIDTH - 4) / 68 + (seededRandom(index + 801) - 0.5) * 8,
+  y: 9 + seededRandom(index + 1801) * 145,
+  s: 0.75 + seededRandom(index + 2801) * 1.2,
+  opacity: 0.28 + seededRandom(index + 3801) * 0.36,
+  speed: 10 + seededRandom(index + 4801) * 12,
+  delay: `${-(seededRandom(index + 5801) * 9).toFixed(2)}s`,
+})).sort((a, b) => a.x - b.x);
+
 const stars = Array.from({ length: 720 }, (_, index) => ({
   id: index,
   x: 3 + seededRandom(index + 701) * (WORLD_WIDTH - 6),
@@ -878,6 +887,7 @@ function App() {
   const [startScreen, setStartScreen] = useState('home');
   const [gameMode, setGameMode] = useState('bots');
   const [restartSignal, setRestartSignal] = useState(0);
+  const [fogActive, setFogActive] = useState(false);
   const [roomCode, setRoomCode] = useState('');
   const [roomTheme, setRoomTheme] = useState('dark');
   const [droppings, setDroppings] = useState([]);
@@ -1130,6 +1140,29 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let stopped = false;
+    let timer = 0;
+
+    const scheduleFog = (delay) => {
+      timer = window.setTimeout(() => {
+        if (stopped) return;
+        setFogActive(true);
+        timer = window.setTimeout(() => {
+          if (stopped) return;
+          setFogActive(false);
+          scheduleFog(22000 + Math.random() * 28000);
+        }, 13000 + Math.random() * 9000);
+      }, delay);
+    };
+
+    scheduleFog(4500 + Math.random() * 6500);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
     const resumeFromPause = (event) => {
       if (!paused || event.code !== 'Space') return;
       event.preventDefault();
@@ -1267,6 +1300,7 @@ function App() {
           <div className="help-rule"><kbd>S</kbd><span>Slow / land</span></div>
           <div className="help-rule"><kbd>Space</kbd><span>Bullets</span></div>
           <div className="help-rule"><kbd>R</kbd><span>Rockets</span></div>
+          <div className="help-rule"><kbd>L</kbd><span>Front light for fog.</span></div>
           <div className="help-rule help-note"><kbd>Start</kbd><span>Bots fight you and each other.</span></div>
           <div className="help-rule"><kbd>Train</kbd><span>No bots. Practice flying.</span></div>
           <div className="help-rule"><kbd>Land</kbd><span>Touch grass softly on wheels.</span></div>
@@ -1521,6 +1555,22 @@ function App() {
             <Cloud key={index} {...cloud} />
           ))}
         </div>
+        <div className={`fog-layer${fogActive ? ' fog-layer-active' : ''}`} aria-hidden="true">
+          {fogBanks.map((fog, index) => (
+            <span
+              key={index}
+              className="fog-bank"
+              style={{
+                left: `${fog.x}vw`,
+                bottom: `${fog.y}vh`,
+                '--fog-scale': fog.s,
+                '--fog-opacity': fog.opacity,
+                '--fog-speed': `${fog.speed}s`,
+                animationDelay: fog.delay,
+              }}
+            />
+          ))}
+        </div>
 
         <ForestLayer className="forest forest-back" rows={980} />
         <ForestLayer className="forest forest-front" rows={820} />
@@ -1561,6 +1611,7 @@ function App() {
             planeColor={planeColor}
             planeLightCombo={planeLightCombo}
             sfxMuted={sfxMuted}
+            fogActive={fogActive}
           />
           {gameMode === 'bots' && botStateRefs.current.map((_, index) => (
             <BotPlane
@@ -1575,6 +1626,7 @@ function App() {
               botApiRefs={botApiRefs}
               onBotMove={updateBotLocator}
               sfxMuted={sfxMuted}
+              fogActive={fogActive}
             />
           ))}
           <div className="grass-plants">
@@ -1662,6 +1714,7 @@ function PlayablePlane({
   planeColor,
   planeLightCombo,
   sfxMuted,
+  fogActive,
 }) {
   const keysRef = useRef(new Set());
   const planeRef = useRef(null);
@@ -1701,6 +1754,7 @@ function PlayablePlane({
   const [crashed, setCrashed] = useState(false);
   const [damageLevel, setDamageLevel] = useState(0);
   const [damageSmokeParticles, setDamageSmokeParticles] = useState([]);
+  const [searchLightOn, setSearchLightOn] = useState(false);
 
   useEffect(() => {
     if (restartSignal === 0) return;
@@ -1737,6 +1791,7 @@ function PlayablePlane({
     setCrashed(false);
     setDamageLevel(0);
     setDamageSmokeParticles([]);
+    setSearchLightOn(false);
     onAmmoChange({ count: MAX_BULLETS, reloading: false });
     onRocketChange(MAX_ROCKETS);
     onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
@@ -2357,6 +2412,8 @@ function PlayablePlane({
       ArrowRight: 'right',
       r: 'rocket',
       R: 'rocket',
+      l: 'light',
+      L: 'light',
     };
 
     const setKey = (event, pressed) => {
@@ -2380,6 +2437,10 @@ function PlayablePlane({
       }
       if (action === 'rocket') {
         if (pressed && !event.repeat) fireRocket();
+        return;
+      }
+      if (action === 'light') {
+        if (pressed && !event.repeat) setSearchLightOn((active) => !active);
         return;
       }
       if (pressed) {
@@ -2849,7 +2910,13 @@ function PlayablePlane({
           '--thrust': 0,
         }}
       >
-        <BitPlane rocketsRemaining={rocketsRemaining} planeColor={planeColor} planeLightCombo={planeLightCombo} />
+        <BitPlane
+          rocketsRemaining={rocketsRemaining}
+          planeColor={planeColor}
+          planeLightCombo={planeLightCombo}
+          searchLightActive={searchLightOn && !crashed}
+          searchLightFog={fogActive}
+        />
       </div>
       <div className="bullet-aim-guide" aria-hidden="true">
         {Array.from({ length: AIM_GUIDE_DOT_COUNT }, (_, index) => (
@@ -2938,7 +3005,7 @@ function PlayablePlane({
   );
 }
 
-function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted }) {
+function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, fogActive }) {
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
@@ -3417,7 +3484,13 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
           '--thrust': 0,
         }}
       >
-        <BitPlane rocketsRemaining={0} planeColor="purple" planeLightCombo="botYellow" />
+        <BitPlane
+          rocketsRemaining={0}
+          planeColor="purple"
+          planeLightCombo="botYellow"
+          searchLightActive={fogActive && !botCrashed}
+          searchLightFog={fogActive}
+        />
       </div>
       <div className="damage-smoke-layer bot-damage-smoke-layer" aria-hidden="true">
         {botSmokeParticles.map((particle) => (
@@ -3480,12 +3553,12 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   );
 }
 
-function BitPlane({ rocketsRemaining, planeColor, planeLightCombo }) {
+function BitPlane({ rocketsRemaining, planeColor, planeLightCombo, searchLightActive = false, searchLightFog = false }) {
   const planeAssets = PLANE_COLOR_ASSETS[planeColor] || PLANE_COLOR_ASSETS.blue;
   const lightCombo = PLANE_LIGHT_COMBOS[planeLightCombo] || PLANE_LIGHT_COMBOS.classic;
   return (
     <div
-      className="plane-visual"
+      className={`plane-visual${searchLightActive ? ' search-light-active' : ''}${searchLightFog ? ' search-light-fog' : ''}`}
       style={{
         '--plane-front-light': lightCombo.front,
         '--plane-back-light': lightCombo.back,
@@ -3497,6 +3570,7 @@ function BitPlane({ rocketsRemaining, planeColor, planeLightCombo }) {
         '--plane-back-light-glow-wide': lightCombo.backGlowWide,
       }}
     >
+      <span className="plane-search-light" aria-hidden="true" />
       <img className="plane-sprite plane-sprite-static" src={planeAssets.staticSrc} alt={`Left facing ${planeAssets.label.toLowerCase()} pixel biplane`} draggable="false" />
       <img className="plane-sprite plane-sprite-no-prop" src={planeAssets.noPropSrc} alt="" draggable="false" aria-hidden="true" />
       <span className="plane-propeller" aria-hidden="true" />
