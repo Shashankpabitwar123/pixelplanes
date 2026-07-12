@@ -52,6 +52,17 @@ const MUSIC_TRACKS = [
   src: `/assets/music/${file}`,
 }));
 
+const HIGH_SCORE_STORAGE_KEY = 'bitplanes-high-score';
+
+function readStoredHighScore() {
+  try {
+    const stored = Number.parseInt(window.localStorage.getItem(HIGH_SCORE_STORAGE_KEY) ?? '0', 10);
+    return Number.isFinite(stored) ? Math.max(0, stored) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 const PLANE_COLOR_ASSETS = {
   blue: {
     label: 'Blue',
@@ -699,6 +710,8 @@ function App() {
   const [droppings, setDroppings] = useState([]);
   const [ammoStatus, setAmmoStatus] = useState({ count: MAX_BULLETS, reloading: false });
   const [rocketCount, setRocketCount] = useState(MAX_ROCKETS);
+  const [killCount, setKillCount] = useState(0);
+  const [highScore, setHighScore] = useState(readStoredHighScore);
   const [fuelStationPulses, setFuelStationPulses] = useState({});
   const [musicOpen, setMusicOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -728,6 +741,7 @@ function App() {
     setMusicOpen(false);
     setHelpOpen(false);
     setPlaneMenuOpen(false);
+    setKillCount(0);
   }, []);
   const pauseGame = useCallback(() => {
     if (!gameStarted) return;
@@ -794,6 +808,23 @@ function App() {
   const updateRocketStatus = useCallback((nextCount) => {
     setRocketCount((current) => (current === nextCount ? current : nextCount));
   }, []);
+  const recordPlayerKill = useCallback(() => {
+    setKillCount((current) => {
+      const next = current + 1;
+      setHighScore((currentHighScore) => {
+        const nextHighScore = Math.max(currentHighScore, next);
+        if (nextHighScore !== currentHighScore) {
+          try {
+            window.localStorage.setItem(HIGH_SCORE_STORAGE_KEY, String(nextHighScore));
+          } catch {
+            // Local storage can be unavailable in private or restricted browser modes.
+          }
+        }
+        return nextHighScore;
+      });
+      return next;
+    });
+  }, []);
   const restartGame = useCallback(() => {
     setGameStarted(false);
     setPaused(false);
@@ -802,6 +833,7 @@ function App() {
     setHelpOpen(false);
     setPlaneMenuOpen(false);
     setDroppings([]);
+    setKillCount(0);
     setFuelStationPulses({});
     fuelPulseTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
     fuelPulseTimersRef.current = [];
@@ -1002,6 +1034,16 @@ function App() {
       >
         <img src="/assets/theme-lightbulb-icon.svg" alt="" draggable="false" aria-hidden="true" />
       </button>
+      <div className="score-panel" aria-label="Kill counter and high score">
+        <div className="score-row">
+          <span>Kills</span>
+          <strong>{killCount}</strong>
+        </div>
+        <div className="score-row score-high">
+          <span>High</span>
+          <strong>{highScore}</strong>
+        </div>
+      </div>
       {musicOpen && (
         <div className="music-panel" aria-label="Background music panel">
           <div className="music-track-grid">
@@ -1298,6 +1340,7 @@ function App() {
             onMove={updateCamera}
             onFuelChange={updateFuelGauge}
             onFuelRefill={triggerFuelRefillFeedback}
+            onKill={recordPlayerKill}
             onAmmoChange={updateAmmoStatus}
             onRocketChange={updateRocketStatus}
             onPlaneState={updatePlayerState}
@@ -1397,6 +1440,7 @@ function PlayablePlane({
   onMove,
   onFuelChange,
   onFuelRefill,
+  onKill,
   onAmmoChange,
   onRocketChange,
   onPlaneState,
@@ -2418,7 +2462,8 @@ function PlayablePlane({
         if (hitIndex >= 0) {
           handledBulletHit = true;
           removeProjectile(projectile.id);
-          botApiRefs.current[hitIndex]?.current?.hitByBullet?.();
+          const hitResult = botApiRefs.current[hitIndex]?.current?.hitByBullet?.({ source: 'player' });
+          if (hitResult?.killed) onKill();
         }
       }
       if (handledBulletHit) return;
@@ -2434,7 +2479,8 @@ function PlayablePlane({
       }
       if (rocketHit) {
         removeRocketProjectile(rocketHit.id);
-        botApiRefs.current[rocketHitIndex]?.current?.crash?.(1.72);
+        const hitResult = botApiRefs.current[rocketHitIndex]?.current?.crash?.(1.72, { source: 'player' });
+        if (hitResult?.killed) onKill();
       }
     };
 
@@ -2565,7 +2611,7 @@ function PlayablePlane({
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [onMove, onFuelChange, onFuelRefill, onAmmoChange, onRocketChange, onPlaneState, botStateRefs, botApiRefs]);
+  }, [onMove, onFuelChange, onFuelRefill, onKill, onAmmoChange, onRocketChange, onPlaneState, botStateRefs, botApiRefs]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
@@ -2680,9 +2726,9 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   const [botSmokeParticles, setBotSmokeParticles] = useState([]);
   const [botCrashed, setBotCrashed] = useState(false);
 
-  const crashBot = useCallback((impact = 1.2) => {
+  const crashBot = useCallback((impact = 1.2, options = {}) => {
     const current = stateRef.current;
-    if (current.crashed) return;
+    if (current.crashed) return { killed: false };
     const next = {
       ...current,
       crashed: true,
@@ -2704,16 +2750,16 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     setBotCrashed(true);
     playPlaneBlastSound(null, next.crashImpact, sfxMuted);
     onBotMove(botIndex, next);
+    return { killed: options.source === 'player' };
   }, [botIndex, onBotMove, sfxMuted]);
 
-  const damageBotByBullet = useCallback(() => {
+  const damageBotByBullet = useCallback((options = {}) => {
     const current = stateRef.current;
-    if (current.crashed) return;
+    if (current.crashed) return { killed: false };
     const currentDamage = Math.max(botDamageRef.current, current.damage ?? 0);
     const nextDamage = currentDamage + 1;
     if (nextDamage >= 2) {
-      crashBot(1.18);
-      return;
+      return crashBot(1.18, options);
     }
     const next = {
       ...current,
@@ -2724,6 +2770,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     playPlaneBulletHitSound(null, sfxMuted);
     setBotDamage(nextDamage);
     onBotMove(botIndex, next);
+    return { killed: false };
   }, [botIndex, crashBot, onBotMove, sfxMuted]);
 
   useEffect(() => {

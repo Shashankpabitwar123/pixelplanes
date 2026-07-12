@@ -241,6 +241,62 @@ button {
   top: 96px;
 }
 
+.score-panel {
+  position: absolute;
+  z-index: 22;
+  left: 74px;
+  top: 150px;
+  width: 154px;
+  height: 46px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.36);
+  box-shadow: 0 8px 20px rgba(31, 65, 86, 0.12);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.score-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  border-radius: 4px;
+  background: rgba(22, 34, 52, 0.26);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.14);
+}
+
+.score-row span {
+  color: rgba(238, 248, 255, 0.9);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  text-shadow: 0 1px 1px rgba(8, 15, 28, 0.4);
+}
+
+.score-row strong {
+  color: #fff66a;
+  font-size: 19px;
+  line-height: 1;
+  text-shadow:
+    0 0 5px rgba(255, 230, 63, 0.76),
+    0 2px 0 rgba(42, 32, 0, 0.3);
+}
+
+.score-high strong {
+  color: #6dff8b;
+  text-shadow:
+    0 0 5px rgba(85, 255, 128, 0.72),
+    0 2px 0 rgba(0, 42, 18, 0.3);
+}
+
 .music-selector img,
 .restart-toggle img,
 .theme-icon-toggle img,
@@ -1359,6 +1415,7 @@ button {
 .scene-dark .sfx-toggle,
 .scene-dark .help-toggle,
 .scene-dark .plane-selector,
+.scene-dark .score-panel,
 .scene-dark .music-panel,
 .scene-dark .help-panel,
 .scene-dark .plane-color-panel,
@@ -3105,6 +3162,12 @@ button {
   .theme-icon-toggle {
     left: 12px;
     top: 138px;
+  }
+
+  .score-panel {
+    left: 66px;
+    top: 138px;
+    width: 154px;
   }
 
   .sfx-toggle {
