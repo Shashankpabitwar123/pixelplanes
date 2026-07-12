@@ -36,9 +36,7 @@ const BOT_FORGET_DISTANCE = 118;
 const BOT_AVOID_DISTANCE = 42;
 const BOT_MIN_FIRE_DISTANCE = 34;
 const BOT_BULLET_COOLDOWN_MS = 280;
-const BOT_ROCKET_COOLDOWN_MS = 3800;
 const BOT_BULLET_RELOAD_MS = BULLET_RELOAD_MS;
-const BOT_ROCKET_RELOAD_MS = 11500;
 const MUSIC_TRACKS = [
   'alisiabeats-titanium-170190.mp3',
   'kulakovka-deep-house-273895.mp3',
@@ -2790,22 +2788,15 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
-  const rocketsRef = useRef([]);
   const bulletTimeoutsRef = useRef([]);
-  const rocketTimeoutsRef = useRef([]);
   const ammoRef = useRef(MAX_BULLETS);
   const reloadingRef = useRef(false);
-  const rocketCountRef = useRef(MAX_ROCKETS);
-  const rocketReloadingRef = useRef(false);
   const lastShotRef = useRef(0);
-  const lastRocketRef = useRef(0);
   const smokePreviousBotRef = useRef(null);
   const botDamageRef = useRef(0);
   const botSmokeParticlesRef = useRef([]);
   const botSmokeLastEmitRef = useRef(0);
   const [botBullets, setBotBullets] = useState([]);
-  const [botRockets, setBotRockets] = useState([]);
-  const [botRocketsRemaining, setBotRocketsRemaining] = useState(MAX_ROCKETS);
   const [botDamage, setBotDamage] = useState(0);
   const [botSmokeParticles, setBotSmokeParticles] = useState([]);
   const [botCrashed, setBotCrashed] = useState(false);
@@ -2874,17 +2865,11 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       .map((botState) => botState?.x)
       .filter((x) => Number.isFinite(x));
     bulletTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
-    rocketTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
     bulletTimeoutsRef.current = [];
-    rocketTimeoutsRef.current = [];
     bulletsRef.current = [];
-    rocketsRef.current = [];
     ammoRef.current = MAX_BULLETS;
     reloadingRef.current = false;
-    rocketCountRef.current = MAX_ROCKETS;
-    rocketReloadingRef.current = false;
     lastShotRef.current = 0;
-    lastRocketRef.current = 0;
     const nextBot = createInitialBotState(stateRef.current?.x, otherBotSpawnXs);
     stateRef.current = nextBot;
     smokePreviousBotRef.current = null;
@@ -2892,8 +2877,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     botSmokeParticlesRef.current = [];
     botSmokeLastEmitRef.current = 0;
     setBotBullets([]);
-    setBotRockets([]);
-    setBotRocketsRemaining(MAX_ROCKETS);
     setBotDamage(0);
     setBotSmokeParticles([]);
     setBotCrashed(false);
@@ -2906,7 +2889,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
 
   useEffect(() => () => {
     bulletTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
-    rocketTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
   }, []);
 
   useEffect(() => {
@@ -2921,11 +2903,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       setBotBullets(bulletsRef.current);
     };
 
-    const removeRocket = (id) => {
-      rocketsRef.current = rocketsRef.current.filter((item) => item.id !== id);
-      setBotRockets(rocketsRef.current);
-    };
-
     const startBulletReload = () => {
       if (reloadingRef.current || ammoRef.current >= MAX_BULLETS) return;
       reloadingRef.current = true;
@@ -2935,18 +2912,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         bulletTimeoutsRef.current = bulletTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
       }, BOT_BULLET_RELOAD_MS);
       bulletTimeoutsRef.current.push(timeoutId);
-    };
-
-    const startRocketReload = () => {
-      if (rocketReloadingRef.current) return;
-      rocketReloadingRef.current = true;
-      const timeoutId = window.setTimeout(() => {
-        rocketCountRef.current = MAX_ROCKETS;
-        rocketReloadingRef.current = false;
-        setBotRocketsRemaining(MAX_ROCKETS);
-        rocketTimeoutsRef.current = rocketTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
-      }, BOT_ROCKET_RELOAD_MS);
-      rocketTimeoutsRef.current.push(timeoutId);
     };
 
     const fireBotBullet = (bot, now) => {
@@ -2965,18 +2930,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         bulletTimeoutsRef.current = bulletTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
       }, projectile.life + (projectile.groundHit ? 420 : 0));
       bulletTimeoutsRef.current.push(timeoutId);
-    };
-
-    const fireBotRocket = (bot, now) => {
-      if (rocketReloadingRef.current || rocketCountRef.current <= 0 || now - lastRocketRef.current < BOT_ROCKET_COOLDOWN_MS) return;
-      lastRocketRef.current = now;
-      const mountPoint = rocketCountRef.current === 2 ? { x: 0.34, y: 0.8 } : { x: 0.52, y: 0.73 };
-      const projectile = createRocketProjectile(bot, now, mountPoint, 'bot-rocket');
-      rocketsRef.current = [...rocketsRef.current, projectile];
-      setBotRockets(rocketsRef.current);
-      rocketCountRef.current -= 1;
-      setBotRocketsRemaining(rocketCountRef.current);
-      if (rocketCountRef.current <= 0) startRocketReload();
     };
 
     const getTargetCandidates = (bot) => {
@@ -3029,16 +2982,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       target.api.crash?.(impact);
     };
 
-    const updateBotRockets = (now) => {
-      if (rocketsRef.current.length === 0) return;
-      const targets = getTargetCandidates(stateRef.current);
-      const nextRockets = updateGuidedRockets(rocketsRef.current, now, targets);
-      if (nextRockets !== rocketsRef.current) {
-        rocketsRef.current = nextRockets;
-        setBotRockets(nextRockets);
-      }
-    };
-
     const scanHits = (now, bot) => {
       const collisionTarget = getTargetCandidates(bot).find((target) => planesCollide(bot, target.state));
       if (collisionTarget) {
@@ -3052,16 +2995,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         if (target) {
           removeBullet(projectile.id);
           damageTargetByBullet(target);
-          return;
-        }
-      }
-      for (const projectile of rocketsRef.current) {
-        if (projectile.groundHit) continue;
-        const segment = getRocketSegment(projectile);
-        const target = getTargetCandidates(bot).find((candidate) => segmentHitsPlane(segment, candidate.state, projectile.radius));
-        if (target) {
-          removeRocket(projectile.id);
-          crashTarget(target, projectile.impact);
           return;
         }
       }
@@ -3217,7 +3150,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         const targetLength = Math.max(1, Math.hypot(targetState.x - next.x, targetState.y - next.y));
         const targetDot = (aimForwardX * (targetState.x - next.x) + aimForwardY * (targetState.y - next.y)) / targetLength;
         if (targetDot > 0.68 && aimError < 11 && distance > BOT_MIN_FIRE_DISTANCE && distance < 120) fireBotBullet(next, now);
-        if (targetDot > 0.78 && aimError < 7 && distance > BOT_AVOID_DISTANCE && distance < 160) fireBotRocket(next, now);
       }
 
       return next;
@@ -3268,14 +3200,11 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
           botDamageRef.current = 0;
           botSmokeParticlesRef.current = [];
           botSmokeLastEmitRef.current = 0;
-          rocketCountRef.current = MAX_ROCKETS;
           ammoRef.current = MAX_BULLETS;
           reloadingRef.current = false;
-          rocketReloadingRef.current = false;
           setBotDamage(0);
           setBotSmokeParticles([]);
           setBotCrashed(false);
-          setBotRocketsRemaining(MAX_ROCKETS);
           onBotMove(botIndex, next);
         }
         renderBot(stateRef.current);
@@ -3292,7 +3221,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       }
       if (steps >= 6) accumulator = 0;
       stateRef.current = next;
-      updateBotRockets(now);
       if (next.crashed) {
         botDamageRef.current = next.damage ?? 2;
         botSmokeParticlesRef.current = [];
@@ -3326,7 +3254,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
           '--thrust': 0,
         }}
       >
-        <BitPlane rocketsRemaining={botRocketsRemaining} planeColor="purple" planeLightCombo="botYellow" />
+        <BitPlane rocketsRemaining={0} planeColor="purple" planeLightCombo="botYellow" />
       </div>
       <div className="damage-smoke-layer bot-damage-smoke-layer" aria-hidden="true">
         {botSmokeParticles.map((particle) => (
@@ -3361,28 +3289,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
           >
             <i className="bullet-core" />
             <i className="bullet-impact" />
-          </span>
-        ))}
-      </div>
-      <div className="rocket-projectiles bot-rocket-projectiles" aria-hidden="true">
-        {botRockets.map((rocket) => (
-          <span
-            key={rocket.id}
-            className={`rocket-shot bot-rocket-shot${rocket.groundHit ? ' rocket-ground-hit' : ''}`}
-            style={{
-              left: `${rocket.x}vw`,
-              bottom: `calc(100% - 2px + ${rocket.y}vh)`,
-              '--rocket-angle': `${rocket.angle}deg`,
-            }}
-          >
-            <i className="rocket-flame" />
-            <i className="rocket-body" />
-            <i className="rocket-nose" />
-            <i className="rocket-band rocket-band-one" />
-            <i className="rocket-band rocket-band-two" />
-            <i className="rocket-fin rocket-fin-top" />
-            <i className="rocket-fin rocket-fin-bottom" />
-            <i className="rocket-impact" />
           </span>
         ))}
       </div>
