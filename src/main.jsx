@@ -354,12 +354,7 @@ function planesCollide(planeA, planeB) {
 
 function getProjectilePoint(projectile, now) {
   const progress = clamp((now - projectile.created) / projectile.life, 0, 1);
-  if (projectile.unit === 'world') {
-    return {
-      x: projectile.x + projectile.dx * progress,
-      y: projectile.y - projectile.dy * progress,
-    };
-  }
+  if (projectile.unit === 'world') return getTrajectoryPoint(projectile, progress);
   const viewportWidth = window.innerWidth || 1440;
   const viewportHeight = window.innerHeight || 900;
   return {
@@ -376,22 +371,25 @@ function getProjectileSegment(projectile, now) {
   return { start, end };
 }
 
-function updateProjectileRenderPositions(projectiles, now) {
-  if (projectiles.length === 0) return projectiles;
-  let changed = false;
-  const nextProjectiles = projectiles.map((projectile) => {
+function getTrajectoryPoint(trajectory, progress) {
+  return {
+    x: trajectory.x + trajectory.dx * progress,
+    y: trajectory.y - trajectory.dy * progress,
+  };
+}
+
+function syncProjectileRenderPositions(projectiles, now, elementRefs = null) {
+  if (projectiles.length === 0) return;
+  projectiles.forEach((projectile) => {
     const point = getProjectilePoint(projectile, now);
-    if (Math.abs((projectile.renderX ?? projectile.x) - point.x) < 0.001 && Math.abs((projectile.renderY ?? projectile.y) - point.y) < 0.001) {
-      return projectile;
+    projectile.renderX = point.x;
+    projectile.renderY = point.y;
+    const element = elementRefs?.get(projectile.id);
+    if (element) {
+      element.style.left = `${point.x}vw`;
+      element.style.bottom = `calc(100% - 2px + ${point.y}vh)`;
     }
-    changed = true;
-    return {
-      ...projectile,
-      renderX: point.x,
-      renderY: point.y,
-    };
   });
-  return changed ? nextProjectiles : projectiles;
 }
 
 function getPlaneForwardVector(plane) {
@@ -405,8 +403,11 @@ function getPlaneForwardVector(plane) {
 function getBulletTrajectory(plane) {
   const forward = getPlaneForwardVector(plane);
   const muzzle = getRenderedPlanePoint(plane, BULLET_MUZZLE_POINT);
-  const fullDx = forward.x * BULLET_RANGE;
-  const fullDy = -forward.y * BULLET_RANGE;
+  const viewportWidth = window.innerWidth || 1440;
+  const viewportHeight = window.innerHeight || 900;
+  const rangePx = viewportWidth * (BULLET_RANGE / 100);
+  const fullDx = (forward.x * rangePx / viewportWidth) * 100;
+  const fullDy = (-forward.y * rangePx / viewportHeight) * 100;
   const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
   return {
     x: muzzle.x,
@@ -416,6 +417,7 @@ function getBulletTrajectory(plane) {
     groundHit: travel.groundHit,
     life: travel.life,
     angle: plane.angle,
+    unit: 'world',
   };
 }
 
@@ -442,10 +444,7 @@ function getBulletGuidePoints(trajectory) {
   return Array.from({ length: AIM_GUIDE_DOT_COUNT }, (_, index) => {
     const dotDistance = Math.min(travelDistance, AIM_GUIDE_FIRST_DOT_DISTANCE + AIM_GUIDE_DOT_SPACING * index);
     const progress = Math.min(1, dotDistance / travelDistance);
-    return {
-      x: trajectory.x + trajectory.dx * progress,
-      y: trajectory.y - trajectory.dy * progress,
-    };
+    return getTrajectoryPoint(trajectory, progress);
   });
 }
 
@@ -1650,6 +1649,7 @@ function PlayablePlane({
   const lastRocketRef = useRef(0);
   const projectilesRef = useRef([]);
   const rocketProjectilesRef = useRef([]);
+  const projectileElementRefs = useRef(new Map());
   const projectileTimeoutsRef = useRef([]);
   const rocketTimeoutsRef = useRef([]);
   const stateRef = useRef(createInitialPlaneState());
@@ -1673,6 +1673,7 @@ function PlayablePlane({
     rocketTimeoutsRef.current = [];
     projectilesRef.current = [];
     rocketProjectilesRef.current = [];
+    projectileElementRefs.current.clear();
     const next = createInitialPlaneState();
     stateRef.current = next;
     bulletTrajectoryRef.current = getBulletTrajectory(next);
@@ -2060,9 +2061,15 @@ function PlayablePlane({
 
       projectilesRef.current = [...projectilesRef.current, projectile];
       setProjectiles(projectilesRef.current);
+      const bulletElement = projectileElementRefs.current.get(projectile.id);
+      if (bulletElement) {
+        bulletElement.style.left = `${projectile.renderX}vw`;
+        bulletElement.style.bottom = `calc(100% - 2px + ${projectile.renderY}vh)`;
+      }
 
       const timeoutId = window.setTimeout(() => {
         projectilesRef.current = projectilesRef.current.filter((item) => item.id !== projectile.id);
+        projectileElementRefs.current.delete(projectile.id);
         setProjectiles(projectilesRef.current);
         projectileTimeoutsRef.current = projectileTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
       }, projectile.life + (projectile.groundHit ? 420 : 0));
@@ -2360,6 +2367,7 @@ function PlayablePlane({
       rocketTimeoutsRef.current = [];
       projectilesRef.current = [];
       rocketProjectilesRef.current = [];
+      projectileElementRefs.current.clear();
       fireBulletRef.current = null;
       const audio = engineAudioRef.current;
       crashSoundRef.current = null;
@@ -2578,6 +2586,7 @@ function PlayablePlane({
 
     const removeProjectile = (id) => {
       projectilesRef.current = projectilesRef.current.filter((item) => item.id !== id);
+      projectileElementRefs.current.delete(id);
       setProjectiles(projectilesRef.current);
     };
 
@@ -2597,11 +2606,7 @@ function PlayablePlane({
     };
 
     const updatePlayerBulletRenders = (now) => {
-      const nextProjectiles = updateProjectileRenderPositions(projectilesRef.current, now);
-      if (nextProjectiles !== projectilesRef.current) {
-        projectilesRef.current = nextProjectiles;
-        setProjectiles(nextProjectiles);
-      }
+      syncProjectileRenderPositions(projectilesRef.current, now, projectileElementRefs.current);
     };
 
     const scanBotHits = (now) => {
@@ -2668,6 +2673,7 @@ function PlayablePlane({
           rocketTimeoutsRef.current = [];
           projectilesRef.current = [];
           rocketProjectilesRef.current = [];
+          projectileElementRefs.current.clear();
           ammoRef.current = MAX_BULLETS;
           reloadingRef.current = false;
           lastShotRef.current = 0;
@@ -2835,6 +2841,10 @@ function PlayablePlane({
         {projectiles.map((projectile) => (
           <span
             key={projectile.id}
+            ref={(element) => {
+              if (element) projectileElementRefs.current.set(projectile.id, element);
+              else projectileElementRefs.current.delete(projectile.id);
+            }}
             className={`bullet-shot${projectile.groundHit ? ' bullet-ground-hit' : ''}`}
             style={{
               left: `${projectile.renderX ?? projectile.x}vw`,
@@ -2890,6 +2900,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
+  const bulletElementRefs = useRef(new Map());
   const bulletTimeoutsRef = useRef([]);
   const ammoRef = useRef(MAX_BULLETS);
   const reloadingRef = useRef(false);
@@ -2969,6 +2980,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     bulletTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
     bulletTimeoutsRef.current = [];
     bulletsRef.current = [];
+    bulletElementRefs.current.clear();
     ammoRef.current = MAX_BULLETS;
     reloadingRef.current = false;
     lastShotRef.current = 0;
@@ -2991,6 +3003,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
 
   useEffect(() => () => {
     bulletTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    bulletElementRefs.current.clear();
   }, []);
 
   useEffect(() => {
@@ -3002,6 +3015,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
 
     const removeBullet = (id) => {
       bulletsRef.current = bulletsRef.current.filter((item) => item.id !== id);
+      bulletElementRefs.current.delete(id);
       setBotBullets(bulletsRef.current);
     };
 
@@ -3085,11 +3099,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     };
 
     const updateBotBulletRenders = (now) => {
-      const nextBullets = updateProjectileRenderPositions(bulletsRef.current, now);
-      if (nextBullets !== bulletsRef.current) {
-        bulletsRef.current = nextBullets;
-        setBotBullets(nextBullets);
-      }
+      syncProjectileRenderPositions(bulletsRef.current, now, bulletElementRefs.current);
     };
 
     const scanHits = (now, bot) => {
@@ -3388,6 +3398,10 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         {botBullets.map((projectile) => (
           <span
             key={projectile.id}
+            ref={(element) => {
+              if (element) bulletElementRefs.current.set(projectile.id, element);
+              else bulletElementRefs.current.delete(projectile.id);
+            }}
             className={`bullet-shot bot-bullet-shot${projectile.groundHit ? ' bullet-ground-hit' : ''}`}
             style={{
               left: `${projectile.renderX ?? projectile.x}vw`,
