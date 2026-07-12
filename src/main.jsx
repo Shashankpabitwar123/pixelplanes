@@ -16,6 +16,8 @@ const BULLET_LIFETIME_MS = 1200;
 const BULLET_RANGE = 102;
 const BULLET_MUZZLE_POINT = { x: 0.051, y: 0.505 };
 const AIM_GUIDE_DOT_COUNT = 4;
+const AIM_GUIDE_FIRST_DOT_DISTANCE = 2.25;
+const AIM_GUIDE_DOT_SPACING = 1.18;
 const DAMAGE_SMOKE_LIFETIME_MS = 1450;
 const DAMAGE_SMOKE_INTERVAL_MS = 95;
 const DAMAGE_SMOKE_MAX_PARTICLES = 28;
@@ -430,10 +432,8 @@ function getBulletGuidePoints(plane) {
   const fullDy = -forward.y * BULLET_RANGE;
   const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
   const travelDistance = Math.max(0.001, Math.hypot(travel.dx, travel.dy));
-  const guideDistance = Math.min(9.2, travelDistance);
-  const firstDotDistance = Math.min(1.45, guideDistance * 0.42);
   return Array.from({ length: AIM_GUIDE_DOT_COUNT }, (_, index) => {
-    const dotDistance = firstDotDistance + (guideDistance - firstDotDistance) * (index / Math.max(1, AIM_GUIDE_DOT_COUNT - 1));
+    const dotDistance = Math.min(travelDistance, AIM_GUIDE_FIRST_DOT_DISTANCE + AIM_GUIDE_DOT_SPACING * index);
     const progress = Math.min(1, dotDistance / travelDistance);
     return {
       x: muzzle.x + travel.dx * progress,
