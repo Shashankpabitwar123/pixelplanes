@@ -22,6 +22,10 @@ const MAX_ROCKETS = 2;
 const ROCKET_COOLDOWN_MS = 520;
 const ROCKET_LIFETIME_MS = 12000;
 const ROCKET_RANGE = 640;
+const ROCKET_HOMING_MS = 4000;
+const ROCKET_IMPACT_MS = 650;
+const ROCKET_SPEED = ROCKET_RANGE / (ROCKET_LIFETIME_MS / 1000);
+const ROCKET_TURN_RATE = 340;
 const PLANE_SPRITE_ASPECT = 935 / 1620;
 const BOT_COUNT = 4;
 const BOT_START_X = START_X + 118;
@@ -400,6 +404,99 @@ function createBulletProjectile(plane, now, idPrefix = 'bullet') {
   };
 }
 
+function getAngleToPoint(source, target) {
+  return normalizeAngle((Math.atan2(target.y - source.y, -(target.x - source.x)) * 180) / Math.PI);
+}
+
+function createRocketProjectile(plane, now, mountPoint, idPrefix = 'rocket') {
+  const forward = getPlaneForwardVector(plane);
+  const launchPoint = getPlanePoint(plane, mountPoint);
+  return {
+    id: `${now}-${idPrefix}-${Math.random()}`,
+    x: launchPoint.x,
+    y: launchPoint.y,
+    previousX: launchPoint.x,
+    previousY: launchPoint.y,
+    vx: forward.x * ROCKET_SPEED,
+    vy: forward.y * ROCKET_SPEED,
+    created: now,
+    lastUpdate: now,
+    guideUntil: now + ROCKET_HOMING_MS,
+    angle: plane.angle,
+    radius: 2.25,
+    impact: 1.72,
+  };
+}
+
+function getNearestRocketTarget(rocket, targets) {
+  return targets.reduce((closest, target) => {
+    if (!target?.state || target.state.crashed) return closest;
+    const distance = Math.hypot(target.state.x - rocket.x, target.state.y - rocket.y);
+    if (!closest || distance < closest.distance) return { ...target, distance };
+    return closest;
+  }, null);
+}
+
+function updateGuidedRocket(rocket, now, targets) {
+  if (rocket.groundHit) return rocket;
+  const age = now - rocket.created;
+  const dt = clamp((now - (rocket.lastUpdate ?? rocket.created)) / 1000, 0, 0.05);
+  if (age >= ROCKET_LIFETIME_MS) return null;
+  let nextAngle = rocket.angle;
+  if (now <= rocket.guideUntil) {
+    const target = getNearestRocketTarget(rocket, targets);
+    if (target) {
+      const desiredAngle = getAngleToPoint(rocket, target.state);
+      const maxTurn = ROCKET_TURN_RATE * dt;
+      nextAngle = normalizeAngle(nextAngle + clamp(normalizeAngle(desiredAngle - nextAngle), -maxTurn, maxTurn));
+    }
+  }
+  const rad = (nextAngle * Math.PI) / 180;
+  const vx = -Math.cos(rad) * ROCKET_SPEED;
+  const vy = Math.sin(rad) * ROCKET_SPEED;
+  const nextX = rocket.x + vx * dt;
+  const nextY = rocket.y + vy * dt;
+  if (nextY <= 0 || nextX <= 0 || nextX >= WORLD_WIDTH) {
+    return {
+      ...rocket,
+      x: clamp(nextX, 0, WORLD_WIDTH),
+      y: Math.max(0, nextY),
+      previousX: rocket.x,
+      previousY: rocket.y,
+      vx: 0,
+      vy: 0,
+      angle: nextAngle,
+      groundHit: true,
+      impactAt: now,
+      lastUpdate: now,
+    };
+  }
+  return {
+    ...rocket,
+    x: nextX,
+    y: nextY,
+    previousX: rocket.x,
+    previousY: rocket.y,
+    vx,
+    vy,
+    angle: nextAngle,
+    lastUpdate: now,
+  };
+}
+
+function updateGuidedRockets(rockets, now, targets) {
+  return rockets
+    .map((rocket) => updateGuidedRocket(rocket, now, targets))
+    .filter((rocket) => rocket && (!rocket.groundHit || now - rocket.impactAt <= ROCKET_IMPACT_MS));
+}
+
+function getRocketSegment(rocket) {
+  return {
+    start: { x: rocket.previousX ?? rocket.x, y: rocket.previousY ?? rocket.y },
+    end: { x: rocket.x, y: rocket.y },
+  };
+}
+
 function distanceToSegment(point, start, end) {
   const scaledPoint = { x: point.x * 1.35, y: point.y };
   const scaledStart = { x: start.x * 1.35, y: start.y };
@@ -683,19 +780,6 @@ function getGroundClippedWorldProjectile(startYVh, dxVw, dyVh, fullLifeMs, minLi
   return {
     dx: dxVw * ratio,
     dy: dyVh * ratio,
-    groundHit,
-    life: groundHit ? Math.max(minLifeMs, fullLifeMs * ratio) : fullLifeMs,
-  };
-}
-
-function getGroundClippedProjectile(startYVh, dxPx, dyPx, fullLifeMs, minLifeMs) {
-  const viewportHeight = window.innerHeight || 900;
-  const startHeightPx = Math.max(0, startYVh * viewportHeight / 100);
-  const groundHit = dyPx > 0 && startHeightPx <= dyPx;
-  const ratio = groundHit ? clamp(startHeightPx / dyPx, 0, 1) : 1;
-  return {
-    dx: dxPx * ratio,
-    dy: dyPx * ratio,
     groundHit,
     life: groundHit ? Math.max(minLifeMs, fullLifeMs * ratio) : fullLifeMs,
   };
@@ -1943,28 +2027,8 @@ function PlayablePlane({
       lastRocketRef.current = now;
       playRocketSound();
 
-      const plane = stateRef.current;
-      const rad = (plane.angle * Math.PI) / 180;
-      const forwardX = -Math.cos(rad);
-      const forwardY = Math.sin(rad);
-      const rocketRangePx = window.innerWidth * (ROCKET_RANGE / 100);
       const mountPoint = rocketsRef.current === 2 ? { x: 0.34, y: 0.8 } : { x: 0.52, y: 0.73 };
-      const launchPoint = getPlanePoint(plane, mountPoint);
-      const fullDx = forwardX * rocketRangePx;
-      const fullDy = -forwardY * rocketRangePx;
-      const travel = getGroundClippedProjectile(launchPoint.y, fullDx, fullDy, ROCKET_LIFETIME_MS, 180);
-      const id = `${now}-rocket-${Math.random()}`;
-      const rocket = {
-        id,
-        x: launchPoint.x,
-        y: launchPoint.y,
-        dx: travel.dx,
-        dy: travel.dy,
-        groundHit: travel.groundHit,
-        life: travel.life,
-        created: now,
-        angle: plane.angle,
-      };
+      const rocket = createRocketProjectile(stateRef.current, now, mountPoint, 'player-rocket');
 
       rocketProjectilesRef.current = [...rocketProjectilesRef.current, rocket];
       setRocketProjectiles(rocketProjectilesRef.current);
@@ -1973,13 +2037,6 @@ function PlayablePlane({
       rocketsRef.current = nextRockets;
       setRocketsRemaining(nextRockets);
       onRocketChange(nextRockets);
-
-      const timeoutId = window.setTimeout(() => {
-        rocketProjectilesRef.current = rocketProjectilesRef.current.filter((item) => item.id !== id);
-        setRocketProjectiles(rocketProjectilesRef.current);
-        rocketTimeoutsRef.current = rocketTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
-      }, travel.life + (travel.groundHit ? 650 : 0));
-      rocketTimeoutsRef.current.push(timeoutId);
     };
 
     crashSoundRef.current = (impact = 1) => {
@@ -2471,6 +2528,16 @@ function PlayablePlane({
       setRocketProjectiles(rocketProjectilesRef.current);
     };
 
+    const updatePlayerRockets = (now) => {
+      if (rocketProjectilesRef.current.length === 0) return;
+      const targets = botStateRefs.current.map((bot, index) => ({ type: 'bot', index, state: bot }));
+      const nextRockets = updateGuidedRockets(rocketProjectilesRef.current, now, targets);
+      if (nextRockets !== rocketProjectilesRef.current) {
+        rocketProjectilesRef.current = nextRockets;
+        setRocketProjectiles(nextRockets);
+      }
+    };
+
     const scanBotHits = (now) => {
       let handledBulletHit = false;
       for (const projectile of projectilesRef.current) {
@@ -2487,8 +2554,9 @@ function PlayablePlane({
       let rocketHit = null;
       let rocketHitIndex = -1;
       for (const projectile of rocketProjectilesRef.current) {
-        const point = getProjectilePoint(projectile, now);
-        rocketHitIndex = botStateRefs.current.findIndex((bot) => bot && !bot.crashed && pointHitsPlane(point, bot, 2.25));
+        if (projectile.groundHit) continue;
+        const segment = getRocketSegment(projectile);
+        rocketHitIndex = botStateRefs.current.findIndex((bot) => bot && !bot.crashed && segmentHitsPlane(segment, bot, projectile.radius ?? 2.25));
         if (rocketHitIndex >= 0) {
           rocketHit = projectile;
           break;
@@ -2568,6 +2636,7 @@ function PlayablePlane({
       }
 
       stateRef.current = next;
+      updatePlayerRockets(now);
       scanBotHits(now);
       onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
       onFuelChange(next.fuel / FUEL_SECONDS);
@@ -2687,10 +2756,7 @@ function PlayablePlane({
             style={{
               left: `${rocket.x}vw`,
               bottom: `calc(100% - 2px + ${rocket.y}vh)`,
-              '--rocket-dx': `${rocket.dx}px`,
-              '--rocket-dy': `${rocket.dy}px`,
               '--rocket-angle': `${rocket.angle}deg`,
-              '--rocket-life': `${rocket.life ?? ROCKET_LIFETIME_MS}ms`,
             }}
           >
             <i className="rocket-flame" />
@@ -2904,55 +2970,13 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     const fireBotRocket = (bot, now) => {
       if (rocketReloadingRef.current || rocketCountRef.current <= 0 || now - lastRocketRef.current < BOT_ROCKET_COOLDOWN_MS) return;
       lastRocketRef.current = now;
-      const rad = (bot.angle * Math.PI) / 180;
-      const forwardX = -Math.cos(rad);
-      const forwardY = Math.sin(rad);
-      const rocketRangePx = window.innerWidth * (ROCKET_RANGE / 100);
       const mountPoint = rocketCountRef.current === 2 ? { x: 0.34, y: 0.8 } : { x: 0.52, y: 0.73 };
-      const launchPoint = getPlanePoint(bot, mountPoint);
-      const fullDx = forwardX * rocketRangePx;
-      const fullDy = -forwardY * rocketRangePx;
-      const travel = getGroundClippedProjectile(launchPoint.y, fullDx, fullDy, ROCKET_LIFETIME_MS, 180);
-      const id = `${now}-bot-rocket-${Math.random()}`;
-      const projectile = {
-        id,
-        x: launchPoint.x,
-        y: launchPoint.y,
-        dx: travel.dx,
-        dy: travel.dy,
-        groundHit: travel.groundHit,
-        life: travel.life,
-        created: now,
-        angle: bot.angle,
-        radius: 2.25,
-        impact: 1.72,
-      };
+      const projectile = createRocketProjectile(bot, now, mountPoint, 'bot-rocket');
       rocketsRef.current = [...rocketsRef.current, projectile];
       setBotRockets(rocketsRef.current);
       rocketCountRef.current -= 1;
       setBotRocketsRemaining(rocketCountRef.current);
-      const timeoutId = window.setTimeout(() => {
-        removeRocket(id);
-        rocketTimeoutsRef.current = rocketTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
-      }, travel.life + (travel.groundHit ? 650 : 0));
-      rocketTimeoutsRef.current.push(timeoutId);
       if (rocketCountRef.current <= 0) startRocketReload();
-    };
-
-    const getShotPoint = (projectile, now) => {
-      const progress = clamp((now - projectile.created) / projectile.life, 0, 1);
-      if (projectile.unit === 'world') {
-        return {
-          x: projectile.x + projectile.dx * progress,
-          y: projectile.y - projectile.dy * progress,
-        };
-      }
-      const viewportWidth = window.innerWidth || 1440;
-      const viewportHeight = window.innerHeight || 900;
-      return {
-        x: projectile.x + (projectile.dx / viewportWidth) * 100 * progress,
-        y: projectile.y - (projectile.dy / viewportHeight) * 100 * progress,
-      };
     };
 
     const getTargetCandidates = (bot) => {
@@ -3005,6 +3029,16 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       target.api.crash?.(impact);
     };
 
+    const updateBotRockets = (now) => {
+      if (rocketsRef.current.length === 0) return;
+      const targets = getTargetCandidates(stateRef.current);
+      const nextRockets = updateGuidedRockets(rocketsRef.current, now, targets);
+      if (nextRockets !== rocketsRef.current) {
+        rocketsRef.current = nextRockets;
+        setBotRockets(nextRockets);
+      }
+    };
+
     const scanHits = (now, bot) => {
       const collisionTarget = getTargetCandidates(bot).find((target) => planesCollide(bot, target.state));
       if (collisionTarget) {
@@ -3022,8 +3056,9 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         }
       }
       for (const projectile of rocketsRef.current) {
-        const point = getShotPoint(projectile, now);
-        const target = getTargetCandidates(bot).find((candidate) => pointHitsPlane(point, candidate.state, projectile.radius));
+        if (projectile.groundHit) continue;
+        const segment = getRocketSegment(projectile);
+        const target = getTargetCandidates(bot).find((candidate) => segmentHitsPlane(segment, candidate.state, projectile.radius));
         if (target) {
           removeRocket(projectile.id);
           crashTarget(target, projectile.impact);
@@ -3257,6 +3292,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       }
       if (steps >= 6) accumulator = 0;
       stateRef.current = next;
+      updateBotRockets(now);
       if (next.crashed) {
         botDamageRef.current = next.damage ?? 2;
         botSmokeParticlesRef.current = [];
@@ -3336,10 +3372,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
             style={{
               left: `${rocket.x}vw`,
               bottom: `calc(100% - 2px + ${rocket.y}vh)`,
-              '--rocket-dx': `${rocket.dx}px`,
-              '--rocket-dy': `${rocket.dy}px`,
               '--rocket-angle': `${rocket.angle}deg`,
-              '--rocket-life': `${rocket.life ?? ROCKET_LIFETIME_MS}ms`,
             }}
           >
             <i className="rocket-flame" />

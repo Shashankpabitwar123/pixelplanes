@@ -2151,9 +2151,8 @@ button {
   width: clamp(24px, 2vw, 42px);
   height: clamp(8px, 0.72vw, 14px);
   transform: translate(-50%, 50%) rotate(var(--rocket-angle));
-  animation: rocketFlight var(--rocket-life, 12s) linear forwards;
   filter: drop-shadow(0 0 7px rgba(255, 128, 26, 0.38));
-  will-change: transform, opacity;
+  will-change: left, bottom, transform, opacity;
 }
 
 .rocket-shot i,
@@ -2235,7 +2234,7 @@ button {
 }
 
 .rocket-ground-hit {
-  animation-name: rocketGroundFlight;
+  opacity: 0.96;
 }
 
 .rocket-impact {
@@ -2283,18 +2282,26 @@ button {
 .rocket-ground-hit .rocket-nose,
 .rocket-ground-hit .rocket-band,
 .rocket-ground-hit .rocket-fin {
-  animation: rocketPartImpact var(--rocket-life, 12s) linear forwards;
+  animation: rocketPartImpact 650ms linear forwards;
 }
 
 .rocket-ground-hit .rocket-flame {
   animation:
     rocketFlame 110ms steps(2) infinite,
-    rocketPartImpact var(--rocket-life, 12s) linear forwards;
+    rocketPartImpact 650ms linear forwards;
 }
 
 .rocket-ground-hit .rocket-impact {
   animation: rocketImpactBoom 560ms ease-out forwards;
-  animation-delay: calc(var(--rocket-life, 12s) - 70ms);
+  animation-delay: 0ms;
+}
+
+.rocket-ground-hit .rocket-flame,
+.rocket-ground-hit .rocket-body,
+.rocket-ground-hit .rocket-nose,
+.rocket-ground-hit .rocket-band,
+.rocket-ground-hit .rocket-fin {
+  opacity: 0;
 }
 
 .plane-visual {
@@ -2819,34 +2826,6 @@ button {
   100% {
     opacity: 0;
     transform: translate(-50%, -76%) scale(1.55);
-  }
-}
-
-@keyframes rocketFlight {
-  0% {
-    opacity: 1;
-    transform: translate(-50%, 50%) rotate(var(--rocket-angle)) scale(1);
-  }
-
-  92% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-    transform: translate(calc(-50% + var(--rocket-dx)), calc(50% + var(--rocket-dy))) rotate(var(--rocket-angle)) scale(0.94);
-  }
-}
-
-@keyframes rocketGroundFlight {
-  0% {
-    opacity: 1;
-    transform: translate(-50%, 50%) rotate(var(--rocket-angle)) scale(1);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translate(calc(-50% + var(--rocket-dx)), calc(50% + var(--rocket-dy))) rotate(var(--rocket-angle)) scale(1);
   }
 }
 
