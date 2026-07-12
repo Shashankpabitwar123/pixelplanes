@@ -984,6 +984,7 @@ function App() {
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
   const musicAudioRef = useRef(null);
   const rainAudioRef = useRef(null);
+  const rainSoundStartTimerRef = useRef(0);
   const fuelPulseTimersRef = useRef([]);
   const shootingStarTimersRef = useRef([]);
   const startGame = useCallback(() => {
@@ -1164,6 +1165,7 @@ function App() {
 
   useEffect(() => () => {
     fuelPulseTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    window.clearTimeout(rainSoundStartTimerRef.current);
     rainAudioRef.current?.stop();
     rainAudioRef.current = null;
     if (!musicAudioRef.current) return;
@@ -1257,21 +1259,30 @@ function App() {
   }, []);
 
   useEffect(() => {
+    window.clearTimeout(rainSoundStartTimerRef.current);
+    rainSoundStartTimerRef.current = 0;
     if (!rainActive || sfxMuted) {
       rainAudioRef.current?.stop();
       rainAudioRef.current = null;
       return;
     }
 
-    if (!rainAudioRef.current) {
-      rainAudioRef.current = createRainAudio();
-    }
-    const rainAudio = rainAudioRef.current;
-    if (!rainAudio) return;
-    rainAudio.context.resume?.();
-    const t = rainAudio.context.currentTime;
-    rainAudio.gain.cancelScheduledValues(t);
-    rainAudio.gain.setTargetAtTime(0.18, t, 0.35);
+    rainSoundStartTimerRef.current = window.setTimeout(() => {
+      if (!rainAudioRef.current) {
+        rainAudioRef.current = createRainAudio();
+      }
+      const rainAudio = rainAudioRef.current;
+      if (!rainAudio) return;
+      rainAudio.context.resume?.();
+      const t = rainAudio.context.currentTime;
+      rainAudio.gain.cancelScheduledValues(t);
+      rainAudio.gain.setTargetAtTime(0.18, t, 0.35);
+    }, 850);
+
+    return () => {
+      window.clearTimeout(rainSoundStartTimerRef.current);
+      rainSoundStartTimerRef.current = 0;
+    };
   }, [rainActive, sfxMuted]);
 
   useEffect(() => {
