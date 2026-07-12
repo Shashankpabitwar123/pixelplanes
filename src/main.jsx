@@ -1038,6 +1038,8 @@ function App() {
   const [localRoomPlayerId, setLocalRoomPlayerId] = useState('');
   const [roomConnectionStatus, setRoomConnectionStatus] = useState('idle');
   const [roomError, setRoomError] = useState('');
+  const [voiceStatus, setVoiceStatus] = useState('idle');
+  const [voiceLevels, setVoiceLevels] = useState({});
   const [roomVoiceEnabled, setRoomVoiceEnabled] = useState(true);
   const [roomSpeakerEnabled, setRoomSpeakerEnabled] = useState(true);
   const [roomMutedPlayers, setRoomMutedPlayers] = useState({});
@@ -1066,6 +1068,8 @@ function App() {
   const playerApiRef = useRef(null);
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
   const roomSocketRef = useRef(null);
+  const liveKitRoomRef = useRef(null);
+  const voiceAudioElementsRef = useRef(new Map());
   const musicAudioRef = useRef(null);
   const rainAudioRef = useRef(null);
   const rainSoundStartTimerRef = useRef(0);
@@ -1096,6 +1100,101 @@ function App() {
     socket.send(JSON.stringify(message));
     return true;
   }, []);
+  const setRemoteAudioMuted = useCallback((muted) => {
+    for (const element of voiceAudioElementsRef.current.values()) {
+      element.muted = muted;
+      element.volume = muted ? 0 : 1;
+    }
+  }, []);
+  const disconnectRoomVoice = useCallback(() => {
+    const liveKitRoom = liveKitRoomRef.current;
+    if (liveKitRoom) {
+      liveKitRoom.disconnect();
+      liveKitRoomRef.current = null;
+    }
+    for (const element of voiceAudioElementsRef.current.values()) {
+      element.remove();
+    }
+    voiceAudioElementsRef.current.clear();
+    setVoiceLevels({});
+    setVoiceStatus('idle');
+  }, []);
+  const connectRoomVoice = useCallback(async () => {
+    if (!MULTIPLAYER_API_URL || !roomLobby?.code || !localRoomPlayerId) return;
+    const currentRoom = liveKitRoomRef.current;
+    if (currentRoom?.state === 'connected' || currentRoom?.state === 'connecting') return;
+
+    setVoiceStatus('connecting');
+    try {
+      const response = await fetch(`${MULTIPLAYER_API_URL}/voice/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          roomCode: roomLobby.code,
+          playerId: localRoomPlayerId,
+        }),
+      });
+      const voiceConfig = await response.json();
+      if (!response.ok) {
+        throw new Error(voiceConfig.error || 'Voice is not available yet.');
+      }
+
+      const { Room, RoomEvent, Track } = await import('livekit-client');
+      const liveKitRoom = new Room();
+      liveKitRoomRef.current = liveKitRoom;
+
+      liveKitRoom.on(RoomEvent.TrackSubscribed, (track, publication) => {
+        if (track.kind !== Track.Kind.Audio) return;
+        const audioElement = track.attach();
+        audioElement.autoplay = true;
+        audioElement.playsInline = true;
+        audioElement.muted = !roomSpeakerEnabled;
+        audioElement.volume = roomSpeakerEnabled ? 1 : 0;
+        audioElement.style.display = 'none';
+        const audioId = publication.trackSid || track.sid || crypto.randomUUID();
+        voiceAudioElementsRef.current.set(audioId, audioElement);
+        document.body.appendChild(audioElement);
+      });
+
+      liveKitRoom.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
+        const audioId = publication.trackSid || track.sid;
+        track.detach().forEach((element) => element.remove());
+        if (audioId) voiceAudioElementsRef.current.delete(audioId);
+      });
+
+      liveKitRoom.on(RoomEvent.ActiveSpeakersChanged, (participants) => {
+        const nextLevels = {};
+        participants.forEach((participant) => {
+          nextLevels[participant.identity] = {
+            speaking: participant.isSpeaking,
+            level: Math.max(1, Math.min(3, Math.ceil((participant.audioLevel || 0) * 3))),
+          };
+        });
+        setVoiceLevels(nextLevels);
+      });
+
+      liveKitRoom.on(RoomEvent.Disconnected, () => {
+        for (const element of voiceAudioElementsRef.current.values()) {
+          element.remove();
+        }
+        voiceAudioElementsRef.current.clear();
+        setVoiceLevels({});
+        setVoiceStatus('idle');
+        if (liveKitRoomRef.current === liveKitRoom) {
+          liveKitRoomRef.current = null;
+        }
+      });
+
+      await liveKitRoom.connect(voiceConfig.url, voiceConfig.token);
+      await liveKitRoom.localParticipant.setMicrophoneEnabled(roomVoiceEnabled);
+      setRemoteAudioMuted(!roomSpeakerEnabled);
+      setVoiceStatus('connected');
+    } catch (error) {
+      disconnectRoomVoice();
+      setVoiceStatus('error');
+      setRoomError(error.message);
+    }
+  }, [disconnectRoomVoice, localRoomPlayerId, roomLobby?.code, roomSpeakerEnabled, roomVoiceEnabled, setRemoteAudioMuted]);
   const applyServerRoomState = useCallback((room, playerId = localRoomPlayerId) => {
     if (!room) return;
     setRoomLobby(room);
@@ -1253,6 +1352,7 @@ function App() {
   const leaveRoomLobby = useCallback(() => {
     if (sendRoomMessage({ type: 'leave_room' })) {
       disconnectRoomSocket();
+      disconnectRoomVoice();
       setRoomLobby(null);
       setRoomMutedPlayers({});
       setStartScreen('room');
@@ -1280,15 +1380,16 @@ function App() {
     ];
     setRoomLobby({ ...roomLobby, players: nextPlayers });
     setStartScreen('room');
-  }, [disconnectRoomSocket, roomLobby, sendRoomMessage]);
+  }, [disconnectRoomSocket, disconnectRoomVoice, roomLobby, sendRoomMessage]);
   const deleteRoomLobby = useCallback(() => {
     if (sendRoomMessage({ type: 'delete_room' })) {
       disconnectRoomSocket();
+      disconnectRoomVoice();
     }
     setRoomLobby(null);
     setRoomMutedPlayers({});
     setStartScreen('room');
-  }, [disconnectRoomSocket, sendRoomMessage]);
+  }, [disconnectRoomSocket, disconnectRoomVoice, sendRoomMessage]);
   const applyRoomTheme = useCallback((nextTheme) => {
     setRoomTheme(nextTheme);
     setTheme(nextTheme);
@@ -1605,7 +1706,31 @@ function App() {
     return () => window.removeEventListener('keydown', resumeFromPause, true);
   }, [paused]);
 
-  useEffect(() => () => disconnectRoomSocket(), [disconnectRoomSocket]);
+  useEffect(() => () => {
+    disconnectRoomSocket();
+    disconnectRoomVoice();
+  }, [disconnectRoomSocket, disconnectRoomVoice]);
+
+  useEffect(() => {
+    if (!roomLobby?.code || !localRoomPlayerId || !MULTIPLAYER_API_URL) {
+      disconnectRoomVoice();
+      return;
+    }
+    connectRoomVoice();
+  }, [connectRoomVoice, disconnectRoomVoice, localRoomPlayerId, roomLobby?.code]);
+
+  useEffect(() => {
+    const liveKitRoom = liveKitRoomRef.current;
+    if (!liveKitRoom || liveKitRoom.state !== 'connected') return;
+    liveKitRoom.localParticipant.setMicrophoneEnabled(roomVoiceEnabled).catch((error) => {
+      setVoiceStatus('error');
+      setRoomError(error.message);
+    });
+  }, [roomVoiceEnabled]);
+
+  useEffect(() => {
+    setRemoteAudioMuted(!roomSpeakerEnabled);
+  }, [roomSpeakerEnabled, setRemoteAudioMuted]);
 
   useEffect(() => {
     if (gameMode !== 'room' || !gameStarted) return;
@@ -1621,14 +1746,15 @@ function App() {
       const isLocalPlayer = localRoomPlayerId ? player.id === localRoomPlayerId : player.id === 'host';
       const micEnabled = isLocalPlayer ? roomVoiceEnabled : player.micEnabled !== false;
       const speakerEnabled = isLocalPlayer ? roomSpeakerEnabled : !roomMutedPlayers[player.id] && player.speakerEnabled !== false;
-      const voiceLevel = 0;
+      const voiceActivity = voiceLevels[player.id] ?? { speaking: false, level: 0 };
+      const voiceLevel = voiceActivity.speaking ? voiceActivity.level : 0;
       return {
         ...player,
         kills: isLocalPlayer ? killCount : player.kills ?? 0,
         isLocalPlayer,
         micEnabled,
         speakerEnabled,
-        speaking: micEnabled && voiceLevel > 0,
+        speaking: micEnabled && voiceActivity.speaking,
         voiceLevel,
       };
     })
