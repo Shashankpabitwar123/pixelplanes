@@ -14,6 +14,7 @@ const BULLET_RELOAD_MS = 7000;
 const BULLET_COOLDOWN_MS = 120;
 const BULLET_LIFETIME_MS = 1200;
 const BULLET_RANGE = 102;
+const BULLET_FLIGHT_SECONDS = BULLET_LIFETIME_MS / 1000;
 const BULLET_MUZZLE_POINT = { x: 0.051, y: 0.505 };
 const AIM_GUIDE_DOT_COUNT = 4;
 const AIM_GUIDE_FIRST_DOT_DISTANCE = 2.25;
@@ -406,9 +407,15 @@ function getBulletTrajectory(plane) {
   const viewportWidth = window.innerWidth || 1440;
   const viewportHeight = window.innerHeight || 900;
   const rangePx = viewportWidth * (BULLET_RANGE / 100);
-  const fullDx = (forward.x * rangePx / viewportWidth) * 100;
-  const fullDy = (-forward.y * rangePx / viewportHeight) * 100;
+  const forwardDx = (forward.x * rangePx / viewportWidth) * 100;
+  const forwardDy = (-forward.y * rangePx / viewportHeight) * 100;
+  const inheritedDx = (plane.vx ?? 0) * BULLET_FLIGHT_SECONDS;
+  const inheritedDy = -(plane.vy ?? 0) * BULLET_FLIGHT_SECONDS;
+  const fullDx = forwardDx + inheritedDx;
+  const fullDy = forwardDy + inheritedDy;
   const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
+  const screenDx = travel.dx * viewportWidth;
+  const screenDy = travel.dy * viewportHeight;
   return {
     x: muzzle.x,
     y: muzzle.y,
@@ -416,7 +423,7 @@ function getBulletTrajectory(plane) {
     dy: travel.dy,
     groundHit: travel.groundHit,
     life: travel.life,
-    angle: plane.angle,
+    angle: normalizeAngle((Math.atan2(screenDy, screenDx) * 180) / Math.PI),
     unit: 'world',
   };
 }
