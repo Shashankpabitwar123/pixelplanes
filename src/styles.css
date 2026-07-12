@@ -1500,6 +1500,14 @@ button {
   animation: mapBotHuntPulse 0.82s ease-in-out infinite;
 }
 
+.map-room-player-dot {
+  background: #ff2638;
+  box-shadow:
+    0 0 5px rgba(255, 38, 56, 0.82),
+    0 0 12px rgba(255, 38, 56, 0.44);
+  animation: none;
+}
+
 .fuel-gauge {
   --fuel-level: 1;
   --fuel-angle: 0deg;
@@ -2725,6 +2733,17 @@ button {
 
 .bot-plane .plane-nav-light-back {
   animation-delay: 0.51s;
+}
+
+.remote-plane-layer {
+  z-index: 10;
+}
+
+.room-projectiles-layer {
+  position: absolute;
+  z-index: 13;
+  inset: 0;
+  pointer-events: none;
 }
 
 .bullet-aim-guide {

@@ -10,6 +10,9 @@ const ROOM_MAX_PLAYERS = 6;
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const PLANE_COLORS = ['blue', 'red', 'yellow', 'purple', 'green', 'cyan'];
 const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
+const HIT_DEDUPE_TTL_MS = 20_000;
+const WORLD_WIDTH = 700;
+const WORLD_HEIGHT = 400;
 
 const rooms = new Map();
 const socketSessions = new WeakMap();
@@ -87,6 +90,52 @@ function normalizeTheme(theme) {
   return theme === 'light' ? 'light' : 'dark';
 }
 
+function finiteNumber(value, fallback = 0, min = -Infinity, max = Infinity) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
+function sanitizePlaneState(state = {}) {
+  return {
+    x: finiteNumber(state.x, 350, 0, WORLD_WIDTH),
+    y: finiteNumber(state.y, 0, 0, WORLD_HEIGHT),
+    vx: finiteNumber(state.vx, 0, -120, 120),
+    vy: finiteNumber(state.vy, 0, -120, 120),
+    angle: finiteNumber(state.angle, 16, -720, 720),
+    thrust: finiteNumber(state.thrust, 0, 0, 1),
+    throttle: finiteNumber(state.throttle, 0, 0, 1),
+    crashed: Boolean(state.crashed),
+    damage: finiteNumber(state.damage, 0, 0, 2),
+    fuel: finiteNumber(state.fuel, 20, 0, 20),
+  };
+}
+
+function sanitizeProjectile(projectile = {}, ownerId, weapon) {
+  const isRocket = weapon === 'rocket';
+  return {
+    id: String(projectile.id || crypto.randomUUID()).slice(0, 96),
+    ownerId,
+    weapon,
+    x: finiteNumber(projectile.x, 0, 0, WORLD_WIDTH),
+    y: finiteNumber(projectile.y, 0, 0, WORLD_HEIGHT),
+    previousX: finiteNumber(projectile.previousX ?? projectile.x, projectile.x, 0, WORLD_WIDTH),
+    previousY: finiteNumber(projectile.previousY ?? projectile.y, projectile.y, 0, WORLD_HEIGHT),
+    renderX: finiteNumber(projectile.renderX ?? projectile.x, 0, 0, WORLD_WIDTH),
+    renderY: finiteNumber(projectile.renderY ?? projectile.y, 0, 0, WORLD_HEIGHT),
+    dx: finiteNumber(projectile.dx, 0, -240, 240),
+    dy: finiteNumber(projectile.dy, 0, -240, 240),
+    vx: finiteNumber(projectile.vx, 0, -140, 140),
+    vy: finiteNumber(projectile.vy, 0, -140, 140),
+    angle: finiteNumber(projectile.angle, 0, -720, 720),
+    radius: finiteNumber(projectile.radius, isRocket ? 2.25 : 1.05, 0.2, 4),
+    groundHit: Boolean(projectile.groundHit),
+    life: finiteNumber(projectile.life, isRocket ? 12000 : 1200, 80, isRocket ? 12000 : 2200),
+    unit: projectile.unit === 'world' ? 'world' : 'world',
+    createdAt: Date.now(),
+  };
+}
+
 function pickPlaneColor(room) {
   const used = new Set(Array.from(room.players.values()).map((player) => player.color));
   const available = PLANE_COLORS.filter((color) => !used.has(color));
@@ -115,6 +164,8 @@ function serializeRoom(room) {
     color: player.color,
     role: player.id === room.hostId ? 'Host' : 'Player',
     kills: player.kills,
+    damage: player.damage || 0,
+    alive: player.alive !== false,
     micEnabled: player.micEnabled,
     speakerEnabled: player.speakerEnabled,
     connected: room.sockets.has(player.id),
@@ -183,6 +234,7 @@ function createRoom(socket, payload) {
     theme: normalizeTheme(payload.theme),
     players: new Map(),
     sockets: new Map(),
+    hitProjectiles: new Map(),
     started: false,
     createdAt: Date.now(),
   };
@@ -194,6 +246,9 @@ function createRoom(socket, payload) {
     name: normalizeName(payload.name, 'Player 1'),
     color: pickPlaneColor(room),
     kills: 0,
+    damage: 0,
+    alive: true,
+    state: null,
     micEnabled: payload.micEnabled !== false,
     speakerEnabled: payload.speakerEnabled !== false,
   });
@@ -229,6 +284,9 @@ function joinRoom(socket, payload) {
     name: normalizeName(payload.name, `Player ${room.players.size + 1}`),
     color: pickPlaneColor(room),
     kills: 0,
+    damage: 0,
+    alive: true,
+    state: null,
     micEnabled: payload.micEnabled !== false,
     speakerEnabled: payload.speakerEnabled !== false,
   });
@@ -291,6 +349,13 @@ function startRoom(socket) {
   }
 
   room.started = true;
+  for (const player of room.players.values()) {
+    player.kills = 0;
+    player.damage = 0;
+    player.alive = true;
+    player.state = null;
+  }
+  room.hitProjectiles.clear();
   logRoomEvent(room.code, 'room_started', {
     playerCount: room.players.size,
     theme: room.theme,
@@ -315,15 +380,120 @@ function relayPlayerState(socket, payload) {
   const current = roomForSocket(socket);
   if (!current) return;
   const { room, playerId } = current;
+  const player = room.players.get(playerId);
+  if (!player) return;
+  const state = sanitizePlaneState(payload.state);
+  player.state = state;
+  player.damage = state.damage;
+  player.alive = !state.crashed && state.damage < 2;
   const message = {
     type: 'remote_player_state',
     playerId,
-    state: payload.state || {},
+    state,
     at: Date.now(),
   };
   for (const [peerId, peer] of room.sockets.entries()) {
     if (peerId !== playerId) send(peer, message);
   }
+}
+
+function relayProjectile(socket, payload) {
+  const current = roomForSocket(socket);
+  if (!current) return;
+  const { room, playerId } = current;
+  const weapon = payload.weapon === 'rocket' ? 'rocket' : 'bullet';
+  const projectile = sanitizeProjectile(payload.projectile, playerId, weapon);
+  const message = {
+    type: 'room_projectile',
+    playerId,
+    projectile,
+    at: Date.now(),
+  };
+  for (const [peerId, peer] of room.sockets.entries()) {
+    if (peerId !== playerId) send(peer, message);
+  }
+}
+
+function pruneHitDedupe(room) {
+  const now = Date.now();
+  for (const [projectileId, timestamp] of room.hitProjectiles.entries()) {
+    if (now - timestamp > HIT_DEDUPE_TTL_MS) {
+      room.hitProjectiles.delete(projectileId);
+    }
+  }
+}
+
+function registerPlayerHit(socket, payload) {
+  const current = roomForSocket(socket);
+  if (!current) return;
+  const { room, playerId: attackerId } = current;
+  const targetId = String(payload.targetId || '');
+  const target = room.players.get(targetId);
+  const attacker = room.players.get(attackerId);
+  if (!target || !attacker || targetId === attackerId) return;
+
+  pruneHitDedupe(room);
+  const projectileId = String(payload.projectileId || crypto.randomUUID()).slice(0, 96);
+  if (room.hitProjectiles.has(projectileId)) return;
+  room.hitProjectiles.set(projectileId, Date.now());
+
+  const weapon = payload.weapon === 'rocket' || payload.weapon === 'collision' ? payload.weapon : 'bullet';
+  const previousDamage = Math.max(0, Math.min(2, Number(target.damage) || 0));
+  const killed = weapon === 'rocket' || weapon === 'collision' || previousDamage >= 1;
+  target.damage = killed ? 2 : 1;
+  target.alive = !killed;
+  if (target.state) {
+    target.state = { ...target.state, damage: target.damage, crashed: killed };
+  }
+  if (killed) {
+    attacker.kills = Math.max(-99, Math.min(999, (Number(attacker.kills) || 0) + 1));
+  }
+
+  const hitMessage = {
+    type: 'player_hit',
+    targetId,
+    attackerId,
+    projectileId,
+    weapon,
+    damage: target.damage,
+    killed,
+    at: Date.now(),
+  };
+  for (const peer of room.sockets.values()) {
+    send(peer, hitMessage);
+  }
+  logRoomEvent(room.code, killed ? 'player_killed' : 'player_damaged', {
+    targetId,
+    attackerId,
+    weapon,
+  });
+  broadcastRoomState(room);
+}
+
+function registerPlayerCrash(socket, payload) {
+  const current = roomForSocket(socket);
+  if (!current) return;
+  const { room, playerId } = current;
+  const player = room.players.get(playerId);
+  if (!player) return;
+
+  player.damage = 2;
+  player.alive = false;
+  if (player.state) {
+    player.state = { ...player.state, crashed: true, damage: 2 };
+  }
+  if (payload.selfCrash !== false) {
+    player.kills = Math.max(-99, Math.min(999, (Number(player.kills) || 0) - 1));
+  }
+  for (const peer of room.sockets.values()) {
+    send(peer, {
+      type: 'player_crashed',
+      playerId,
+      selfCrash: payload.selfCrash !== false,
+      at: Date.now(),
+    });
+  }
+  broadcastRoomState(room);
 }
 
 function handleSocketMessage(socket, raw) {
@@ -363,6 +533,15 @@ function handleSocketMessage(socket, raw) {
       break;
     case 'player_state':
       relayPlayerState(socket, message);
+      break;
+    case 'fire_projectile':
+      relayProjectile(socket, message);
+      break;
+    case 'player_hit':
+      registerPlayerHit(socket, message);
+      break;
+    case 'player_crashed':
+      registerPlayerCrash(socket, message);
       break;
     case 'ping':
       send(socket, { type: 'pong', at: Date.now() });

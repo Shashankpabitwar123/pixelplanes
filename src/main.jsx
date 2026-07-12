@@ -1058,12 +1058,20 @@ function App() {
   const [musicVolume, setMusicVolume] = useState(0.32);
   const [sfxMuted, setSfxMuted] = useState(false);
   const [shootingStars, setShootingStars] = useState([]);
+  const [remotePlayerStates, setRemotePlayerStates] = useState({});
+  const [remoteProjectiles, setRemoteProjectiles] = useState([]);
   const worldRef = useRef(null);
   const mapPointerRef = useRef(null);
   const mapDotRef = useRef(null);
   const mapBotDotRefs = useRef([]);
   const fuelGaugeRef = useRef(null);
   const playerStateRef = useRef(createInitialPlaneState());
+  const remotePlayerStatesRef = useRef({});
+  const remoteProjectilesRef = useRef([]);
+  const remoteProjectileElementRefs = useRef(new Map());
+  const roomDamageEventIdsRef = useRef(new Set());
+  const localRoomPlayerIdRef = useRef('');
+  const lastRoomStateSentRef = useRef(0);
   const botStateRefs = useRef(createInitialBotStates());
   const playerApiRef = useRef(null);
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
@@ -1099,6 +1107,16 @@ function App() {
     }
     socket.send(JSON.stringify(message));
     return true;
+  }, []);
+  const replaceRemotePlayerStates = useCallback((updater) => {
+    const next = typeof updater === 'function' ? updater(remotePlayerStatesRef.current) : updater;
+    remotePlayerStatesRef.current = next;
+    setRemotePlayerStates(next);
+  }, []);
+  const replaceRemoteProjectiles = useCallback((updater) => {
+    const next = typeof updater === 'function' ? updater(remoteProjectilesRef.current) : updater;
+    remoteProjectilesRef.current = next;
+    setRemoteProjectiles(next);
   }, []);
   const setRemoteAudioMuted = useCallback((muted) => {
     for (const element of voiceAudioElementsRef.current.values()) {
@@ -1200,16 +1218,28 @@ function App() {
     setRoomLobby(room);
     setRoomTheme(room.theme || 'dark');
     setTheme(room.theme || 'dark');
-    if (playerId) {
-      setLocalRoomPlayerId(playerId);
-      const localPlayer = room.players?.find((player) => player.id === playerId);
+    const effectivePlayerId = playerId || localRoomPlayerIdRef.current;
+    if (effectivePlayerId) {
+      setLocalRoomPlayerId(effectivePlayerId);
+      const localPlayer = room.players?.find((player) => player.id === effectivePlayerId);
       if (localPlayer?.color) setPlaneColor(localPlayer.color);
+      if (Number.isFinite(localPlayer?.kills)) {
+        setKillCount(localPlayer.kills);
+      }
       if (typeof localPlayer?.micEnabled === 'boolean') setRoomVoiceEnabled(localPlayer.micEnabled);
       if (typeof localPlayer?.speakerEnabled === 'boolean') setRoomSpeakerEnabled(localPlayer.speakerEnabled);
     }
+    const activeRemoteIds = new Set((room.players || []).filter((player) => player.id !== effectivePlayerId).map((player) => player.id));
+    replaceRemotePlayerStates((current) => {
+      const next = {};
+      Object.entries(current).forEach(([id, value]) => {
+        if (activeRemoteIds.has(id)) next[id] = value;
+      });
+      return next;
+    });
     setRoomError('');
     setStartScreen('room-waiting');
-  }, [localRoomPlayerId]);
+  }, [replaceRemotePlayerStates]);
   const connectRoomSocket = useCallback(() => new Promise((resolve, reject) => {
     if (!MULTIPLAYER_WS_URL) {
       reject(new Error('Multiplayer server is not configured yet.'));
@@ -1244,19 +1274,102 @@ function App() {
         applyServerRoomState(message.room, message.localPlayerId);
       }
       if (message.type === 'room_started') {
-        applyServerRoomState(message.room, localRoomPlayerId);
+        applyServerRoomState(message.room, localRoomPlayerIdRef.current);
         setGameMode('room');
         startGame();
+      }
+      if (message.type === 'remote_player_state') {
+        if (!message.playerId || message.playerId === localRoomPlayerIdRef.current) return;
+        replaceRemotePlayerStates((current) => ({
+          ...current,
+          [message.playerId]: {
+            state: {
+              ...current[message.playerId]?.state,
+              ...message.state,
+            },
+            at: performance.now(),
+          },
+        }));
+      }
+      if (message.type === 'room_projectile') {
+        const projectile = message.projectile;
+        if (!projectile || projectile.ownerId === localRoomPlayerIdRef.current) return;
+        const now = performance.now();
+        const weapon = projectile.weapon === 'rocket' ? 'rocket' : 'bullet';
+        replaceRemoteProjectiles((current) => [
+          ...current,
+          {
+            ...projectile,
+            weapon,
+            created: now,
+            lastUpdate: now,
+            guideUntil: weapon === 'rocket' ? now + ROCKET_HOMING_MS : 0,
+            impact: weapon === 'rocket' ? 1.72 : 1.08,
+          },
+        ]);
+      }
+      if (message.type === 'player_hit') {
+        const eventId = message.projectileId || `${message.attackerId}-${message.targetId}-${message.at}`;
+        if (message.targetId === localRoomPlayerIdRef.current) {
+          if (roomDamageEventIdsRef.current.has(eventId)) return;
+          roomDamageEventIdsRef.current.add(eventId);
+          if (message.killed || message.weapon === 'rocket' || message.weapon === 'collision') {
+            playerApiRef.current?.crash?.(1.35, { selfCrash: false });
+          } else {
+            playerApiRef.current?.hitByBullet?.();
+          }
+        } else if (message.targetId) {
+          replaceRemotePlayerStates((current) => {
+            const target = current[message.targetId];
+            if (!target) return current;
+            return {
+              ...current,
+              [message.targetId]: {
+                ...target,
+                state: {
+                  ...target.state,
+                  damage: message.damage,
+                  crashed: Boolean(message.killed),
+                  thrust: message.killed ? 0 : target.state?.thrust,
+                  throttle: message.killed ? 0 : target.state?.throttle,
+                },
+              },
+            };
+          });
+        }
+      }
+      if (message.type === 'player_crashed' && message.playerId && message.playerId !== localRoomPlayerIdRef.current) {
+        replaceRemotePlayerStates((current) => {
+          const target = current[message.playerId];
+          if (!target) return current;
+          return {
+            ...current,
+            [message.playerId]: {
+              ...target,
+              state: {
+                ...target.state,
+                crashed: true,
+                damage: 2,
+                thrust: 0,
+                throttle: 0,
+              },
+            },
+          };
+        });
       }
       if (message.type === 'room_deleted') {
         setRoomLobby(null);
         setRoomMutedPlayers({});
+        replaceRemotePlayerStates({});
+        replaceRemoteProjectiles([]);
         setRoomError('Room was deleted by the host.');
         setStartScreen('room');
       }
       if (message.type === 'room_left') {
         setRoomLobby(null);
         setRoomMutedPlayers({});
+        replaceRemotePlayerStates({});
+        replaceRemoteProjectiles([]);
         setStartScreen('room');
       }
       if (message.type === 'room_error') {
@@ -1278,7 +1391,7 @@ function App() {
         reject(new Error('Could not connect to multiplayer server.'));
       }
     });
-  }), [applyServerRoomState, localRoomPlayerId, startGame]);
+  }), [applyServerRoomState, localRoomPlayerId, replaceRemotePlayerStates, replaceRemoteProjectiles, startGame]);
   const pauseGame = useCallback(() => {
     if (!gameStarted) return;
     setPaused((current) => !current);
@@ -1475,6 +1588,30 @@ function App() {
   const updateRocketStatus = useCallback((nextCount) => {
     setRocketCount((current) => (current === nextCount ? current : nextCount));
   }, []);
+  const sendRoomProjectile = useCallback((weapon, projectile) => {
+    if (gameMode !== 'room' || !gameStarted || !localRoomPlayerIdRef.current) return;
+    sendRoomMessage({
+      type: 'fire_projectile',
+      weapon,
+      projectile,
+    });
+  }, [gameMode, gameStarted, sendRoomMessage]);
+  const sendRoomHit = useCallback(({ targetId, projectileId, weapon }) => {
+    if (gameMode !== 'room' || !gameStarted || !targetId || !projectileId) return;
+    sendRoomMessage({
+      type: 'player_hit',
+      targetId,
+      projectileId,
+      weapon,
+    });
+  }, [gameMode, gameStarted, sendRoomMessage]);
+  const sendRoomCrash = useCallback((options = {}) => {
+    if (gameMode !== 'room' || !gameStarted || !localRoomPlayerIdRef.current) return;
+    sendRoomMessage({
+      type: 'player_crashed',
+      selfCrash: options.selfCrash !== false,
+    });
+  }, [gameMode, gameStarted, sendRoomMessage]);
   const recordPlayerKill = useCallback(() => {
     setKillCount((current) => {
       const next = current + 1;
@@ -1492,9 +1629,15 @@ function App() {
       return next;
     });
   }, []);
-  const resetCurrentKills = useCallback(() => {
-    setKillCount((current) => (gameMode === 'room' ? Math.max(0, current - 1) : 0));
-  }, [gameMode]);
+  const resetCurrentKills = useCallback((options = {}) => {
+    if (gameMode === 'room') {
+      if (options.selfCrash !== false) {
+        sendRoomMessage({ type: 'player_crashed', selfCrash: true });
+      }
+      return;
+    }
+    setKillCount(0);
+  }, [gameMode, sendRoomMessage]);
   const toggleRoomPlayerMute = useCallback((playerId) => {
     setRoomMutedPlayers((current) => ({ ...current, [playerId]: !current[playerId] }));
   }, []);
@@ -1532,7 +1675,15 @@ function App() {
   }, [disconnectRoomSocket, updateCamera, updateFuelGauge]);
   const updatePlayerState = useCallback((nextState) => {
     playerStateRef.current = nextState;
-  }, []);
+    if (gameMode !== 'room' || !gameStarted || !localRoomPlayerIdRef.current) return;
+    const now = performance.now();
+    if (now - lastRoomStateSentRef.current < 50) return;
+    lastRoomStateSentRef.current = now;
+    sendRoomMessage({
+      type: 'player_state',
+      state: nextState,
+    });
+  }, [gameMode, gameStarted, sendRoomMessage]);
   const updateBotLocator = useCallback((botIndex, botState) => {
     botStateRefs.current[botIndex] = botState;
     const dot = mapBotDotRefs.current[botIndex];
@@ -1581,6 +1732,10 @@ function App() {
     musicAudioRef.current.pause();
     musicAudioRef.current.src = '';
   }, []);
+
+  useEffect(() => {
+    localRoomPlayerIdRef.current = localRoomPlayerId;
+  }, [localRoomPlayerId]);
 
   useEffect(() => {
     let stopped = false;
@@ -1759,6 +1914,12 @@ function App() {
       };
     })
     .sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name));
+  const remoteRoomPlanes = isRoomGame
+    ? roomPlayers
+      .filter((player) => player.id !== localRoomPlayerId)
+      .map((player) => ({ player, entry: remotePlayerStates[player.id] }))
+      .filter(({ entry }) => entry?.state)
+    : [];
 
   return (
     <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}`} aria-label="Animated Bitplanes background">
@@ -2259,6 +2420,22 @@ function App() {
             }}
           />
         ))}
+        {gameMode === 'room' && roomPlayers
+          .filter((player) => player.id !== localRoomPlayerId)
+          .map((player) => {
+            const state = remotePlayerStates[player.id]?.state;
+            if (!state) return null;
+            return (
+              <span
+                key={player.id}
+                className="map-bot-dot map-room-player-dot"
+                style={{
+                  left: `${Math.max(2, Math.min(98, (state.x / WORLD_WIDTH) * 100))}%`,
+                  top: `${Math.max(2, Math.min(98, 100 - ((state.y + 50) / WORLD_HEIGHT) * 100))}%`,
+                }}
+              />
+            );
+          })}
         <span
           ref={mapDotRef}
           className="map-pointer-dot"
@@ -2372,6 +2549,10 @@ function App() {
             onAmmoChange={updateAmmoStatus}
             onRocketChange={updateRocketStatus}
             onPlaneState={updatePlayerState}
+            onRoomProjectile={sendRoomProjectile}
+            onRoomHit={sendRoomHit}
+            onRoomCrash={sendRoomCrash}
+            roomTargetStatesRef={remotePlayerStatesRef}
             playerApiRef={playerApiRef}
             botStateRefs={botStateRefs}
             botApiRefs={botApiRefs}
@@ -2385,6 +2566,19 @@ function App() {
             planeLightCombo={planeLightCombo}
             sfxMuted={sfxMuted}
             fogActive={fogActive}
+          />
+          {remoteRoomPlanes.map(({ player, entry }) => (
+            <RemotePlane key={player.id} player={player} entry={entry} fogActive={fogActive} />
+          ))}
+          <RoomProjectilesLayer
+            active={isRoomGame}
+            projectiles={remoteProjectiles}
+            projectilesRef={remoteProjectilesRef}
+            projectileElementRefs={remoteProjectileElementRefs}
+            replaceProjectiles={replaceRemoteProjectiles}
+            playerStateRef={playerStateRef}
+            localPlayerId={localRoomPlayerId}
+            sendRoomMessage={sendRoomMessage}
           />
           {gameMode === 'bots' && botStateRefs.current.map((_, index) => (
             <BotPlane
@@ -2493,6 +2687,10 @@ function PlayablePlane({
   onAmmoChange,
   onRocketChange,
   onPlaneState,
+  onRoomProjectile,
+  onRoomHit,
+  onRoomCrash,
+  roomTargetStatesRef,
   playerApiRef,
   botStateRefs,
   botApiRefs,
@@ -2531,6 +2729,7 @@ function PlayablePlane({
   const lastShotRef = useRef(0);
   const fireQueuedRef = useRef(false);
   const fireBulletRef = useRef(null);
+  const crashCurrentPlaneRef = useRef(null);
   const rocketsRef = useRef(MAX_ROCKETS);
   const lastRocketRef = useRef(0);
   const projectilesRef = useRef([]);
@@ -2600,7 +2799,7 @@ function PlayablePlane({
 
   useEffect(() => {
     if (!playerApiRef) return undefined;
-    const crashPlayer = (impact = 1.2) => {
+    const crashPlayer = (impact = 1.2, options = {}) => {
       const current = stateRef.current;
       if (current.crashed) return;
       const next = {
@@ -2625,12 +2824,13 @@ function PlayablePlane({
       setDamageSmokeParticles([]);
       setCrashed(true);
       crashSoundRef.current?.(next.crashImpact);
-      onPlayerDeath();
+      onPlayerDeath(options);
       onPlaneState(next);
       if (engineAudioRef.current) {
         engineAudioRef.current.master.gain.setTargetAtTime(0, engineAudioRef.current.context.currentTime, 0.025);
       }
     };
+    crashCurrentPlaneRef.current = crashPlayer;
 
     playerApiRef.current = {
       playHitSound: () => {
@@ -2658,6 +2858,7 @@ function PlayablePlane({
     };
     return () => {
       if (playerApiRef.current) playerApiRef.current = null;
+      crashCurrentPlaneRef.current = null;
     };
   }, [playerApiRef, onPlayerDeath, onPlaneState]);
 
@@ -2946,6 +3147,7 @@ function PlayablePlane({
       const trajectory = getBulletTrajectory(planeState);
       bulletTrajectoryRef.current = trajectory;
       const projectile = createBulletProjectile(planeState, now, 'player-bullet', trajectory);
+      onRoomProjectile?.('bullet', projectile);
 
       projectilesRef.current = [...projectilesRef.current, projectile];
       setProjectiles(projectilesRef.current);
@@ -2981,6 +3183,7 @@ function PlayablePlane({
 
       const mountPoint = rocketsRef.current === 2 ? { x: 0.34, y: 0.8 } : { x: 0.52, y: 0.73 };
       const rocket = createRocketProjectile(stateRef.current, now, mountPoint, 'player-rocket');
+      onRoomProjectile?.('rocket', rocket);
 
       rocketProjectilesRef.current = [...rocketProjectilesRef.current, rocket];
       setRocketProjectiles(rocketProjectilesRef.current);
@@ -3271,7 +3474,7 @@ function PlayablePlane({
         engineAudioRef.current = null;
       }
     };
-  }, [onAmmoChange, onRocketChange]);
+  }, [onAmmoChange, onRocketChange, onRoomProjectile]);
 
   useEffect(() => {
     let frame = 0;
@@ -3489,12 +3692,21 @@ function PlayablePlane({
       setRocketProjectiles(rocketProjectilesRef.current);
     };
 
+    const getRoomTargets = () =>
+      Object.entries(roomTargetStatesRef?.current || {})
+        .map(([id, entry]) => ({
+          type: 'room-player',
+          id,
+          state: entry?.state,
+        }))
+        .filter((target) => target.state && !target.state.crashed);
+
     const updatePlayerRockets = (now) => {
       if (rocketProjectilesRef.current.length === 0) return;
       const targets = botTargetsActive
         ? botStateRefs.current.map((bot, index) => ({ type: 'bot', index, state: bot }))
         : [];
-      const nextRockets = updateGuidedRockets(rocketProjectilesRef.current, now, targets);
+      const nextRockets = updateGuidedRockets(rocketProjectilesRef.current, now, [...targets, ...getRoomTargets()]);
       if (nextRockets !== rocketProjectilesRef.current) {
         rocketProjectilesRef.current = nextRockets;
         setRocketProjectiles(nextRockets);
@@ -3503,6 +3715,41 @@ function PlayablePlane({
 
     const updatePlayerBulletRenders = (now) => {
       syncProjectileRenderPositions(projectilesRef.current, now, projectileElementRefs.current);
+    };
+
+    const scanRoomHits = (now, planeState) => {
+      const roomTargets = getRoomTargets();
+      if (!roomTargets.length || planeState.crashed) return;
+
+      const collisionTarget = roomTargets.find((target) => planesCollide(planeState, target.state));
+      if (collisionTarget) {
+        const projectileId = `collision-${collisionTarget.id}-${Math.round(now)}`;
+        onRoomHit?.({ targetId: collisionTarget.id, projectileId, weapon: 'collision' });
+        onRoomCrash?.({ selfCrash: false });
+        crashCurrentPlaneRef.current?.(1.8, { selfCrash: false });
+        return;
+      }
+
+      for (const projectile of projectilesRef.current) {
+        const segment = getProjectileSegment(projectile, now);
+        const target = roomTargets.find((candidate) => segmentHitsPlane(segment, candidate.state, projectile.radius ?? 1.05));
+        if (target) {
+          removeProjectile(projectile.id);
+          onRoomHit?.({ targetId: target.id, projectileId: projectile.id, weapon: 'bullet' });
+          return;
+        }
+      }
+
+      for (const projectile of rocketProjectilesRef.current) {
+        if (projectile.groundHit) continue;
+        const segment = getRocketSegment(projectile);
+        const target = roomTargets.find((candidate) => segmentHitsPlane(segment, candidate.state, projectile.radius ?? 2.25));
+        if (target) {
+          removeRocketProjectile(projectile.id);
+          onRoomHit?.({ targetId: target.id, projectileId: projectile.id, weapon: 'rocket' });
+          return;
+        }
+      }
     };
 
     const scanBotHits = (now) => {
@@ -3615,6 +3862,7 @@ function PlayablePlane({
       updatePlayerBulletRenders(now);
       updatePlayerRockets(now);
       scanBotHits(now);
+      scanRoomHits(now, next);
       onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
       onFuelChange(next.fuel / FUEL_SECONDS);
       onPlaneState(next);
@@ -3692,7 +3940,7 @@ function PlayablePlane({
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [onMove, onFuelChange, onFuelRefill, onKill, onPlayerDeath, onAmmoChange, onRocketChange, onPlaneState, botStateRefs, botApiRefs, botTargetsActive]);
+  }, [onMove, onFuelChange, onFuelRefill, onKill, onPlayerDeath, onAmmoChange, onRocketChange, onPlaneState, onRoomHit, onRoomCrash, roomTargetStatesRef, botStateRefs, botApiRefs, botTargetsActive]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
@@ -3795,6 +4043,218 @@ function PlayablePlane({
           <i className="smoke smoke-five" />
         </span>
       )}
+    </div>
+  );
+}
+
+function RemotePlane({ player, entry, fogActive }) {
+  const plane = entry.state;
+  const crashed = Boolean(plane.crashed);
+  const damaged = (plane.damage ?? 0) > 0 && !crashed;
+  const visibleThrust = Math.max(plane.thrust || 0, plane.throttle || 0);
+
+  return (
+    <div className="player-plane-layer remote-plane-layer" aria-label={`${player.name} plane`}>
+      <div
+        className={`player-plane remote-plane${crashed ? ' plane-crashed' : ''}${damaged ? ' plane-damaged' : ''}`}
+        style={{
+          transform: `translate(${plane.x}vw, ${-plane.y}vh) rotate(${plane.angle}deg)`,
+          '--thrust': visibleThrust,
+        }}
+      >
+        <BitPlane
+          rocketsRemaining={0}
+          planeColor={player.color || 'blue'}
+          planeLightCombo="classic"
+          searchLightActive={fogActive && !crashed}
+          searchLightFog={fogActive}
+          propellerActive={visibleThrust > 0.05}
+        />
+      </div>
+      {crashed && (
+        <span
+          className="blast remote-blast"
+          style={{
+            left: `${plane.x}vw`,
+            bottom: `calc(100% - 2px + ${Math.max(0, plane.y)}vh)`,
+          }}
+          aria-hidden="true"
+        >
+          <i className="blast-flash" />
+          <i className="blast-core" />
+          <i className="blast-sparks" />
+          <i className="smoke smoke-one" />
+          <i className="smoke smoke-two" />
+          <i className="smoke smoke-three" />
+          <i className="smoke smoke-four" />
+          <i className="smoke smoke-five" />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function RoomProjectilesLayer({
+  active,
+  projectiles,
+  projectilesRef,
+  projectileElementRefs,
+  replaceProjectiles,
+  playerStateRef,
+  localPlayerId,
+  sendRoomMessage,
+}) {
+  useEffect(() => {
+    if (!active) {
+      replaceProjectiles([]);
+      projectileElementRefs.current.clear();
+      return undefined;
+    }
+
+    let frame = 0;
+    let last = performance.now();
+    const localHitIds = new Set();
+
+    const removeProjectile = (id) => {
+      replaceProjectiles((current) => current.filter((projectile) => projectile.id !== id));
+      projectileElementRefs.current.delete(id);
+    };
+
+    const reportLocalHit = (projectile, weapon) => {
+      if (!localPlayerId || localHitIds.has(projectile.id)) return;
+      localHitIds.add(projectile.id);
+      sendRoomMessage({
+        type: 'player_hit',
+        targetId: localPlayerId,
+        projectileId: projectile.id,
+        weapon,
+      });
+    };
+
+    const update = (now) => {
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      let changed = false;
+      const playerState = playerStateRef.current;
+      const nextProjectiles = [];
+
+      for (const projectile of projectilesRef.current) {
+        if (projectile.weapon === 'rocket') {
+          const updated = updateGuidedRocket(projectile, now, playerState && !playerState.crashed ? [{ type: 'player', state: playerState }] : []);
+          if (!updated || (updated.groundHit && now - updated.impactAt > ROCKET_IMPACT_MS)) {
+            changed = true;
+            projectileElementRefs.current.delete(projectile.id);
+            continue;
+          }
+          const segment = getRocketSegment(updated);
+          if (playerState && !playerState.crashed && !updated.groundHit && segmentHitsPlane(segment, playerState, updated.radius ?? 2.25)) {
+            reportLocalHit(updated, 'rocket');
+            projectileElementRefs.current.delete(projectile.id);
+            changed = true;
+            continue;
+          }
+          nextProjectiles.push(updated);
+          const element = projectileElementRefs.current.get(updated.id);
+          if (element) {
+            element.style.left = `${updated.x}vw`;
+            element.style.bottom = `calc(100% - 2px + ${updated.y}vh)`;
+            element.style.setProperty('--rocket-angle', `${updated.angle}deg`);
+          }
+          if (updated !== projectile) changed = true;
+          continue;
+        }
+
+        const age = now - projectile.created;
+        if (age > projectile.life + (projectile.groundHit ? 420 : 0)) {
+          changed = true;
+          projectileElementRefs.current.delete(projectile.id);
+          continue;
+        }
+        const segment = getProjectileSegment(projectile, now);
+        if (playerState && !playerState.crashed && !projectile.groundHit && segmentHitsPlane(segment, playerState, projectile.radius ?? 1.05)) {
+          reportLocalHit(projectile, 'bullet');
+          projectileElementRefs.current.delete(projectile.id);
+          changed = true;
+          continue;
+        }
+        const point = getProjectilePoint(projectile, now);
+        projectile.renderX = point.x;
+        projectile.renderY = point.y;
+        const element = projectileElementRefs.current.get(projectile.id);
+        if (element) {
+          element.style.left = `${point.x}vw`;
+          element.style.bottom = `calc(100% - 2px + ${point.y}vh)`;
+        }
+        nextProjectiles.push(projectile);
+      }
+
+      if (changed || nextProjectiles.length !== projectilesRef.current.length) {
+        replaceProjectiles(nextProjectiles);
+      }
+      frame = requestAnimationFrame(update);
+    };
+
+    frame = requestAnimationFrame(update);
+    return () => {
+      cancelAnimationFrame(frame);
+      projectileElementRefs.current.clear();
+    };
+  }, [active, localPlayerId, playerStateRef, projectileElementRefs, projectilesRef, replaceProjectiles, sendRoomMessage]);
+
+  const bullets = projectiles.filter((projectile) => projectile.weapon !== 'rocket');
+  const rockets = projectiles.filter((projectile) => projectile.weapon === 'rocket');
+
+  if (!active) return null;
+
+  return (
+    <div className="room-projectiles-layer" aria-hidden="true">
+      <div className="bullet-projectiles room-bullet-projectiles">
+        {bullets.map((projectile) => (
+          <span
+            key={projectile.id}
+            ref={(element) => {
+              if (element) projectileElementRefs.current.set(projectile.id, element);
+              else projectileElementRefs.current.delete(projectile.id);
+            }}
+            className={`bullet-shot room-bullet-shot${projectile.groundHit ? ' bullet-ground-hit' : ''}`}
+            style={{
+              left: `${projectile.renderX ?? projectile.x}vw`,
+              bottom: `calc(100% - 2px + ${projectile.renderY ?? projectile.y}vh)`,
+              '--bullet-angle': `${projectile.angle}deg`,
+              '--bullet-life': `${projectile.life ?? BULLET_LIFETIME_MS}ms`,
+            }}
+          >
+            <i className="bullet-core" />
+            <i className="bullet-impact" />
+          </span>
+        ))}
+      </div>
+      <div className="rocket-projectiles room-rocket-projectiles">
+        {rockets.map((rocket) => (
+          <span
+            key={rocket.id}
+            ref={(element) => {
+              if (element) projectileElementRefs.current.set(rocket.id, element);
+              else projectileElementRefs.current.delete(rocket.id);
+            }}
+            className={`rocket-shot room-rocket-shot${rocket.groundHit ? ' rocket-ground-hit' : ''}`}
+            style={{
+              left: `${rocket.x}vw`,
+              bottom: `calc(100% - 2px + ${rocket.y}vh)`,
+              '--rocket-angle': `${rocket.angle}deg`,
+            }}
+          >
+            <i className="rocket-flame" />
+            <i className="rocket-body" />
+            <i className="rocket-nose" />
+            <i className="rocket-band rocket-band-one" />
+            <i className="rocket-band rocket-band-two" />
+            <i className="rocket-fin rocket-fin-top" />
+            <i className="rocket-fin rocket-fin-bottom" />
+            <i className="rocket-impact" />
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -4347,12 +4807,12 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   );
 }
 
-function BitPlane({ rocketsRemaining, planeColor, planeLightCombo, searchLightActive = false, searchLightFog = false }) {
+function BitPlane({ rocketsRemaining, planeColor, planeLightCombo, searchLightActive = false, searchLightFog = false, propellerActive = false }) {
   const planeAssets = PLANE_COLOR_ASSETS[planeColor] || PLANE_COLOR_ASSETS.blue;
   const lightCombo = PLANE_LIGHT_COMBOS[planeLightCombo] || PLANE_LIGHT_COMBOS.classic;
   return (
     <div
-      className={`plane-visual${searchLightActive ? ' search-light-active' : ''}${searchLightFog ? ' search-light-fog' : ''}`}
+      className={`plane-visual${searchLightActive ? ' search-light-active' : ''}${searchLightFog ? ' search-light-fog' : ''}${propellerActive ? ' prop-spinning' : ''}`}
       style={{
         '--plane-front-light': lightCombo.front,
         '--plane-back-light': lightCombo.back,
