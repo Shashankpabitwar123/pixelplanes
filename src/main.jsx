@@ -573,6 +573,14 @@ function getDamageSmokeVector(plane, previousPlane = null) {
   const deltaX = previousPlane ? plane.x - previousPlane.x : 0;
   const deltaY = previousPlane ? plane.y - previousPlane.y : 0;
   const moved = Math.hypot(deltaX, deltaY);
+  const groundLowestPoint = Math.min(...planeModel.groundPoints.map((point) => getPlanePoint(plane, point).y));
+  const restingOnGround = speed < 1.3 && (groundLowestPoint <= 0.28 || plane.y <= 0.35);
+  if (restingOnGround) {
+    return {
+      dx: 0,
+      dy: -8.4,
+    };
+  }
   const trailX = moved > 0.002 ? -deltaX : speed > 1.4 ? -plane.vx : Math.cos(rad);
   const trailY = moved > 0.002 ? deltaY : speed > 1.4 ? plane.vy : -Math.sin(rad);
   const sourceLength = Math.max(0.001, Math.hypot(trailX, trailY));
