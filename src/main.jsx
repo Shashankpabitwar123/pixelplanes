@@ -119,10 +119,10 @@ function pickRoomPlaneColor() {
 function RoomMicIcon({ className }) {
   return (
     <svg className={className} viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-      <path d="M32 5c8.3 0 15 6.7 15 15v16c0 8.3-6.7 15-15 15s-15-6.7-15-15V20C17 11.7 23.7 5 32 5Z" fill="currentColor" />
-      <path d="M13 28v7c0 10.5 8.5 19 19 19s19-8.5 19-19v-7" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M32 54v7M22 61h20" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d="M21 21h22M21 27h22M21 33h22" fill="none" stroke="var(--audio-icon-cut, rgba(18, 29, 47, 0.9))" strokeWidth="3" strokeLinecap="round" />
+      <path className="room-audio-fill" d="M32 5c8.3 0 15 6.7 15 15v16c0 8.3-6.7 15-15 15s-15-6.7-15-15V20C17 11.7 23.7 5 32 5Z" />
+      <path className="room-audio-stroke" d="M13 28v7c0 10.5 8.5 19 19 19s19-8.5 19-19v-7" strokeWidth="5" strokeLinecap="round" />
+      <path className="room-audio-stroke" d="M32 54v7M22 61h20" strokeWidth="5" strokeLinecap="round" />
+      <path className="room-audio-cut" d="M21 21h22M21 27h22M21 33h22" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }
@@ -130,8 +130,8 @@ function RoomMicIcon({ className }) {
 function RoomSpeakerIcon({ className }) {
   return (
     <svg className={className} viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-      <path d="M8 24h13L39 10v44L21 40H8V24Z" fill="currentColor" />
-      <path d="M46 23c3.1 2.1 5 5.4 5 9s-1.9 6.9-5 9M52 15c5.8 4.1 9 10.1 9 17s-3.2 12.9-9 17" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <path className="room-audio-fill" d="M8 24h13L39 10v44L21 40H8V24Z" />
+      <path className="room-audio-stroke" d="M46 23c3.1 2.1 5 5.4 5 9s-1.9 6.9-5 9M52 15c5.8 4.1 9 10.1 9 17s-3.2 12.9-9 17" strokeWidth="5" strokeLinecap="round" />
     </svg>
   );
 }
