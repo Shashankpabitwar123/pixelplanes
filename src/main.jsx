@@ -678,22 +678,29 @@ function createRainAudio() {
   textureFilter.connect(master);
   master.connect(context.destination);
   source.start();
+  let stopped = false;
 
   return {
     context,
     gain: master.gain,
     stop: () => {
+      if (stopped) return;
+      stopped = true;
       const t = context.currentTime;
       master.gain.cancelScheduledValues(t);
-      master.gain.setTargetAtTime(0.0001, t, 0.08);
+      master.gain.setValueAtTime(0, t);
+      try {
+        source.stop(t + 0.01);
+      } catch {
+        // The rain source may already be stopped during rapid weather toggles.
+      }
       window.setTimeout(() => {
-        source.stop();
         master.disconnect();
         textureFilter.disconnect();
         lowpass.disconnect();
         highpass.disconnect();
         context.close?.();
-      }, 240);
+      }, 60);
     },
   };
 }
