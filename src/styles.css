@@ -2002,6 +2002,39 @@ button {
   animation-delay: 0.51s;
 }
 
+.bullet-aim-guide {
+  position: absolute;
+  z-index: 9;
+  left: 0;
+  bottom: calc(100% - 2px);
+  width: clamp(38px, 3.1vw, 58px);
+  height: 2px;
+  opacity: 0;
+  transform: translate(0, 50%) rotate(var(--aim-angle, 180deg));
+  transform-origin: 0 50%;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(210, 216, 218, 0.78) 0 5px,
+    transparent 5px 9px
+  );
+  filter:
+    drop-shadow(0 0 2px rgba(20, 25, 28, 0.48))
+    drop-shadow(0 0 4px rgba(230, 235, 238, 0.2));
+  will-change: left, bottom, transform, opacity;
+}
+
+.scene-dark .bullet-aim-guide {
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(196, 205, 211, 0.72) 0 5px,
+    transparent 5px 9px
+  );
+  filter:
+    drop-shadow(0 0 2px rgba(0, 0, 0, 0.52))
+    drop-shadow(0 0 5px rgba(216, 224, 231, 0.24));
+}
+
 .damage-smoke-layer {
   position: absolute;
   z-index: 10;

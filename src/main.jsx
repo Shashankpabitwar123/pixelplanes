@@ -1597,6 +1597,7 @@ function PlayablePlane({
 }) {
   const keysRef = useRef(new Set());
   const planeRef = useRef(null);
+  const aimGuideRef = useRef(null);
   const blastRef = useRef(null);
   const engineAudioRef = useRef(null);
   const crashSoundRef = useRef(null);
@@ -2717,6 +2718,17 @@ function PlayablePlane({
           audio.filter.frequency.setTargetAtTime(520 + visibleThrust * 1350, t, 0.06);
         }
       }
+      if (aimGuideRef.current) {
+        if (planeState.crashed) {
+          aimGuideRef.current.style.opacity = 0;
+        } else {
+          const muzzle = getRenderedPlanePoint(planeState, BULLET_MUZZLE_POINT);
+          aimGuideRef.current.style.left = `${muzzle.x}vw`;
+          aimGuideRef.current.style.bottom = `calc(100% - 2px + ${muzzle.y}vh)`;
+          aimGuideRef.current.style.setProperty('--aim-angle', `${normalizeAngle(planeState.angle + 180)}deg`);
+          aimGuideRef.current.style.opacity = 1;
+        }
+      }
       if (blastRef.current) {
         blastRef.current.style.left = `${planeState.x}vw`;
         blastRef.current.style.bottom = `calc(100% - 2px + ${Math.max(0, planeState.y)}vh)`;
@@ -2739,6 +2751,7 @@ function PlayablePlane({
       >
         <BitPlane rocketsRemaining={rocketsRemaining} planeColor={planeColor} planeLightCombo={planeLightCombo} />
       </div>
+      <span ref={aimGuideRef} className="bullet-aim-guide" aria-hidden="true" />
       <div className="damage-smoke-layer" aria-hidden="true">
         {damageSmokeParticles.map((particle) => (
           <span
