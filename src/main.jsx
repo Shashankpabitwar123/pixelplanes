@@ -433,8 +433,8 @@ function playPlaneBulletHitSound(existingContext = null, muted = false) {
 
   const master = context.createGain();
   master.gain.setValueAtTime(0.0001, t);
-  master.gain.exponentialRampToValueAtTime(0.82, t + 0.006);
-  master.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+  master.gain.exponentialRampToValueAtTime(1.45, t + 0.006);
+  master.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
   master.connect(limiter);
 
   const makeNoise = (seconds, power = 2.4) => {
@@ -467,12 +467,17 @@ function playPlaneBulletHitSound(existingContext = null, muted = false) {
 
   const punch = context.createOscillator();
   const punchGain = context.createGain();
+  const punchFilter = context.createBiquadFilter();
   punch.type = 'sawtooth';
-  punch.frequency.setValueAtTime(150, t);
-  punch.frequency.exponentialRampToValueAtTime(62, t + 0.09);
-  punchGain.gain.setValueAtTime(0.52, t);
-  punchGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-  punch.connect(punchGain);
+  punch.frequency.setValueAtTime(210, t);
+  punch.frequency.exponentialRampToValueAtTime(54, t + 0.14);
+  punchFilter.type = 'lowpass';
+  punchFilter.frequency.setValueAtTime(740, t);
+  punchFilter.frequency.exponentialRampToValueAtTime(130, t + 0.16);
+  punchGain.gain.setValueAtTime(0.82, t);
+  punchGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  punch.connect(punchFilter);
+  punchFilter.connect(punchGain);
   punchGain.connect(master);
 
   const grit = makeNoise(0.16, 2.9);
@@ -482,8 +487,8 @@ function playPlaneBulletHitSound(existingContext = null, muted = false) {
   gritFilter.frequency.setValueAtTime(2100, t);
   gritFilter.frequency.exponentialRampToValueAtTime(760, t + 0.09);
   gritFilter.Q.value = 1.3;
-  gritGain.gain.setValueAtTime(0.72, t);
-  gritGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+  gritGain.gain.setValueAtTime(1.05, t);
+  gritGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
   grit.connect(gritFilter);
   gritFilter.connect(gritGain);
   gritGain.connect(master);
@@ -493,13 +498,13 @@ function playPlaneBulletHitSound(existingContext = null, muted = false) {
   grit.start(t);
   metalPing.stop(t + 0.2);
   punch.stop(t + 0.13);
-  grit.stop(t + 0.17);
+  grit.stop(t + 0.2);
 
   window.setTimeout(() => {
     master.disconnect();
     limiter.disconnect();
     if (context !== existingContext) context.close?.();
-  }, 340);
+  }, 430);
 }
 
 function playPlaneBlastSound(existingContext = null, impact = 1, muted = false) {
@@ -1468,7 +1473,10 @@ function PlayablePlane({
     };
 
     playerApiRef.current = {
-      hitByBullet: () => {
+      playHitSound: () => {
+        playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current);
+      },
+      hitByBullet: (options = {}) => {
         const current = stateRef.current;
         if (current.crashed) return;
         const nextDamage = (current.damage ?? 0) + 1;
@@ -1482,7 +1490,7 @@ function PlayablePlane({
         };
         stateRef.current = next;
         damageLevelRef.current = nextDamage;
-        playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current);
+        if (!options.skipHitSound) playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current);
         setDamageLevel(nextDamage);
         onPlaneState(next);
       },
@@ -2825,7 +2833,8 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       );
       if (bulletHit) {
         removeBullet(bulletHit.id);
-        playerApiRef.current?.hitByBullet?.();
+        if ((player.damage ?? 0) <= 0) playerApiRef.current?.playHitSound?.();
+        playerApiRef.current?.hitByBullet?.({ skipHitSound: true });
         return;
       }
       const rocketHit = rocketsRef.current.find((projectile) => pointHitsPlane(getShotPoint(projectile, now), player, projectile.radius));
