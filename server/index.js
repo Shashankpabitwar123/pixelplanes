@@ -482,7 +482,20 @@ const server = http.createServer(async (request, response) => {
   writeJson(response, 404, { error: 'Not found.' });
 });
 
-const wss = new WebSocketServer({ server, path: '/rooms' });
+const wss = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', (request, socket, head) => {
+  const { pathname } = new URL(request.url || '/', 'http://localhost');
+  if (pathname !== '/rooms') {
+    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  wss.handleUpgrade(request, socket, head, (webSocket) => {
+    wss.emit('connection', webSocket, request);
+  });
+});
 
 wss.on('connection', (socket) => {
   send(socket, { type: 'connected', at: Date.now() });
