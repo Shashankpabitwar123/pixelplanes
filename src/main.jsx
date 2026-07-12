@@ -1821,7 +1821,9 @@ function App() {
                       aria-label={roomVoiceEnabled ? 'Microphone enabled' : 'Microphone disabled'}
                       onClick={() => setRoomVoiceEnabled((enabled) => !enabled)}
                     >
-                      <RoomMicIcon className="room-voice-icon" />
+                      <span className="room-audio-icon-wrap">
+                        <RoomMicIcon className="room-voice-icon" />
+                      </span>
                       <span>{roomVoiceEnabled ? 'Mic On' : 'Mic Off'}</span>
                     </button>
                     <button
@@ -1831,7 +1833,9 @@ function App() {
                       aria-label={roomSpeakerEnabled ? 'Speaker enabled' : 'Speaker disabled'}
                       onClick={() => setRoomSpeakerEnabled((enabled) => !enabled)}
                     >
-                      <RoomSpeakerIcon className="room-speaker-icon" />
+                      <span className="room-audio-icon-wrap">
+                        <RoomSpeakerIcon className="room-speaker-icon" />
+                      </span>
                       <span>{roomSpeakerEnabled ? 'Speaker On' : 'Speaker Off'}</span>
                     </button>
                   </div>
