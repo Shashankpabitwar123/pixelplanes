@@ -14,7 +14,7 @@ const BULLET_RELOAD_MS = 7000;
 const BULLET_COOLDOWN_MS = 120;
 const BULLET_LIFETIME_MS = 1200;
 const BULLET_RANGE = 102;
-const BULLET_MUZZLE_POINT = { x: 0.017, y: 0.505 };
+const BULLET_MUZZLE_POINT = { x: 0.051, y: 0.505 };
 const DAMAGE_SMOKE_LIFETIME_MS = 1450;
 const DAMAGE_SMOKE_INTERVAL_MS = 95;
 const DAMAGE_SMOKE_MAX_PARTICLES = 28;
@@ -369,6 +369,35 @@ function getProjectileSegment(projectile, now) {
   const end = getProjectilePoint(projectile, now);
   projectile.lastHitCheck = now;
   return { start, end };
+}
+
+function getPlaneForwardVector(plane) {
+  const rad = (plane.angle * Math.PI) / 180;
+  return {
+    x: -Math.cos(rad),
+    y: Math.sin(rad),
+  };
+}
+
+function createBulletProjectile(plane, now, idPrefix = 'bullet') {
+  const forward = getPlaneForwardVector(plane);
+  const muzzle = getRenderedPlanePoint(plane, BULLET_MUZZLE_POINT);
+  const fullDx = forward.x * BULLET_RANGE;
+  const fullDy = -forward.y * BULLET_RANGE;
+  const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
+  return {
+    id: `${now}-${idPrefix}-${Math.random()}`,
+    x: muzzle.x,
+    y: muzzle.y,
+    dx: travel.dx,
+    dy: travel.dy,
+    groundHit: travel.groundHit,
+    life: travel.life,
+    created: now,
+    angle: plane.angle,
+    unit: 'world',
+    radius: 1.05,
+  };
 }
 
 function distanceToSegment(point, start, end) {
@@ -1888,37 +1917,16 @@ function PlayablePlane({
       lastShotRef.current = now;
       playBulletSound();
 
-      const plane = stateRef.current;
-      const rad = (plane.angle * Math.PI) / 180;
-      const forwardX = -Math.cos(rad);
-      const forwardY = Math.sin(rad);
-      const muzzle = getRenderedPlanePoint(plane, BULLET_MUZZLE_POINT);
-      const fullDx = forwardX * BULLET_RANGE;
-      const fullDy = -forwardY * BULLET_RANGE;
-      const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
-      const id = `${now}-${Math.random()}`;
-      const projectile = {
-        id,
-        x: muzzle.x,
-        y: muzzle.y,
-        dx: travel.dx,
-        dy: travel.dy,
-        groundHit: travel.groundHit,
-        life: travel.life,
-        created: now,
-        angle: plane.angle,
-        unit: 'world',
-        radius: 1.05,
-      };
+      const projectile = createBulletProjectile(stateRef.current, now, 'player-bullet');
 
       projectilesRef.current = [...projectilesRef.current, projectile];
       setProjectiles(projectilesRef.current);
 
       const timeoutId = window.setTimeout(() => {
-        projectilesRef.current = projectilesRef.current.filter((item) => item.id !== id);
+        projectilesRef.current = projectilesRef.current.filter((item) => item.id !== projectile.id);
         setProjectiles(projectilesRef.current);
         projectileTimeoutsRef.current = projectileTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
-      }, travel.life + (travel.groundHit ? 420 : 0));
+      }, projectile.life + (projectile.groundHit ? 420 : 0));
       projectileTimeoutsRef.current.push(timeoutId);
 
       const nextAmmo = ammoRef.current - 1;
@@ -2877,34 +2885,16 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       lastShotRef.current = now;
       ammoRef.current -= 1;
       startBulletReload();
-      const rad = (bot.angle * Math.PI) / 180;
-      const forwardX = -Math.cos(rad);
-      const forwardY = Math.sin(rad);
-      const muzzle = getRenderedPlanePoint(bot, BULLET_MUZZLE_POINT);
-      const fullDx = forwardX * BULLET_RANGE;
-      const fullDy = -forwardY * BULLET_RANGE;
-      const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
-      const id = `${now}-bot-bullet-${Math.random()}`;
       const projectile = {
-        id,
-        x: muzzle.x,
-        y: muzzle.y,
-        dx: travel.dx,
-        dy: travel.dy,
-        groundHit: travel.groundHit,
-        life: travel.life,
-        created: now,
-        angle: bot.angle,
-        unit: 'world',
-        radius: 1.05,
+        ...createBulletProjectile(bot, now, 'bot-bullet'),
         impact: 1.08,
       };
       bulletsRef.current = [...bulletsRef.current, projectile];
       setBotBullets(bulletsRef.current);
       const timeoutId = window.setTimeout(() => {
-        removeBullet(id);
+        removeBullet(projectile.id);
         bulletTimeoutsRef.current = bulletTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
-      }, travel.life + (travel.groundHit ? 420 : 0));
+      }, projectile.life + (projectile.groundHit ? 420 : 0));
       bulletTimeoutsRef.current.push(timeoutId);
     };
 
