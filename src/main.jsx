@@ -15,6 +15,7 @@ const BULLET_COOLDOWN_MS = 120;
 const BULLET_LIFETIME_MS = 1200;
 const BULLET_RANGE = 102;
 const BULLET_MUZZLE_POINT = { x: 0.051, y: 0.505 };
+const AIM_GUIDE_DOT_COUNT = 4;
 const DAMAGE_SMOKE_LIFETIME_MS = 1450;
 const DAMAGE_SMOKE_INTERVAL_MS = 95;
 const DAMAGE_SMOKE_MAX_PARTICLES = 28;
@@ -420,6 +421,25 @@ function createBulletProjectile(plane, now, idPrefix = 'bullet') {
     unit: 'world',
     radius: 1.05,
   };
+}
+
+function getBulletGuidePoints(plane) {
+  const forward = getPlaneForwardVector(plane);
+  const muzzle = getRenderedPlanePoint(plane, BULLET_MUZZLE_POINT);
+  const fullDx = forward.x * BULLET_RANGE;
+  const fullDy = -forward.y * BULLET_RANGE;
+  const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
+  const travelDistance = Math.max(0.001, Math.hypot(travel.dx, travel.dy));
+  const guideDistance = Math.min(9.2, travelDistance);
+  const firstDotDistance = Math.min(1.45, guideDistance * 0.42);
+  return Array.from({ length: AIM_GUIDE_DOT_COUNT }, (_, index) => {
+    const dotDistance = firstDotDistance + (guideDistance - firstDotDistance) * (index / Math.max(1, AIM_GUIDE_DOT_COUNT - 1));
+    const progress = Math.min(1, dotDistance / travelDistance);
+    return {
+      x: muzzle.x + travel.dx * progress,
+      y: muzzle.y - travel.dy * progress,
+    };
+  });
 }
 
 function getAngleToPoint(source, target) {
@@ -1597,7 +1617,7 @@ function PlayablePlane({
 }) {
   const keysRef = useRef(new Set());
   const planeRef = useRef(null);
-  const aimGuideRef = useRef(null);
+  const aimGuideDotRefs = useRef([]);
   const blastRef = useRef(null);
   const engineAudioRef = useRef(null);
   const crashSoundRef = useRef(null);
@@ -2718,15 +2738,19 @@ function PlayablePlane({
           audio.filter.frequency.setTargetAtTime(520 + visibleThrust * 1350, t, 0.06);
         }
       }
-      if (aimGuideRef.current) {
+      if (aimGuideDotRefs.current.length > 0) {
         if (planeState.crashed) {
-          aimGuideRef.current.style.opacity = 0;
+          aimGuideDotRefs.current.forEach((dot) => {
+            if (dot) dot.style.opacity = 0;
+          });
         } else {
-          const muzzle = getRenderedPlanePoint(planeState, BULLET_MUZZLE_POINT);
-          aimGuideRef.current.style.left = `${muzzle.x}vw`;
-          aimGuideRef.current.style.bottom = `calc(100% - 2px + ${muzzle.y}vh)`;
-          aimGuideRef.current.style.setProperty('--aim-angle', `${normalizeAngle(planeState.angle + 180)}deg`);
-          aimGuideRef.current.style.opacity = 1;
+          getBulletGuidePoints(planeState).forEach((point, index) => {
+            const dot = aimGuideDotRefs.current[index];
+            if (!dot) return;
+            dot.style.left = `${point.x}vw`;
+            dot.style.bottom = `calc(100% - 2px + ${point.y}vh)`;
+            dot.style.opacity = 1;
+          });
         }
       }
       if (blastRef.current) {
@@ -2751,7 +2775,17 @@ function PlayablePlane({
       >
         <BitPlane rocketsRemaining={rocketsRemaining} planeColor={planeColor} planeLightCombo={planeLightCombo} />
       </div>
-      <span ref={aimGuideRef} className="bullet-aim-guide" aria-hidden="true" />
+      <div className="bullet-aim-guide" aria-hidden="true">
+        {Array.from({ length: AIM_GUIDE_DOT_COUNT }, (_, index) => (
+          <i
+            key={index}
+            ref={(element) => {
+              aimGuideDotRefs.current[index] = element;
+            }}
+            className="bullet-aim-dot"
+          />
+        ))}
+      </div>
       <div className="damage-smoke-layer" aria-hidden="true">
         {damageSmokeParticles.map((particle) => (
           <span

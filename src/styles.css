@@ -2005,34 +2005,29 @@ button {
 .bullet-aim-guide {
   position: absolute;
   z-index: 9;
-  left: 0;
-  bottom: calc(100% - 2px);
-  width: clamp(38px, 3.1vw, 58px);
-  height: 2px;
-  opacity: 0;
-  transform: translate(0, 50%) rotate(var(--aim-angle, 180deg));
-  transform-origin: 0 50%;
-  border-radius: 999px;
-  background: repeating-linear-gradient(
-    90deg,
-    rgba(210, 216, 218, 0.78) 0 5px,
-    transparent 5px 9px
-  );
-  filter:
-    drop-shadow(0 0 2px rgba(20, 25, 28, 0.48))
-    drop-shadow(0 0 4px rgba(230, 235, 238, 0.2));
-  will-change: left, bottom, transform, opacity;
+  inset: 0;
+  pointer-events: none;
 }
 
-.scene-dark .bullet-aim-guide {
-  background: repeating-linear-gradient(
-    90deg,
-    rgba(196, 205, 211, 0.72) 0 5px,
-    transparent 5px 9px
-  );
+.bullet-aim-dot {
+  position: absolute;
+  display: block;
+  width: clamp(3px, 0.24vw, 5px);
+  aspect-ratio: 1;
+  opacity: 0;
+  border-radius: 50%;
+  background: rgba(202, 209, 213, 0.78);
+  transform: translate(-50%, 50%);
+  box-shadow: 0 0 4px rgba(18, 24, 28, 0.38);
   filter:
     drop-shadow(0 0 2px rgba(0, 0, 0, 0.52))
-    drop-shadow(0 0 5px rgba(216, 224, 231, 0.24));
+    drop-shadow(0 0 4px rgba(224, 230, 234, 0.18));
+  will-change: left, bottom, opacity;
+}
+
+.scene-dark .bullet-aim-dot {
+  background: rgba(184, 194, 201, 0.72);
+  box-shadow: 0 0 5px rgba(220, 228, 235, 0.26);
 }
 
 .damage-smoke-layer {
