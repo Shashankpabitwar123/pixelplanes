@@ -2339,16 +2339,19 @@ function PlayablePlane({
     };
 
     const scanBotHits = (now) => {
-      const bot = botStateRef.current;
+      let bot = botStateRef.current;
       if (!bot || bot.crashed) return;
-      const bulletHit = projectilesRef.current.find((projectile) =>
-        segmentHitsPlane(getProjectileSegment(projectile, now), bot, projectile.radius ?? 1.05),
-      );
-      if (bulletHit) {
-        removeProjectile(bulletHit.id);
-        botApiRef.current?.hitByBullet?.();
-        return;
+      let handledBulletHit = false;
+      for (const projectile of projectilesRef.current) {
+        if (bot?.crashed) break;
+        if (segmentHitsPlane(getProjectileSegment(projectile, now), bot, projectile.radius ?? 1.05)) {
+          handledBulletHit = true;
+          removeProjectile(projectile.id);
+          botApiRef.current?.hitByBullet?.();
+          bot = botStateRef.current;
+        }
       }
+      if (handledBulletHit) return;
       const rocketHit = rocketProjectilesRef.current.find((projectile) => pointHitsPlane(getProjectilePoint(projectile, now), bot, 2.25));
       if (rocketHit) {
         removeRocketProjectile(rocketHit.id);
@@ -2626,7 +2629,8 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
   const damageBotByBullet = useCallback(() => {
     const current = stateRef.current;
     if (current.crashed) return;
-    const nextDamage = (current.damage ?? 0) + 1;
+    const currentDamage = Math.max(botDamageRef.current, current.damage ?? 0);
+    const nextDamage = currentDamage + 1;
     if (nextDamage >= 2) {
       crashBot(1.18);
       return;
