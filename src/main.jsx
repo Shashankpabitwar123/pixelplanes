@@ -23,6 +23,7 @@ const ROCKET_COOLDOWN_MS = 520;
 const ROCKET_LIFETIME_MS = 12000;
 const ROCKET_RANGE = 640;
 const PLANE_SPRITE_ASPECT = 935 / 1620;
+const BOT_COUNT = 4;
 const BOT_START_X = START_X + 118;
 const BOT_SPAWN_MARGIN = 44;
 const BOT_RESPAWN_MIN_GAP = 120;
@@ -252,20 +253,22 @@ function createInitialPlaneState() {
   };
 }
 
-function getRandomBotSpawnX(previousX = null) {
+function getRandomBotSpawnX(previousX = null, avoidXValues = []) {
   const minX = BOT_SPAWN_MARGIN;
   const maxX = WORLD_WIDTH - BOT_SPAWN_MARGIN;
   let x = BOT_START_X;
   for (let attempt = 0; attempt < 12; attempt += 1) {
     x = minX + Math.random() * (maxX - minX);
-    if (previousX == null || Math.abs(x - previousX) >= BOT_RESPAWN_MIN_GAP) return x;
+    const farFromPrevious = previousX == null || Math.abs(x - previousX) >= BOT_RESPAWN_MIN_GAP;
+    const farFromOtherBots = avoidXValues.every((avoidX) => Math.abs(x - avoidX) >= BOT_RESPAWN_MIN_GAP * 0.65);
+    if (farFromPrevious && farFromOtherBots) return x;
   }
   return previousX == null || previousX < WORLD_WIDTH / 2 ? maxX - Math.random() * 80 : minX + Math.random() * 80;
 }
 
-function createInitialBotState(previousX = null) {
+function createInitialBotState(previousX = null, avoidXValues = []) {
   return {
-    x: getRandomBotSpawnX(previousX),
+    x: getRandomBotSpawnX(previousX, avoidXValues),
     y: 0,
     vx: 0,
     vy: 0,
@@ -281,6 +284,14 @@ function createInitialBotState(previousX = null) {
     damage: 0,
     engaged: false,
   };
+}
+
+function createInitialBotStates(previousStates = []) {
+  const states = [];
+  for (let index = 0; index < BOT_COUNT; index += 1) {
+    states.push(createInitialBotState(previousStates[index]?.x, states.map((state) => state.x)));
+  }
+  return states;
 }
 
 function getPlanePoint(plane, point) {
@@ -700,12 +711,12 @@ function App() {
   const worldRef = useRef(null);
   const mapPointerRef = useRef(null);
   const mapDotRef = useRef(null);
-  const mapBotDotRef = useRef(null);
+  const mapBotDotRefs = useRef([]);
   const fuelGaugeRef = useRef(null);
   const playerStateRef = useRef(createInitialPlaneState());
-  const botStateRef = useRef(createInitialBotState());
+  const botStateRefs = useRef(createInitialBotStates());
   const playerApiRef = useRef(null);
-  const botApiRef = useRef(null);
+  const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
   const musicAudioRef = useRef(null);
   const shootingStarTimersRef = useRef([]);
   const startGame = useCallback(() => {
@@ -774,11 +785,14 @@ function App() {
     setAmmoStatus({ count: MAX_BULLETS, reloading: false });
     setRocketCount(MAX_ROCKETS);
     playerStateRef.current = createInitialPlaneState();
-    botStateRef.current = createInitialBotState(botStateRef.current?.x);
-    if (mapBotDotRef.current) {
-      mapBotDotRef.current.style.left = `${Math.max(2, Math.min(98, (botStateRef.current.x / WORLD_WIDTH) * 100))}%`;
-      mapBotDotRef.current.style.top = `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`;
-    }
+    botStateRefs.current = createInitialBotStates(botStateRefs.current);
+    botStateRefs.current.forEach((botState, index) => {
+      const dot = mapBotDotRefs.current[index];
+      if (!dot) return;
+      dot.style.left = `${Math.max(2, Math.min(98, (botState.x / WORLD_WIDTH) * 100))}%`;
+      dot.style.top = `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`;
+      dot.classList.remove('map-bot-dot-active');
+    });
     updateCamera({ x: getCameraX(START_X), y: getCameraY(0) });
     updateFuelGauge(1);
     setRestartSignal((signal) => signal + 1);
@@ -786,12 +800,13 @@ function App() {
   const updatePlayerState = useCallback((nextState) => {
     playerStateRef.current = nextState;
   }, []);
-  const updateBotLocator = useCallback((botState) => {
-    botStateRef.current = botState;
-    if (!mapBotDotRef.current) return;
-    mapBotDotRef.current.style.left = `${Math.max(2, Math.min(98, (botState.x / WORLD_WIDTH) * 100))}%`;
-    mapBotDotRef.current.style.top = `${Math.max(2, Math.min(98, 100 - ((botState.y + 50) / WORLD_HEIGHT) * 100))}%`;
-    mapBotDotRef.current.classList.toggle('map-bot-dot-active', gameStarted && Boolean(botState.engaged));
+  const updateBotLocator = useCallback((botIndex, botState) => {
+    botStateRefs.current[botIndex] = botState;
+    const dot = mapBotDotRefs.current[botIndex];
+    if (!dot) return;
+    dot.style.left = `${Math.max(2, Math.min(98, (botState.x / WORLD_WIDTH) * 100))}%`;
+    dot.style.top = `${Math.max(2, Math.min(98, 100 - ((botState.y + 50) / WORLD_HEIGHT) * 100))}%`;
+    dot.classList.toggle('map-bot-dot-active', gameStarted && Boolean(botState.engaged));
   }, [gameStarted]);
   const addDropping = useCallback((x) => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -1153,14 +1168,19 @@ function App() {
             }}
           />
         ))}
-        <span
-          ref={mapBotDotRef}
-          className="map-bot-dot"
-          style={{
-            left: `${Math.max(2, Math.min(98, (botStateRef.current.x / WORLD_WIDTH) * 100))}%`,
-            top: `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`,
-          }}
-        />
+        {botStateRefs.current.map((botState, index) => (
+          <span
+            key={index}
+            ref={(node) => {
+              mapBotDotRefs.current[index] = node;
+            }}
+            className="map-bot-dot"
+            style={{
+              left: `${Math.max(2, Math.min(98, (botState.x / WORLD_WIDTH) * 100))}%`,
+              top: `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`,
+            }}
+          />
+        ))}
         <span
           ref={mapDotRef}
           className="map-pointer-dot"
@@ -1256,8 +1276,8 @@ function App() {
             onRocketChange={updateRocketStatus}
             onPlaneState={updatePlayerState}
             playerApiRef={playerApiRef}
-            botStateRef={botStateRef}
-            botApiRef={botApiRef}
+            botStateRefs={botStateRefs}
+            botApiRefs={botApiRefs}
             controlsEnabled={gameStarted && !paused}
             paused={paused}
             restartSignal={restartSignal}
@@ -1267,16 +1287,21 @@ function App() {
             planeLightCombo={planeLightCombo}
             sfxMuted={sfxMuted}
           />
-          <BotPlane
-            active={gameStarted}
-            paused={paused}
-            restartSignal={restartSignal}
-            playerStateRef={playerStateRef}
-            playerApiRef={playerApiRef}
-            botApiRef={botApiRef}
-            onBotMove={updateBotLocator}
-            sfxMuted={sfxMuted}
-          />
+          {botStateRefs.current.map((_, index) => (
+            <BotPlane
+              key={index}
+              botIndex={index}
+              active={gameStarted}
+              paused={paused}
+              restartSignal={restartSignal}
+              playerStateRef={playerStateRef}
+              playerApiRef={playerApiRef}
+              botStateRefs={botStateRefs}
+              botApiRefs={botApiRefs}
+              onBotMove={updateBotLocator}
+              sfxMuted={sfxMuted}
+            />
+          ))}
           <div className="grass-plants">
             {mapGrassPlants.map((plant, index) => (
               <GrassPlant key={index} {...plant} />
@@ -1349,8 +1374,8 @@ function PlayablePlane({
   onRocketChange,
   onPlaneState,
   playerApiRef,
-  botStateRef,
-  botApiRef,
+  botStateRefs,
+  botApiRefs,
   controlsEnabled,
   paused,
   restartSignal,
@@ -2339,23 +2364,30 @@ function PlayablePlane({
     };
 
     const scanBotHits = (now) => {
-      let bot = botStateRef.current;
-      if (!bot || bot.crashed) return;
       let handledBulletHit = false;
       for (const projectile of projectilesRef.current) {
-        if (bot?.crashed) break;
-        if (segmentHitsPlane(getProjectileSegment(projectile, now), bot, projectile.radius ?? 1.05)) {
+        const segment = getProjectileSegment(projectile, now);
+        const hitIndex = botStateRefs.current.findIndex((bot) => bot && !bot.crashed && segmentHitsPlane(segment, bot, projectile.radius ?? 1.05));
+        if (hitIndex >= 0) {
           handledBulletHit = true;
           removeProjectile(projectile.id);
-          botApiRef.current?.hitByBullet?.();
-          bot = botStateRef.current;
+          botApiRefs.current[hitIndex]?.current?.hitByBullet?.();
         }
       }
       if (handledBulletHit) return;
-      const rocketHit = rocketProjectilesRef.current.find((projectile) => pointHitsPlane(getProjectilePoint(projectile, now), bot, 2.25));
+      let rocketHit = null;
+      let rocketHitIndex = -1;
+      for (const projectile of rocketProjectilesRef.current) {
+        const point = getProjectilePoint(projectile, now);
+        rocketHitIndex = botStateRefs.current.findIndex((bot) => bot && !bot.crashed && pointHitsPlane(point, bot, 2.25));
+        if (rocketHitIndex >= 0) {
+          rocketHit = projectile;
+          break;
+        }
+      }
       if (rocketHit) {
         removeRocketProjectile(rocketHit.id);
-        botApiRef.current?.crash?.(1.72);
+        botApiRefs.current[rocketHitIndex]?.current?.crash?.(1.72);
       }
     };
 
@@ -2485,7 +2517,7 @@ function PlayablePlane({
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [onMove, onFuelChange, onAmmoChange, onRocketChange, onPlaneState, botStateRef, botApiRef]);
+  }, [onMove, onFuelChange, onAmmoChange, onRocketChange, onPlaneState, botStateRefs, botApiRefs]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
@@ -2576,7 +2608,7 @@ function PlayablePlane({
   );
 }
 
-function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef, botApiRef, onBotMove, sfxMuted }) {
+function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted }) {
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
@@ -2623,8 +2655,8 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
     setBotSmokeParticles([]);
     setBotCrashed(true);
     playPlaneBlastSound(null, next.crashImpact, sfxMuted);
-    onBotMove(next);
-  }, [onBotMove, sfxMuted]);
+    onBotMove(botIndex, next);
+  }, [botIndex, onBotMove, sfxMuted]);
 
   const damageBotByBullet = useCallback(() => {
     const current = stateRef.current;
@@ -2643,21 +2675,25 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
     botDamageRef.current = nextDamage;
     playPlaneBulletHitSound(null, sfxMuted);
     setBotDamage(nextDamage);
-    onBotMove(next);
-  }, [crashBot, onBotMove, sfxMuted]);
+    onBotMove(botIndex, next);
+  }, [botIndex, crashBot, onBotMove, sfxMuted]);
 
   useEffect(() => {
-    if (!botApiRef) return undefined;
-    botApiRef.current = {
+    if (!botApiRefs?.current?.[botIndex]) return undefined;
+    botApiRefs.current[botIndex].current = {
       hitByBullet: damageBotByBullet,
       crash: crashBot,
     };
     return () => {
-      if (botApiRef.current) botApiRef.current = null;
+      if (botApiRefs.current[botIndex]) botApiRefs.current[botIndex].current = null;
     };
-  }, [botApiRef, damageBotByBullet, crashBot]);
+  }, [botIndex, botApiRefs, damageBotByBullet, crashBot]);
 
   useEffect(() => {
+    const otherBotSpawnXs = botStateRefs.current
+      .filter((_, index) => index !== botIndex)
+      .map((botState) => botState?.x)
+      .filter((x) => Number.isFinite(x));
     bulletTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
     rocketTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
     bulletTimeoutsRef.current = [];
@@ -2670,7 +2706,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
     rocketReloadingRef.current = false;
     lastShotRef.current = 0;
     lastRocketRef.current = 0;
-    const nextBot = createInitialBotState(stateRef.current?.x);
+    const nextBot = createInitialBotState(stateRef.current?.x, otherBotSpawnXs);
     stateRef.current = nextBot;
     smokePreviousBotRef.current = null;
     botDamageRef.current = 0;
@@ -2686,8 +2722,8 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       botRef.current.style.transform = `translate(${nextBot.x}vw, ${-nextBot.y}vh) rotate(${nextBot.angle}deg)`;
       botRef.current.style.setProperty('--thrust', 0);
     }
-    onBotMove(nextBot);
-  }, [active, restartSignal, onBotMove]);
+    onBotMove(botIndex, nextBot);
+  }, [active, restartSignal, botIndex, botStateRefs, onBotMove]);
 
   useEffect(() => () => {
     bulletTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
@@ -2824,27 +2860,80 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       };
     };
 
-    const scanHits = (now, bot) => {
+    const getTargetCandidates = (bot) => {
+      const candidates = [];
       const player = playerStateRef.current;
-      if (!player || player.crashed) return;
-      if (!bot.crashed && planesCollide(bot, player)) {
+      if (player && !player.crashed) {
+        const dx = player.x - bot.x;
+        const dy = player.y - bot.y;
+        candidates.push({
+          type: 'player',
+          state: player,
+          api: playerApiRef.current,
+          distance: Math.max(1, Math.hypot(dx, dy)),
+          dx,
+          dy,
+        });
+      }
+      botStateRefs.current.forEach((otherBot, index) => {
+        if (index === botIndex || !otherBot || otherBot.crashed) return;
+        const dx = otherBot.x - bot.x;
+        const dy = otherBot.y - bot.y;
+        candidates.push({
+          type: 'bot',
+          index,
+          state: otherBot,
+          api: botApiRefs.current[index]?.current,
+          distance: Math.max(1, Math.hypot(dx, dy)),
+          dx,
+          dy,
+        });
+      });
+      return candidates;
+    };
+
+    const getClosestTarget = (bot) =>
+      getTargetCandidates(bot).reduce((closest, target) => (!closest || target.distance < closest.distance ? target : closest), null);
+
+    const damageTargetByBullet = (target) => {
+      if (!target?.api) return;
+      if (target.type === 'player') {
+        if ((target.state.damage ?? 0) <= 0) target.api.playHitSound?.();
+        target.api.hitByBullet?.({ skipHitSound: true });
+        return;
+      }
+      target.api.hitByBullet?.();
+    };
+
+    const crashTarget = (target, impact) => {
+      if (!target?.api) return;
+      target.api.crash?.(impact);
+    };
+
+    const scanHits = (now, bot) => {
+      const collisionTarget = getTargetCandidates(bot).find((target) => planesCollide(bot, target.state));
+      if (collisionTarget) {
         crashBot(1.8);
-        playerApiRef.current?.crash(1.8);
+        crashTarget(collisionTarget, 1.8);
         return;
       }
-      const bulletHit = bulletsRef.current.find((projectile) =>
-        segmentHitsPlane(getProjectileSegment(projectile, now), player, projectile.radius ?? 1.05),
-      );
-      if (bulletHit) {
-        removeBullet(bulletHit.id);
-        if ((player.damage ?? 0) <= 0) playerApiRef.current?.playHitSound?.();
-        playerApiRef.current?.hitByBullet?.({ skipHitSound: true });
-        return;
+      for (const projectile of bulletsRef.current) {
+        const segment = getProjectileSegment(projectile, now);
+        const target = getTargetCandidates(bot).find((candidate) => segmentHitsPlane(segment, candidate.state, projectile.radius ?? 1.05));
+        if (target) {
+          removeBullet(projectile.id);
+          damageTargetByBullet(target);
+          return;
+        }
       }
-      const rocketHit = rocketsRef.current.find((projectile) => pointHitsPlane(getShotPoint(projectile, now), player, projectile.radius));
-      if (rocketHit) {
-        removeRocket(rocketHit.id);
-        playerApiRef.current?.crash(rocketHit.impact);
+      for (const projectile of rocketsRef.current) {
+        const point = getShotPoint(projectile, now);
+        const target = getTargetCandidates(bot).find((candidate) => pointHitsPlane(point, candidate.state, projectile.radius));
+        if (target) {
+          removeRocket(projectile.id);
+          crashTarget(target, projectile.impact);
+          return;
+        }
       }
     };
 
@@ -2870,48 +2959,41 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
 
     const simulateBot = (current, dt, now) => {
       const next = { ...current };
-      const player = playerStateRef.current || createInitialPlaneState();
-      const liveTarget = !player.crashed;
-      const dx = player.x - next.x;
-      const dy = player.y - next.y;
-      const distance = Math.max(1, Math.hypot(dx, dy));
+      const closestTarget = getClosestTarget(next);
+      const liveTarget = Boolean(closestTarget);
+      const distance = closestTarget?.distance ?? Infinity;
       if (liveTarget && !next.engaged && distance <= BOT_WAKE_DISTANCE) next.engaged = true;
       if ((!liveTarget || distance >= BOT_FORGET_DISTANCE) && next.engaged) next.engaged = false;
       const pursuing = liveTarget && next.engaged;
-      const botToPlayerX = dx / distance;
-      const botToPlayerY = dy / distance;
-      const closingSpeed = (next.vx - player.vx) * botToPlayerX + (next.vy - player.vy) * botToPlayerY;
-      const avoidingPlayer = pursuing && distance < BOT_AVOID_DISTANCE;
-
-      if (!pursuing && !next.airborne) {
-        next.throttle = 0;
-        next.thrust += (0 - next.thrust) * Math.min(1, dt * 5.8);
-        next.turnRate *= Math.exp(-dt * 4);
-        next.angle = normalizeAngle(next.angle + normalizeAngle(18 - next.angle) * Math.min(1, dt * 3));
-        return next;
-      }
+      const targetState = closestTarget?.state;
+      const targetDx = closestTarget?.dx ?? 1;
+      const targetDy = closestTarget?.dy ?? 0;
+      const botToTargetX = targetDx / Math.max(1, distance);
+      const botToTargetY = targetDy / Math.max(1, distance);
+      const closingSpeed = targetState ? (next.vx - targetState.vx) * botToTargetX + (next.vy - targetState.vy) * botToTargetY : 0;
+      const avoidingTarget = pursuing && distance < BOT_AVOID_DISTANCE;
 
       const leadTime = pursuing ? clamp(distance / 46, 0.45, 2.15) : 1;
       const roamDirection = Math.abs(next.vx) > 1 ? Math.sign(next.vx) : next.x < WORLD_WIDTH / 2 ? 1 : -1;
       const roamPhase = now / 1900 + next.x * 0.025;
       const target = pursuing
         ? {
-            x: player.x + player.vx * leadTime,
-            y: player.y + player.vy * leadTime + 2.6,
+            x: targetState.x + targetState.vx * leadTime,
+            y: targetState.y + targetState.vy * leadTime + 2.6,
           }
         : {
             x: clamp(next.x + roamDirection * (74 + Math.sin(roamPhase) * 16), 34, WORLD_WIDTH - 34),
             y: clamp(next.y + Math.sin(roamPhase) * 30 + 6, 30, WORLD_HEIGHT - 65),
           };
 
-      if (avoidingPlayer) {
-        target.x = next.x - botToPlayerX * 72;
-        target.y = clamp(next.y - botToPlayerY * 46 + 20, 28, WORLD_HEIGHT - 65);
+      if (avoidingTarget) {
+        target.x = next.x - botToTargetX * 72;
+        target.y = clamp(next.y - botToTargetY * 46 + 20, 28, WORLD_HEIGHT - 65);
         if (target.x < 26) target.x = next.x + 72;
         if (target.x > WORLD_WIDTH - 26) target.x = next.x - 72;
       } else if (pursuing && distance < 28) {
         target.y += 16;
-        target.x += next.x < player.x ? -18 : 18;
+        target.x += next.x < targetState.x ? -18 : 18;
       }
       if (next.y < 13) target.y = Math.max(target.y, 32);
       if (next.y > WORLD_HEIGHT - 28) target.y = Math.min(target.y, WORLD_HEIGHT - 65);
@@ -2939,7 +3021,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       const normalX = -Math.sin(rad);
       const normalY = Math.cos(rad);
       const onRunway = !next.airborne && next.y <= 0.08;
-      const targetThrottle = pursuing ? (avoidingPlayer && closingSpeed > 0 ? 0.34 : 1) : 0.52;
+      const targetThrottle = pursuing ? (avoidingTarget && closingSpeed > 0 ? 0.34 : 1) : 0.56;
       next.throttle += (targetThrottle - next.throttle) * Math.min(1, dt * (pursuing ? 1.45 : 1.1));
       next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * 5.8);
 
@@ -2996,14 +3078,14 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       next.x = clamp(next.x, 5, WORLD_WIDTH - 5);
       next.y = clamp(next.y, 0, WORLD_HEIGHT - 10);
 
-      if (pursuing && next.airborne && next.y > 5) {
-        const aimAngle = angleToPoint(next, { x: player.x + player.vx * 0.75, y: player.y + player.vy * 0.65 + 1.2 });
+      if (pursuing && targetState && next.airborne && next.y > 5) {
+        const aimAngle = angleToPoint(next, { x: targetState.x + targetState.vx * 0.75, y: targetState.y + targetState.vy * 0.65 + 1.2 });
         const aimError = Math.abs(normalizeAngle(aimAngle - next.angle));
         const aimRad = (next.angle * Math.PI) / 180;
         const aimForwardX = -Math.cos(aimRad);
         const aimForwardY = Math.sin(aimRad);
-        const targetLength = Math.max(1, Math.hypot(player.x - next.x, player.y - next.y));
-        const targetDot = (aimForwardX * (player.x - next.x) + aimForwardY * (player.y - next.y)) / targetLength;
+        const targetLength = Math.max(1, Math.hypot(targetState.x - next.x, targetState.y - next.y));
+        const targetDot = (aimForwardX * (targetState.x - next.x) + aimForwardY * (targetState.y - next.y)) / targetLength;
         if (targetDot > 0.68 && aimError < 11 && distance > BOT_MIN_FIRE_DISTANCE && distance < 120) fireBotBullet(next, now);
         if (targetDot > 0.78 && aimError < 7 && distance > BOT_AVOID_DISTANCE && distance < 160) fireBotRocket(next, now);
       }
@@ -3031,7 +3113,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       botRef.current.style.transform = `translate(${bot.x}vw, ${-bot.y}vh) rotate(${bot.angle}deg)`;
       botRef.current.style.setProperty('--thrust', bot.thrust);
       botRef.current.querySelector('.plane-visual')?.classList.toggle('prop-spinning', bot.thrust > 0.05);
-      onBotMove(bot);
+      onBotMove(botIndex, bot);
     };
 
     const update = (now) => {
@@ -3046,7 +3128,11 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
       let next = stateRef.current;
       if (next.crashed) {
         if (now - next.crashTime > 1650) {
-          next = createInitialBotState(next.x);
+          const otherBotSpawnXs = botStateRefs.current
+            .filter((_, index) => index !== botIndex)
+            .map((botState) => botState?.x)
+            .filter((x) => Number.isFinite(x));
+          next = createInitialBotState(next.x, otherBotSpawnXs);
           stateRef.current = next;
           smokePreviousBotRef.current = null;
           botDamageRef.current = 0;
@@ -3060,7 +3146,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
           setBotSmokeParticles([]);
           setBotCrashed(false);
           setBotRocketsRemaining(MAX_ROCKETS);
-          onBotMove(next);
+          onBotMove(botIndex, next);
         }
         renderBot(stateRef.current);
         frame = requestAnimationFrame(update);
@@ -3095,7 +3181,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [active, paused, playerApiRef, playerStateRef, onBotMove, crashBot, sfxMuted]);
+  }, [active, paused, botIndex, botStateRefs, botApiRefs, playerApiRef, playerStateRef, onBotMove, crashBot, sfxMuted]);
 
   if (!active) return null;
 
