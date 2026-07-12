@@ -992,6 +992,7 @@ function App() {
   const [roomPlayerName, setRoomPlayerName] = useState('');
   const [roomLobby, setRoomLobby] = useState(null);
   const [roomVoiceEnabled, setRoomVoiceEnabled] = useState(true);
+  const [roomMutedPlayers, setRoomMutedPlayers] = useState({});
   const [droppings, setDroppings] = useState([]);
   const [ammoStatus, setAmmoStatus] = useState({ count: MAX_BULLETS, reloading: false });
   const [rocketCount, setRocketCount] = useState(MAX_ROCKETS);
@@ -1052,6 +1053,8 @@ function App() {
     const hostName = roomPlayerName.trim() || 'Player 1';
     const hostColor = pickRoomPlaneColor();
     setPlaneColor(hostColor);
+    setKillCount(0);
+    setRoomMutedPlayers({});
     setRoomLobby({
       code: generateRoomCode(),
       players: [
@@ -1090,6 +1093,7 @@ function App() {
   }, [roomLobby]);
   const deleteRoomLobby = useCallback(() => {
     setRoomLobby(null);
+    setRoomMutedPlayers({});
     setStartScreen('room');
   }, []);
   const updateCamera = useCallback((camera) => {
@@ -1168,7 +1172,14 @@ function App() {
     });
   }, []);
   const resetCurrentKills = useCallback(() => {
-    setKillCount(0);
+    setKillCount((current) => (gameMode === 'room' ? Math.max(0, current - 1) : 0));
+  }, [gameMode]);
+  const toggleRoomPlayerMute = useCallback((playerId) => {
+    if (playerId === 'host') {
+      setRoomVoiceEnabled((enabled) => !enabled);
+      return;
+    }
+    setRoomMutedPlayers((current) => ({ ...current, [playerId]: !current[playerId] }));
   }, []);
   const restartGame = useCallback(() => {
     setGameStarted(false);
@@ -1176,6 +1187,7 @@ function App() {
     setStartScreen('home');
     setGameMode('bots');
     setRoomLobby(null);
+    setRoomMutedPlayers({});
     setMusicOpen(false);
     setHelpOpen(false);
     setPlaneMenuOpen(false);
@@ -1379,6 +1391,19 @@ function App() {
   const roomPlayers = roomLobby?.players ?? [];
   const roomSlots = Array.from({ length: ROOM_MAX_PLAYERS }, (_, index) => roomPlayers[index] ?? null);
   const roomIsHost = roomPlayers[0]?.id === 'host';
+  const isRoomGame = gameStarted && gameMode === 'room';
+  const roomLeaderboardRows = (roomPlayers.length ? roomPlayers : [{ id: 'host', name: 'Player 1', color: planeColor, role: 'Host' }])
+    .map((player) => {
+      const muted = player.id === 'host' ? !roomVoiceEnabled : Boolean(roomMutedPlayers[player.id]);
+      return {
+        ...player,
+        kills: player.id === 'host' ? killCount : 0,
+        muted,
+        speaking: !muted,
+        voiceLevel: player.id === 'host' ? 3 : 0,
+      };
+    })
+    .sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name));
 
   return (
     <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}`} aria-label="Animated Bitplanes background">
@@ -1459,24 +1484,54 @@ function App() {
           style={{ filter: PLANE_COLOR_ASSETS[planeColor].filter || 'none' }}
         />
       </button>
-      <button
-        className="theme-icon-toggle"
-        type="button"
-        aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-        onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-      >
-        <img src="/assets/theme-lightbulb-icon.svg" alt="" draggable="false" aria-hidden="true" />
-      </button>
-      <div className="score-panel" aria-label="Kill counter and high score">
-        <div className="score-row">
-          <span>Kills</span>
-          <strong>{killCount}</strong>
+      {!isRoomGame && (
+        <button
+          className="theme-icon-toggle"
+          type="button"
+          aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+        >
+          <img src="/assets/theme-lightbulb-icon.svg" alt="" draggable="false" aria-hidden="true" />
+        </button>
+      )}
+      {!isRoomGame && (
+        <div className="score-panel" aria-label="Kill counter and high score">
+          <div className="score-row">
+            <span>Kills</span>
+            <strong>{killCount}</strong>
+          </div>
+          <div className="score-row score-high">
+            <span>High</span>
+            <strong>{highScore}</strong>
+          </div>
         </div>
-        <div className="score-row score-high">
-          <span>High</span>
-          <strong>{highScore}</strong>
+      )}
+      {isRoomGame && (
+        <div className="room-leaderboard" aria-label="Room leaderboard">
+          <div className="room-leaderboard-title">Leaderboard</div>
+          {roomLeaderboardRows.map((player, index) => (
+            <div key={player.id} className="room-leaderboard-row">
+              <span className="room-rank">{index + 1}</span>
+              <span className="room-board-name">{player.name}</span>
+              <strong className="room-board-kills">{player.kills}</strong>
+              <button
+                className={`room-board-speaker${player.muted ? ' room-board-muted' : ''}`}
+                type="button"
+                aria-label={player.muted ? `Unmute ${player.name}` : `Mute ${player.name}`}
+                aria-pressed={!player.muted}
+                onClick={() => toggleRoomPlayerMute(player.id)}
+              >
+                <span className="room-board-speaker-icon" aria-hidden="true" />
+              </button>
+              <span className={`room-voice-bars${player.speaking ? ' room-voice-speaking' : ''}`} aria-hidden="true">
+                {[1, 2, 3].map((level) => (
+                  <i key={level} className={level <= player.voiceLevel ? 'voice-bar-active' : ''} />
+                ))}
+              </span>
+            </div>
+          ))}
         </div>
-      </div>
+      )}
       {musicOpen && (
         <div className="music-panel" aria-label="Background music panel">
           <div className="music-track-grid">
