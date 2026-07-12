@@ -1079,7 +1079,7 @@ function App() {
   const liveKitRoomRef = useRef(null);
   const voiceAudioElementsRef = useRef(new Map());
   const voiceLevelsRef = useRef({});
-  const localVoiceMeterRef = useRef({ frame: 0, cleanup: null });
+  const localVoiceMeterRef = useRef({ source: '', frame: 0, cleanup: null });
   const roomVoiceEnabledRef = useRef(roomVoiceEnabled);
   const roomSpeakerEnabledRef = useRef(roomSpeakerEnabled);
   const roomMutedPlayersRef = useRef(roomMutedPlayers);
@@ -1134,6 +1134,10 @@ function App() {
     }
   }, []);
   const requestMicrophonePermission = useCallback(async () => {
+    if (localVoiceMeterRef.current.source === 'browser') {
+      setRoomError('');
+      return true;
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       setRoomError('Microphone is not available in this browser.');
       return false;
@@ -1147,7 +1151,69 @@ function App() {
           autoGainControl: true,
         },
       });
-      stream.getTracks().forEach((track) => track.stop());
+
+      const previousMeter = localVoiceMeterRef.current;
+      if (previousMeter.frame) window.cancelAnimationFrame(previousMeter.frame);
+      previousMeter.cleanup?.();
+
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+        stream.getTracks().forEach((track) => track.stop());
+        setRoomError('Microphone meter is not available in this browser.');
+        return false;
+      }
+
+      const context = new AudioContextClass();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.42;
+      const source = context.createMediaStreamSource(stream);
+      source.connect(analyser);
+      context.resume?.();
+
+      const samples = new Uint8Array(analyser.fftSize);
+      const tick = () => {
+        const playerId = localRoomPlayerIdRef.current;
+        const enabled = roomVoiceEnabledRef.current;
+        let rms = 0;
+
+        if (enabled) {
+          analyser.getByteTimeDomainData(samples);
+          let total = 0;
+          for (let index = 0; index < samples.length; index += 1) {
+            const centered = (samples[index] - 128) / 128;
+            total += centered * centered;
+          }
+          rms = Math.sqrt(total / samples.length);
+        }
+
+        const nextLevel = !enabled || rms < 0.006 ? 0 : rms > 0.075 ? 3 : rms > 0.028 ? 2 : 1;
+        const nextSpeaking = nextLevel > 0;
+        if (playerId) {
+          setVoiceLevels((current) => {
+            const previous = current[playerId] || { speaking: false, level: 0 };
+            if (previous.speaking === nextSpeaking && previous.level === nextLevel) return current;
+            const next = {
+              ...current,
+              [playerId]: { speaking: nextSpeaking, level: nextLevel },
+            };
+            voiceLevelsRef.current = next;
+            return next;
+          });
+        }
+
+        localVoiceMeterRef.current.frame = window.requestAnimationFrame(tick);
+      };
+
+      localVoiceMeterRef.current = {
+        source: 'browser',
+        frame: window.requestAnimationFrame(tick),
+        cleanup: () => {
+          source.disconnect();
+          stream.getTracks().forEach((track) => track.stop());
+          context.close?.();
+        },
+      };
       setRoomError('');
       return true;
     } catch {
@@ -1171,7 +1237,7 @@ function App() {
     const meter = localVoiceMeterRef.current;
     if (meter.frame) window.cancelAnimationFrame(meter.frame);
     meter.cleanup?.();
-    localVoiceMeterRef.current = { frame: 0, cleanup: null };
+    localVoiceMeterRef.current = { source: '', frame: 0, cleanup: null };
     const playerId = localRoomPlayerIdRef.current;
     if (playerId) {
       updateVoiceLevels((current) => ({
@@ -1181,6 +1247,7 @@ function App() {
     }
   }, [updateVoiceLevels]);
   const startLocalVoiceMeter = useCallback((publication, createAudioAnalyser) => {
+    if (localVoiceMeterRef.current.source === 'browser') return;
     const track = publication?.track;
     if (!track || track.kind !== 'audio' || !createAudioAnalyser) {
       stopLocalVoiceMeter();
