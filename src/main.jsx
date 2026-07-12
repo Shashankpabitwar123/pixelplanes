@@ -373,6 +373,24 @@ function getProjectileSegment(projectile, now) {
   return { start, end };
 }
 
+function updateProjectileRenderPositions(projectiles, now) {
+  if (projectiles.length === 0) return projectiles;
+  let changed = false;
+  const nextProjectiles = projectiles.map((projectile) => {
+    const point = getProjectilePoint(projectile, now);
+    if (Math.abs((projectile.renderX ?? projectile.x) - point.x) < 0.001 && Math.abs((projectile.renderY ?? projectile.y) - point.y) < 0.001) {
+      return projectile;
+    }
+    changed = true;
+    return {
+      ...projectile,
+      renderX: point.x,
+      renderY: point.y,
+    };
+  });
+  return changed ? nextProjectiles : projectiles;
+}
+
 function getPlaneForwardVector(plane) {
   const rad = (plane.angle * Math.PI) / 180;
   return {
@@ -391,6 +409,8 @@ function createBulletProjectile(plane, now, idPrefix = 'bullet') {
     id: `${now}-${idPrefix}-${Math.random()}`,
     x: muzzle.x,
     y: muzzle.y,
+    renderX: muzzle.x,
+    renderY: muzzle.y,
     dx: travel.dx,
     dy: travel.dy,
     groundHit: travel.groundHit,
@@ -2536,6 +2556,14 @@ function PlayablePlane({
       }
     };
 
+    const updatePlayerBulletRenders = (now) => {
+      const nextProjectiles = updateProjectileRenderPositions(projectilesRef.current, now);
+      if (nextProjectiles !== projectilesRef.current) {
+        projectilesRef.current = nextProjectiles;
+        setProjectiles(nextProjectiles);
+      }
+    };
+
     const scanBotHits = (now) => {
       let handledBulletHit = false;
       for (const projectile of projectilesRef.current) {
@@ -2634,6 +2662,7 @@ function PlayablePlane({
       }
 
       stateRef.current = next;
+      updatePlayerBulletRenders(now);
       updatePlayerRockets(now);
       scanBotHits(now);
       onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
@@ -2733,10 +2762,8 @@ function PlayablePlane({
             key={projectile.id}
             className={`bullet-shot${projectile.groundHit ? ' bullet-ground-hit' : ''}`}
             style={{
-              left: `${projectile.x}vw`,
-              bottom: `calc(100% - 2px + ${projectile.y}vh)`,
-              '--bullet-dx': `${projectile.dx}${projectile.unit === 'world' ? 'vw' : 'px'}`,
-              '--bullet-dy': `${projectile.dy}${projectile.unit === 'world' ? 'vh' : 'px'}`,
+              left: `${projectile.renderX ?? projectile.x}vw`,
+              bottom: `calc(100% - 2px + ${projectile.renderY ?? projectile.y}vh)`,
               '--bullet-angle': `${projectile.angle}deg`,
               '--bullet-life': `${projectile.life ?? BULLET_LIFETIME_MS}ms`,
             }}
@@ -2982,6 +3009,14 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       target.api.crash?.(impact);
     };
 
+    const updateBotBulletRenders = (now) => {
+      const nextBullets = updateProjectileRenderPositions(bulletsRef.current, now);
+      if (nextBullets !== bulletsRef.current) {
+        bulletsRef.current = nextBullets;
+        setBotBullets(nextBullets);
+      }
+    };
+
     const scanHits = (now, bot) => {
       const collisionTarget = getTargetCandidates(bot).find((target) => planesCollide(bot, target.state));
       if (collisionTarget) {
@@ -3221,6 +3256,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       }
       if (steps >= 6) accumulator = 0;
       stateRef.current = next;
+      updateBotBulletRenders(now);
       if (next.crashed) {
         botDamageRef.current = next.damage ?? 2;
         botSmokeParticlesRef.current = [];
@@ -3279,10 +3315,8 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
             key={projectile.id}
             className={`bullet-shot bot-bullet-shot${projectile.groundHit ? ' bullet-ground-hit' : ''}`}
             style={{
-              left: `${projectile.x}vw`,
-              bottom: `calc(100% - 2px + ${projectile.y}vh)`,
-              '--bullet-dx': `${projectile.dx}${projectile.unit === 'world' ? 'vw' : 'px'}`,
-              '--bullet-dy': `${projectile.dy}${projectile.unit === 'world' ? 'vh' : 'px'}`,
+              left: `${projectile.renderX ?? projectile.x}vw`,
+              bottom: `calc(100% - 2px + ${projectile.renderY ?? projectile.y}vh)`,
               '--bullet-angle': `${projectile.angle}deg`,
               '--bullet-life': `${projectile.life ?? BULLET_LIFETIME_MS}ms`,
             }}

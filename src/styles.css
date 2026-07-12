@@ -2065,8 +2065,8 @@ button {
   width: clamp(11px, 0.82vw, 18px);
   height: clamp(3px, 0.22vw, 5px);
   transform: translate(-50%, 50%);
-  animation: bulletFlight var(--bullet-life, 4s) linear forwards;
-  will-change: transform, opacity;
+  opacity: 1;
+  will-change: left, bottom, transform, opacity;
 }
 
 .bullet-core {
@@ -2081,10 +2081,6 @@ button {
     0 0 4px rgba(255, 222, 69, 0.9),
     0 0 10px rgba(255, 151, 35, 0.62);
   transform: rotate(var(--bullet-angle));
-}
-
-.bullet-ground-hit {
-  animation-name: bulletGroundFlight;
 }
 
 .bullet-ground-hit .bullet-core {
@@ -2771,34 +2767,6 @@ button {
 @keyframes prop-spin {
   to {
     transform: rotate(180deg) scaleY(0.88);
-  }
-}
-
-@keyframes bulletFlight {
-  0% {
-    opacity: 1;
-    transform: translate(-50%, 50%) scale(1);
-  }
-
-  82% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-    transform: translate(calc(-50% + var(--bullet-dx)), calc(50% + var(--bullet-dy))) scale(0.88);
-  }
-}
-
-@keyframes bulletGroundFlight {
-  0% {
-    opacity: 1;
-    transform: translate(-50%, 50%) scale(1);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translate(calc(-50% + var(--bullet-dx)), calc(50% + var(--bullet-dy))) scale(1);
   }
 }
 
