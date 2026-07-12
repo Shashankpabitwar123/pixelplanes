@@ -1725,7 +1725,7 @@ function App() {
                     Leave
                   </button>
                   <button className="start-option start-primary" type="button" disabled>
-                    Start Soon
+                    Start
                   </button>
                 </div>
               </>
