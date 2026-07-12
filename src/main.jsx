@@ -1934,6 +1934,7 @@ function App() {
             playerApiRef={playerApiRef}
             botStateRefs={botStateRefs}
             botApiRefs={botApiRefs}
+            botTargetsActive={gameMode === 'bots'}
             controlsEnabled={gameStarted && !paused}
             paused={paused}
             restartSignal={restartSignal}
@@ -2054,6 +2055,7 @@ function PlayablePlane({
   playerApiRef,
   botStateRefs,
   botApiRefs,
+  botTargetsActive,
   controlsEnabled,
   paused,
   restartSignal,
@@ -3048,7 +3050,9 @@ function PlayablePlane({
 
     const updatePlayerRockets = (now) => {
       if (rocketProjectilesRef.current.length === 0) return;
-      const targets = botStateRefs.current.map((bot, index) => ({ type: 'bot', index, state: bot }));
+      const targets = botTargetsActive
+        ? botStateRefs.current.map((bot, index) => ({ type: 'bot', index, state: bot }))
+        : [];
       const nextRockets = updateGuidedRockets(rocketProjectilesRef.current, now, targets);
       if (nextRockets !== rocketProjectilesRef.current) {
         rocketProjectilesRef.current = nextRockets;
@@ -3061,6 +3065,7 @@ function PlayablePlane({
     };
 
     const scanBotHits = (now) => {
+      if (!botTargetsActive) return;
       let handledBulletHit = false;
       for (const projectile of projectilesRef.current) {
         const segment = getProjectileSegment(projectile, now);
@@ -3246,7 +3251,7 @@ function PlayablePlane({
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [onMove, onFuelChange, onFuelRefill, onKill, onPlayerDeath, onAmmoChange, onRocketChange, onPlaneState, botStateRefs, botApiRefs]);
+  }, [onMove, onFuelChange, onFuelRefill, onKill, onPlayerDeath, onAmmoChange, onRocketChange, onPlaneState, botStateRefs, botApiRefs, botTargetsActive]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
