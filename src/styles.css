@@ -478,13 +478,14 @@ button {
 
 .room-board-speaker-icon {
   position: absolute;
-  left: 5px;
-  top: 9px;
+  left: 3px;
+  top: 7px;
   width: 6px;
-  height: 7px;
+  height: 10px;
   background: currentColor;
   border-radius: 1px;
   filter: drop-shadow(0 0 4px currentColor);
+  overflow: visible;
 }
 
 .room-board-speaker-icon::before {
@@ -492,26 +493,26 @@ button {
   position: absolute;
   left: 5px;
   top: -3px;
-  width: 0;
-  height: 0;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
-  border-left: 9px solid currentColor;
+  width: 9px;
+  height: 16px;
+  background: currentColor;
+  clip-path: polygon(0 34%, 100% 14%, 100% 86%, 0 66%);
 }
 
 .room-board-speaker-icon::after {
   content: '';
   position: absolute;
   left: 15px;
-  top: -2px;
+  top: -5px;
   width: 8px;
-  height: 12px;
+  height: 18px;
   border: 2px solid currentColor;
   border-left: 0;
   border-top-color: transparent;
   border-bottom-color: transparent;
   border-radius: 0 10px 10px 0;
-  opacity: 0.72;
+  box-shadow: 4px 0 0 -1px currentColor;
+  opacity: 0.92;
 }
 
 .room-board-muted {
@@ -526,8 +527,8 @@ button {
   width: 15px;
   height: 3px;
   border-radius: 2px;
-  background: currentColor;
-  box-shadow: 0 0 6px currentColor;
+  background: #ff5148;
+  box-shadow: 0 0 6px rgba(255, 81, 72, 0.72);
   transform: rotate(-42deg);
 }
 
@@ -1140,7 +1141,7 @@ button {
 
 .room-settings-row {
   display: grid;
-  grid-template-columns: minmax(210px, 0.72fr) minmax(150px, 0.28fr);
+  grid-template-columns: minmax(210px, 0.52fr) minmax(300px, 0.48fr);
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -1153,6 +1154,18 @@ button {
 
 .room-theme-switch-compact .room-rule-button {
   font-size: 14px;
+}
+
+.room-audio-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.room-audio-controls .room-voice-toggle {
+  gap: 7px;
+  padding-inline: 8px;
+  font-size: 12px;
 }
 
 .room-voice-toggle {
@@ -1216,6 +1229,45 @@ button {
 
 .room-voice-toggle:not(.room-voice-enabled) .room-voice-icon {
   box-shadow: none;
+}
+
+.room-speaker-icon {
+  position: relative;
+  width: 24px;
+  height: 20px;
+  display: inline-block;
+}
+
+.room-speaker-icon::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 7px;
+  height: 8px;
+  border-radius: 1px;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+}
+
+.room-speaker-icon::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  background:
+    radial-gradient(ellipse at left center, transparent 0 38%, currentColor 40% 49%, transparent 52%),
+    linear-gradient(90deg, currentColor 0 44%, transparent 45%);
+  clip-path: polygon(0 30%, 42% 4%, 42% 96%, 0 70%, 0 30%, 56% 14%, 100% 50%, 56% 86%);
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.room-voice-toggle:not(.room-voice-enabled) .room-speaker-icon::before,
+.room-voice-toggle:not(.room-voice-enabled) .room-speaker-icon::after {
+  box-shadow: none;
+  filter: none;
 }
 
 .room-voice-toggle:not(.room-voice-enabled)::after {

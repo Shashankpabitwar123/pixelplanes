@@ -992,6 +992,7 @@ function App() {
   const [roomPlayerName, setRoomPlayerName] = useState('');
   const [roomLobby, setRoomLobby] = useState(null);
   const [roomVoiceEnabled, setRoomVoiceEnabled] = useState(true);
+  const [roomSpeakerEnabled, setRoomSpeakerEnabled] = useState(true);
   const [roomMutedPlayers, setRoomMutedPlayers] = useState({});
   const [droppings, setDroppings] = useState([]);
   const [ammoStatus, setAmmoStatus] = useState({ count: MAX_BULLETS, reloading: false });
@@ -1392,14 +1393,14 @@ function App() {
     .map((player) => {
       const isLocalPlayer = player.id === 'host';
       const micEnabled = isLocalPlayer ? roomVoiceEnabled : true;
-      const speakerMuted = !isLocalPlayer && Boolean(roomMutedPlayers[player.id]);
+      const speakerEnabled = isLocalPlayer ? roomSpeakerEnabled : !roomMutedPlayers[player.id];
       const voiceLevel = 0;
       return {
         ...player,
         kills: player.id === 'host' ? killCount : 0,
         isLocalPlayer,
         micEnabled,
-        speakerMuted,
+        speakerEnabled,
         speaking: micEnabled && voiceLevel > 0,
         voiceLevel,
       };
@@ -1528,12 +1529,17 @@ function App() {
                 <span className="room-board-mic-icon" aria-hidden="true" />
               </button>
               <button
-                className={`room-board-control room-board-speaker${player.speakerMuted ? ' room-board-muted' : ''}`}
+                className={`room-board-control room-board-speaker${player.speakerEnabled ? '' : ' room-board-muted'}`}
                 type="button"
-                aria-label={player.speakerMuted ? `Unmute ${player.name}` : `Mute ${player.name}`}
-                aria-pressed={!player.speakerMuted}
-                disabled={player.isLocalPlayer}
-                onClick={() => toggleRoomPlayerMute(player.id)}
+                aria-label={player.speakerEnabled ? `Turn ${player.name} speaker off` : `Turn ${player.name} speaker on`}
+                aria-pressed={player.speakerEnabled}
+                onClick={() => {
+                  if (player.isLocalPlayer) {
+                    setRoomSpeakerEnabled((enabled) => !enabled);
+                  } else {
+                    toggleRoomPlayerMute(player.id);
+                  }
+                }}
               >
                 <span className="room-board-speaker-icon" aria-hidden="true" />
               </button>
@@ -1787,16 +1793,28 @@ function App() {
                       Light
                     </button>
                   </div>
-                  <button
-                    className={`room-voice-toggle${roomVoiceEnabled ? ' room-voice-enabled' : ''}`}
-                    type="button"
-                    aria-pressed={roomVoiceEnabled}
-                    aria-label={roomVoiceEnabled ? 'Voice enabled' : 'Voice disabled'}
-                    onClick={() => setRoomVoiceEnabled((enabled) => !enabled)}
-                  >
-                    <span className="room-voice-icon" aria-hidden="true" />
-                    <span>{roomVoiceEnabled ? 'Voice On' : 'Voice Off'}</span>
-                  </button>
+                  <div className="room-audio-controls">
+                    <button
+                      className={`room-voice-toggle${roomVoiceEnabled ? ' room-voice-enabled' : ''}`}
+                      type="button"
+                      aria-pressed={roomVoiceEnabled}
+                      aria-label={roomVoiceEnabled ? 'Microphone enabled' : 'Microphone disabled'}
+                      onClick={() => setRoomVoiceEnabled((enabled) => !enabled)}
+                    >
+                      <span className="room-voice-icon" aria-hidden="true" />
+                      <span>{roomVoiceEnabled ? 'Mic On' : 'Mic Off'}</span>
+                    </button>
+                    <button
+                      className={`room-voice-toggle room-voice-speaker${roomSpeakerEnabled ? ' room-voice-enabled' : ''}`}
+                      type="button"
+                      aria-pressed={roomSpeakerEnabled}
+                      aria-label={roomSpeakerEnabled ? 'Speaker enabled' : 'Speaker disabled'}
+                      onClick={() => setRoomSpeakerEnabled((enabled) => !enabled)}
+                    >
+                      <span className="room-speaker-icon" aria-hidden="true" />
+                      <span>{roomSpeakerEnabled ? 'Speaker On' : 'Speaker Off'}</span>
+                    </button>
+                  </div>
                 </div>
                 <div className="room-player-grid" aria-label="Room players">
                   {roomSlots.map((player, index) => {
