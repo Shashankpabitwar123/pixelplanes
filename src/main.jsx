@@ -1133,6 +1133,28 @@ function App() {
       element.volume = shouldMute ? 0 : 1;
     }
   }, []);
+  const requestMicrophonePermission = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setRoomError('Microphone is not available in this browser.');
+      return false;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      stream.getTracks().forEach((track) => track.stop());
+      setRoomError('');
+      return true;
+    } catch {
+      setRoomError('Microphone permission was blocked. Allow microphone in the browser to use voice chat.');
+      return false;
+    }
+  }, []);
   const updateVoiceLevels = useCallback((updater) => {
     setVoiceLevels((current) => {
       const next = typeof updater === 'function' ? updater(current) : updater;
@@ -1505,6 +1527,9 @@ function App() {
     setRoomError('');
     setKillCount(0);
     setRoomMutedPlayers({});
+    const micAllowed = roomVoiceEnabled ? await requestMicrophonePermission() : false;
+    const micEnabled = roomVoiceEnabled && micAllowed;
+    if (roomVoiceEnabled && !micAllowed) setRoomVoiceEnabled(false);
 
     if (MULTIPLAYER_WS_URL) {
       try {
@@ -1513,7 +1538,7 @@ function App() {
           type: 'create_room',
           name: roomPlayerName,
           theme: roomTheme,
-          micEnabled: roomVoiceEnabled,
+          micEnabled,
           speakerEnabled: roomSpeakerEnabled,
         }));
       } catch (error) {
@@ -1523,11 +1548,12 @@ function App() {
     }
 
     const localLobby = createLocalRoomLobby(roomPlayerName, roomTheme);
+    localLobby.players[0].micEnabled = micEnabled;
     setPlaneColor(localLobby.players[0].color);
     setLocalRoomPlayerId('host');
     setRoomLobby(localLobby);
     setStartScreen('room-waiting');
-  }, [connectRoomSocket, roomPlayerName, roomSpeakerEnabled, roomTheme, roomVoiceEnabled]);
+  }, [connectRoomSocket, requestMicrophonePermission, roomPlayerName, roomSpeakerEnabled, roomTheme, roomVoiceEnabled]);
   const joinRoomLobby = useCallback(async () => {
     setRoomError('');
     if (!roomCode.trim()) {
@@ -1541,18 +1567,21 @@ function App() {
     }
 
     try {
+      const micAllowed = roomVoiceEnabled ? await requestMicrophonePermission() : false;
+      const micEnabled = roomVoiceEnabled && micAllowed;
+      if (roomVoiceEnabled && !micAllowed) setRoomVoiceEnabled(false);
       const socket = await connectRoomSocket();
       socket.send(JSON.stringify({
         type: 'join_room',
         code: roomCode,
         name: roomPlayerName,
-        micEnabled: roomVoiceEnabled,
+        micEnabled,
         speakerEnabled: roomSpeakerEnabled,
       }));
     } catch (error) {
       setRoomError(error.message);
     }
-  }, [connectRoomSocket, roomCode, roomPlayerName, roomSpeakerEnabled, roomVoiceEnabled]);
+  }, [connectRoomSocket, requestMicrophonePermission, roomCode, roomPlayerName, roomSpeakerEnabled, roomVoiceEnabled]);
   const leaveRoomLobby = useCallback(() => {
     if (sendRoomMessage({ type: 'leave_room' })) {
       disconnectRoomSocket();
@@ -1599,17 +1628,26 @@ function App() {
     setTheme(nextTheme);
     sendRoomMessage({ type: 'update_room_settings', theme: nextTheme });
   }, [sendRoomMessage]);
-  const toggleRoomVoice = useCallback(() => {
-    setRoomVoiceEnabled((enabled) => {
-      const nextEnabled = !enabled;
+  const toggleRoomVoice = useCallback(async () => {
+    if (roomVoiceEnabled) {
+      setRoomVoiceEnabled(false);
       sendRoomMessage({
         type: 'update_audio_settings',
-        micEnabled: nextEnabled,
+        micEnabled: false,
         speakerEnabled: roomSpeakerEnabled,
       });
-      return nextEnabled;
+      return;
+    }
+
+    const micAllowed = await requestMicrophonePermission();
+    if (!micAllowed) return;
+    setRoomVoiceEnabled(true);
+    sendRoomMessage({
+      type: 'update_audio_settings',
+      micEnabled: true,
+      speakerEnabled: roomSpeakerEnabled,
     });
-  }, [roomSpeakerEnabled, sendRoomMessage]);
+  }, [requestMicrophonePermission, roomSpeakerEnabled, roomVoiceEnabled, sendRoomMessage]);
   const toggleRoomSpeaker = useCallback(() => {
     setRoomSpeakerEnabled((enabled) => {
       const nextEnabled = !enabled;
