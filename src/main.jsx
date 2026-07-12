@@ -27,6 +27,7 @@ const ROCKET_COOLDOWN_MS = 520;
 const ROCKET_LIFETIME_MS = 12000;
 const ROCKET_RANGE = 640;
 const ROCKET_HOMING_MS = 4000;
+const ROCKET_DETECTION_RANGE = 150;
 const ROCKET_IMPACT_MS = 650;
 const ROCKET_SPEED = ROCKET_RANGE / (ROCKET_LIFETIME_MS / 1000);
 const ROCKET_TURN_RATE = 340;
@@ -523,6 +524,7 @@ function getNearestRocketTarget(rocket, targets) {
   return targets.reduce((closest, target) => {
     if (!target?.state || target.state.crashed) return closest;
     const distance = Math.hypot(target.state.x - rocket.x, target.state.y - rocket.y);
+    if (distance > ROCKET_DETECTION_RANGE) return closest;
     if (!closest || distance < closest.distance) return { ...target, distance };
     return closest;
   }, null);
