@@ -1155,6 +1155,11 @@ function App() {
       return false;
     }
   }, []);
+  const getLocalAudioPublication = useCallback((liveKitRoom, preferredPublication = null) => {
+    if (preferredPublication?.track?.kind === 'audio') return preferredPublication;
+    const publications = Array.from(liveKitRoom?.localParticipant?.audioTrackPublications?.values?.() || []);
+    return publications.find((publication) => publication.track?.kind === 'audio') || null;
+  }, []);
   const updateVoiceLevels = useCallback((updater) => {
     setVoiceLevels((current) => {
       const next = typeof updater === 'function' ? updater(current) : updater;
@@ -1195,7 +1200,7 @@ function App() {
       const playerId = localRoomPlayerIdRef.current;
       const enabled = roomVoiceEnabledRef.current;
       const volume = enabled ? analyser.calculateVolume() : 0;
-      const nextLevel = !enabled || volume < 0.018 ? 0 : volume > 0.16 ? 3 : volume > 0.075 ? 2 : 1;
+      const nextLevel = !enabled || volume < 0.004 ? 0 : volume > 0.045 ? 3 : volume > 0.018 ? 2 : 1;
       const nextSpeaking = nextLevel > 0;
 
       if (playerId) {
@@ -1313,8 +1318,9 @@ function App() {
 
       await liveKitRoom.connect(voiceConfig.url, voiceConfig.token);
       const publication = await liveKitRoom.localParticipant.setMicrophoneEnabled(roomVoiceEnabled);
-      if (roomVoiceEnabled && publication?.track) {
-        startLocalVoiceMeter(publication, createAudioAnalyser);
+      const micPublication = getLocalAudioPublication(liveKitRoom, publication);
+      if (roomVoiceEnabled && micPublication?.track) {
+        startLocalVoiceMeter(micPublication, createAudioAnalyser);
       } else {
         stopLocalVoiceMeter();
       }
@@ -1325,7 +1331,7 @@ function App() {
       setVoiceStatus('error');
       setRoomError(error.message);
     }
-  }, [disconnectRoomVoice, localRoomPlayerId, roomLobby?.code, roomVoiceEnabled, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, updateVoiceLevels]);
+  }, [disconnectRoomVoice, getLocalAudioPublication, localRoomPlayerId, roomLobby?.code, roomVoiceEnabled, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, updateVoiceLevels]);
   const applyServerRoomState = useCallback((room, playerId = localRoomPlayerId) => {
     if (!room) return;
     setRoomLobby(room);
@@ -2026,12 +2032,13 @@ function App() {
     liveKitRoom.localParticipant.setMicrophoneEnabled(roomVoiceEnabled)
       .then(async (publication) => {
         if (cancelled) return;
-        if (!roomVoiceEnabled || !publication?.track) {
+        const micPublication = getLocalAudioPublication(liveKitRoom, publication);
+        if (!roomVoiceEnabled || !micPublication?.track) {
           stopLocalVoiceMeter();
           return;
         }
         const { createAudioAnalyser } = await import('livekit-client');
-        if (!cancelled) startLocalVoiceMeter(publication, createAudioAnalyser);
+        if (!cancelled) startLocalVoiceMeter(micPublication, createAudioAnalyser);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -2042,7 +2049,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [roomVoiceEnabled, startLocalVoiceMeter, stopLocalVoiceMeter]);
+  }, [getLocalAudioPublication, roomVoiceEnabled, startLocalVoiceMeter, stopLocalVoiceMeter]);
 
   useEffect(() => {
     setRemoteAudioMuted(!roomSpeakerEnabled);
