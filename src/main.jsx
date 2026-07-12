@@ -1615,38 +1615,38 @@ function App() {
                   aria-label="Your player name"
                   onChange={(event) => setRoomPlayerName(event.target.value)}
                 />
-                <div className="room-rule-row" aria-label="Room theme">
-                  <button
-                    className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
-                    type="button"
-                    aria-pressed={roomTheme === 'dark'}
-                    onClick={() => {
-                      setRoomTheme('dark');
-                      setTheme('dark');
-                    }}
-                  >
-                    Dark
-                  </button>
-                  <button
-                    className={`room-rule-button${roomTheme === 'light' ? ' room-rule-active' : ''}`}
-                    type="button"
-                    aria-pressed={roomTheme === 'light'}
-                    onClick={() => {
-                      setRoomTheme('light');
-                      setTheme('light');
-                    }}
-                  >
-                    Light
-                  </button>
-                </div>
-                <div className="start-actions">
-                  <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
-                    Back
-                  </button>
+                <div className="room-create-controls">
+                  <div className="room-theme-switch" aria-label="Room theme">
+                    <button
+                      className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
+                      type="button"
+                      aria-pressed={roomTheme === 'dark'}
+                      onClick={() => {
+                        setRoomTheme('dark');
+                        setTheme('dark');
+                      }}
+                    >
+                      Dark
+                    </button>
+                    <button
+                      className={`room-rule-button${roomTheme === 'light' ? ' room-rule-active' : ''}`}
+                      type="button"
+                      aria-pressed={roomTheme === 'light'}
+                      onClick={() => {
+                        setRoomTheme('light');
+                        setTheme('light');
+                      }}
+                    >
+                      Light
+                    </button>
+                  </div>
                   <button className="start-option start-primary" type="button" onClick={createRoomLobby}>
                     Create
                   </button>
                 </div>
+                <button className="start-back" type="button" onClick={() => setStartScreen('room')}>
+                  Back
+                </button>
               </>
             )}
             {startScreen === 'room-waiting' && roomLobby && (

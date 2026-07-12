@@ -851,6 +851,24 @@ button {
   width: 100%;
 }
 
+.room-create-controls {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(160px, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.room-theme-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(96px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.room-theme-switch .room-rule-button {
+  min-width: 0;
+}
+
 .room-lobby-header {
   display: flex;
   align-items: center;
@@ -3554,6 +3572,10 @@ button {
   }
 
   .start-actions-home {
+    grid-template-columns: 1fr;
+  }
+
+  .room-create-controls {
     grid-template-columns: 1fr;
   }
 
