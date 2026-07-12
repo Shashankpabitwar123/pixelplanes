@@ -59,6 +59,7 @@ const MUSIC_TRACKS = [
 }));
 
 const HIGH_SCORE_STORAGE_KEY = 'bitplanes-high-score';
+const ROOM_MAX_PLAYERS = 6;
 
 function readStoredHighScore() {
   try {
@@ -90,9 +91,31 @@ const PLANE_COLOR_ASSETS = {
     staticSrc: '/assets/exact-plane-purple.png',
     noPropSrc: '/assets/exact-plane-no-prop-purple.png',
   },
+  green: {
+    label: 'Green',
+    staticSrc: '/assets/exact-plane.png',
+    noPropSrc: '/assets/exact-plane-no-prop.png',
+    filter: 'hue-rotate(94deg) saturate(1.55) brightness(1.02)',
+  },
+  cyan: {
+    label: 'Cyan',
+    staticSrc: '/assets/exact-plane.png',
+    noPropSrc: '/assets/exact-plane-no-prop.png',
+    filter: 'hue-rotate(28deg) saturate(1.35) brightness(1.08)',
+  },
 };
 
-const PLANE_COLOR_OPTIONS = ['blue', 'red', 'yellow'].map((id) => ({ id, ...PLANE_COLOR_ASSETS[id] }));
+const PLANE_COLOR_IDS = ['blue', 'red', 'yellow', 'purple', 'green', 'cyan'];
+const PLANE_COLOR_OPTIONS = PLANE_COLOR_IDS.map((id) => ({ id, ...PLANE_COLOR_ASSETS[id] }));
+
+function generateRoomCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+}
+
+function pickRoomPlaneColor() {
+  return PLANE_COLOR_IDS[Math.floor(Math.random() * PLANE_COLOR_IDS.length)];
+}
 
 const PLANE_LIGHT_COMBOS = {
   classic: {
@@ -966,6 +989,8 @@ function App() {
   const [rainActive, setRainActive] = useState(false);
   const [roomCode, setRoomCode] = useState('');
   const [roomTheme, setRoomTheme] = useState('dark');
+  const [roomPlayerName, setRoomPlayerName] = useState('');
+  const [roomLobby, setRoomLobby] = useState(null);
   const [droppings, setDroppings] = useState([]);
   const [ammoStatus, setAmmoStatus] = useState({ count: MAX_BULLETS, reloading: false });
   const [rocketCount, setRocketCount] = useState(MAX_ROCKETS);
@@ -1022,6 +1047,23 @@ function App() {
     setHelpOpen(false);
     setPlaneMenuOpen(false);
   }, []);
+  const createRoomLobby = useCallback(() => {
+    const hostName = roomPlayerName.trim() || 'Player 1';
+    const hostColor = pickRoomPlaneColor();
+    setPlaneColor(hostColor);
+    setRoomLobby({
+      code: generateRoomCode(),
+      players: [
+        {
+          id: 'host',
+          name: hostName,
+          color: hostColor,
+          role: 'Host',
+        },
+      ],
+    });
+    setStartScreen('room-waiting');
+  }, [roomPlayerName]);
   const updateCamera = useCallback((camera) => {
     if (worldRef.current) {
       worldRef.current.style.transform = `translate(${-camera.x}vw, ${camera.y}vh)`;
@@ -1105,6 +1147,7 @@ function App() {
     setPaused(false);
     setStartScreen('home');
     setGameMode('bots');
+    setRoomLobby(null);
     setMusicOpen(false);
     setHelpOpen(false);
     setPlaneMenuOpen(false);
@@ -1305,6 +1348,9 @@ function App() {
     return () => window.removeEventListener('keydown', resumeFromPause, true);
   }, [paused]);
 
+  const roomPlayers = roomLobby?.players ?? [];
+  const roomSlots = Array.from({ length: ROOM_MAX_PLAYERS }, (_, index) => roomPlayers[index] ?? null);
+
   return (
     <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}`} aria-label="Animated Bitplanes background">
       <div className="sky-gradient" />
@@ -1376,7 +1422,13 @@ function App() {
           setHelpOpen(false);
         }}
       >
-        <img src={PLANE_COLOR_ASSETS[planeColor].staticSrc} alt="" draggable="false" aria-hidden="true" />
+        <img
+          src={PLANE_COLOR_ASSETS[planeColor].staticSrc}
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+          style={{ filter: PLANE_COLOR_ASSETS[planeColor].filter || 'none' }}
+        />
       </button>
       <button
         className="theme-icon-toggle"
@@ -1455,7 +1507,13 @@ function App() {
               aria-pressed={planeColor === option.id}
               onClick={() => setPlaneColor(option.id)}
             >
-              <img src={option.staticSrc} alt="" draggable="false" aria-hidden="true" />
+              <img
+                src={option.staticSrc}
+                alt=""
+                draggable="false"
+                aria-hidden="true"
+                style={{ filter: option.filter || 'none' }}
+              />
             </button>
           ))}
           <div className="plane-light-options" aria-label="Plane blinking light options">
@@ -1477,7 +1535,7 @@ function App() {
       )}
       {!gameStarted && (
         <div className="start-overlay" aria-label="Game start menu">
-          <div className={`start-card${startScreen === 'bot-ready' || startScreen === 'training-ready' ? ' start-card-slim' : ''}`}>
+          <div className={`start-card${startScreen === 'bot-ready' || startScreen === 'training-ready' ? ' start-card-slim' : ''}${startScreen === 'room-waiting' ? ' start-card-room-lobby' : ''}`}>
             {startScreen === 'home' && (
               <>
                 <div className="start-title">Bit Planes</div>
@@ -1501,7 +1559,10 @@ function App() {
                   <button className="start-option" type="button" onClick={() => setStartScreen('join')}>
                     Join
                   </button>
-                  <button className="start-option start-primary" type="button" onClick={() => setStartScreen('create')}>
+                  <button className="start-option start-primary" type="button" onClick={() => {
+                    setRoomLobby(null);
+                    setStartScreen('create');
+                  }}>
                     Create
                   </button>
                 </div>
@@ -1546,6 +1607,14 @@ function App() {
             {startScreen === 'create' && (
               <>
                 <div className="start-title">Create Room</div>
+                <input
+                  className="room-code-input room-name-input"
+                  value={roomPlayerName}
+                  maxLength="14"
+                  placeholder="YOUR NAME"
+                  aria-label="Your player name"
+                  onChange={(event) => setRoomPlayerName(event.target.value)}
+                />
                 <div className="room-rule-row" aria-label="Room theme">
                   <button
                     className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
@@ -1574,11 +1643,89 @@ function App() {
                   <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
                     Back
                   </button>
-                  <button className="start-option start-primary" type="button" onClick={() => {
-                    setGameMode('room');
-                    startGame();
+                  <button className="start-option start-primary" type="button" onClick={createRoomLobby}>
+                    Create
+                  </button>
+                </div>
+              </>
+            )}
+            {startScreen === 'room-waiting' && roomLobby && (
+              <>
+                <div className="room-lobby-header">
+                  <div>
+                    <div className="start-title">Room</div>
+                    <div className="room-subtitle">Waiting for players</div>
+                  </div>
+                  <div className="room-count-badge" aria-label={`${roomPlayers.length} of ${ROOM_MAX_PLAYERS} players`}>
+                    {roomPlayers.length}/{ROOM_MAX_PLAYERS}
+                  </div>
+                </div>
+                <div className="room-code-card" aria-label={`Room code ${roomLobby.code}`}>
+                  <span>Code</span>
+                  <strong>{roomLobby.code}</strong>
+                </div>
+                <div className="room-rule-row" aria-label="Room theme">
+                  <button
+                    className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
+                    type="button"
+                    aria-pressed={roomTheme === 'dark'}
+                    onClick={() => {
+                      setRoomTheme('dark');
+                      setTheme('dark');
+                    }}
+                  >
+                    Dark
+                  </button>
+                  <button
+                    className={`room-rule-button${roomTheme === 'light' ? ' room-rule-active' : ''}`}
+                    type="button"
+                    aria-pressed={roomTheme === 'light'}
+                    onClick={() => {
+                      setRoomTheme('light');
+                      setTheme('light');
+                    }}
+                  >
+                    Light
+                  </button>
+                </div>
+                <div className="room-player-grid" aria-label="Room players">
+                  {roomSlots.map((player, index) => {
+                    const colorAsset = player ? PLANE_COLOR_ASSETS[player.color] : null;
+                    return (
+                      <div key={index} className={`room-player-slot${player ? ' room-player-filled' : ' room-player-empty'}`}>
+                        {player ? (
+                          <>
+                            <img
+                              src={colorAsset.staticSrc}
+                              alt=""
+                              draggable="false"
+                              aria-hidden="true"
+                              style={{ filter: colorAsset.filter || 'none' }}
+                            />
+                            <div className="room-player-copy">
+                              <strong>{player.name}</strong>
+                              <span>{player.role} - {colorAsset.label}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <span className="room-empty-number">{index + 1}</span>
+                            <span>Waiting</span>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="start-actions">
+                  <button className="start-option" type="button" onClick={() => {
+                    setRoomLobby(null);
+                    setStartScreen('room');
                   }}>
-                    Start
+                    Leave
+                  </button>
+                  <button className="start-option start-primary" type="button" disabled>
+                    Start Soon
                   </button>
                 </div>
               </>
@@ -3716,6 +3863,7 @@ function BitPlane({ rocketsRemaining, planeColor, planeLightCombo, searchLightAc
         '--plane-back-light-glow': lightCombo.backGlow,
         '--plane-back-light-glow-soft': lightCombo.backGlowSoft,
         '--plane-back-light-glow-wide': lightCombo.backGlowWide,
+        '--plane-body-filter': planeAssets.filter || 'none',
       }}
     >
       <span className="plane-search-light" aria-hidden="true" />
