@@ -1259,8 +1259,16 @@ function App() {
           <div className="help-rule"><kbd>S</kbd><span>Slow / land</span></div>
           <div className="help-rule"><kbd>Space</kbd><span>Bullets</span></div>
           <div className="help-rule"><kbd>R</kbd><span>Rockets</span></div>
+          <div className="help-rule help-note"><kbd>Start</kbd><span>Bots fight you and each other.</span></div>
+          <div className="help-rule"><kbd>Train</kbd><span>No bots. Practice flying.</span></div>
+          <div className="help-rule"><kbd>Land</kbd><span>Touch grass softly on wheels.</span></div>
           <div className="help-rule help-note"><i className="help-fuel-dot" /><span>Purple dots are fuel stations</span></div>
-          <div className="help-rule help-note"><kbd>Fuel</kbd><span>20 seconds. Touch station to refill.</span></div>
+          <div className="help-rule"><i className="help-enemy-dot" /><span>Red dots are enemy bots</span></div>
+          <div className="help-rule help-note"><kbd>Fuel</kbd><span>20 seconds. Station refills and repairs.</span></div>
+          <div className="help-rule"><kbd>Ammo</kbd><span>Bullets refill every 7 seconds.</span></div>
+          <div className="help-rule"><kbd>Rocket</kbd><span>Tracks nearest target for 4 seconds.</span></div>
+          <div className="help-rule"><kbd>Hit</kbd><span>First hit smokes, second hit blasts.</span></div>
+          <div className="help-rule"><kbd>Score</kbd><span>Kills reset on death. High score stays.</span></div>
         </div>
       )}
       {planeMenuOpen && (

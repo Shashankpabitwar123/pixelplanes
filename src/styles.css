@@ -522,7 +522,7 @@ button {
   z-index: 22;
   left: 20px;
   top: 204px;
-  width: 206px;
+  width: 248px;
   padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.48);
   border-radius: 8px;
@@ -576,6 +576,16 @@ button {
   background: #8c55ff;
   border: 1px solid rgba(62, 15, 105, 0.8);
   box-shadow: 0 0 8px rgba(140, 85, 255, 0.88);
+}
+
+.help-enemy-dot {
+  justify-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff2838;
+  border: 1px solid rgba(110, 5, 18, 0.8);
+  box-shadow: 0 0 8px rgba(255, 40, 56, 0.86);
 }
 
 .plane-color-panel {
