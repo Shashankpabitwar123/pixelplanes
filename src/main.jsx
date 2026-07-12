@@ -1767,7 +1767,15 @@ function App() {
                       </button>
                     )}
                   </div>
-                  <button className="start-option start-primary" type="button" disabled>
+                  <button
+                    className="start-option start-primary"
+                    type="button"
+                    disabled={!roomIsHost}
+                    onClick={() => {
+                      setGameMode('room');
+                      startGame();
+                    }}
+                  >
                     Start
                   </button>
                 </div>
