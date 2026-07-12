@@ -502,6 +502,125 @@ function playPlaneBulletHitSound(existingContext = null, muted = false) {
   }, 340);
 }
 
+function playPlaneBlastSound(existingContext = null, impact = 1, muted = false) {
+  if (muted) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  const context = existingContext && existingContext.state !== 'closed' ? existingContext : AudioContextClass ? new AudioContextClass() : null;
+  if (!context) return;
+  context.resume?.();
+
+  const t = context.currentTime;
+  const amount = clamp(impact, 0.75, 1.8);
+  const limiter = context.createDynamicsCompressor();
+  limiter.threshold.setValueAtTime(-9, t);
+  limiter.knee.setValueAtTime(16, t);
+  limiter.ratio.setValueAtTime(8, t);
+  limiter.attack.setValueAtTime(0.003, t);
+  limiter.release.setValueAtTime(0.22, t);
+  limiter.connect(context.destination);
+
+  const distortion = context.createWaveShaper();
+  const curve = new Float32Array(384);
+  for (let index = 0; index < curve.length; index += 1) {
+    const x = (index * 2) / (curve.length - 1) - 1;
+    curve[index] = Math.tanh(x * 4.2);
+  }
+  distortion.curve = curve;
+  distortion.oversample = '4x';
+  distortion.connect(limiter);
+
+  const master = context.createGain();
+  master.gain.setValueAtTime(0.0001, t);
+  master.gain.exponentialRampToValueAtTime(1.32 * amount, t + 0.012);
+  master.gain.exponentialRampToValueAtTime(0.0001, t + 1.06);
+  master.connect(distortion);
+
+  const makeNoise = (seconds, power = 2.2) => {
+    const bufferLength = Math.floor(context.sampleRate * seconds);
+    const buffer = context.createBuffer(1, bufferLength, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let index = 0; index < bufferLength; index += 1) {
+      const fade = 1 - index / bufferLength;
+      data[index] = (Math.random() * 2 - 1) * Math.pow(fade, power);
+    }
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    return source;
+  };
+
+  const boom = context.createOscillator();
+  const boomGain = context.createGain();
+  const boomFilter = context.createBiquadFilter();
+  boom.type = 'triangle';
+  boom.frequency.setValueAtTime(96 * amount, t);
+  boom.frequency.exponentialRampToValueAtTime(26, t + 0.48);
+  boomFilter.type = 'lowpass';
+  boomFilter.frequency.setValueAtTime(520, t);
+  boomFilter.frequency.exponentialRampToValueAtTime(96, t + 0.54);
+  boomGain.gain.setValueAtTime(1.1, t);
+  boomGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.58);
+  boom.connect(boomFilter);
+  boomFilter.connect(boomGain);
+  boomGain.connect(master);
+
+  const crack = makeNoise(0.2, 4.1);
+  const crackFilter = context.createBiquadFilter();
+  const crackGain = context.createGain();
+  crackFilter.type = 'bandpass';
+  crackFilter.frequency.setValueAtTime(2400, t);
+  crackFilter.frequency.exponentialRampToValueAtTime(640, t + 0.16);
+  crackFilter.Q.value = 1.7;
+  crackGain.gain.setValueAtTime(1.35, t);
+  crackGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+  crack.connect(crackFilter);
+  crackFilter.connect(crackGain);
+  crackGain.connect(master);
+
+  const rumble = makeNoise(0.78, 1.7);
+  const rumbleFilter = context.createBiquadFilter();
+  const rumbleGain = context.createGain();
+  rumbleFilter.type = 'lowpass';
+  rumbleFilter.frequency.setValueAtTime(820, t + 0.04);
+  rumbleFilter.frequency.exponentialRampToValueAtTime(135, t + 0.82);
+  rumbleGain.gain.setValueAtTime(0.72, t + 0.04);
+  rumbleGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+  rumble.connect(rumbleFilter);
+  rumbleFilter.connect(rumbleGain);
+  rumbleGain.connect(master);
+
+  const metalFrequencies = [840, 1320, 1960];
+  const metalNodes = metalFrequencies.map((frequency, index) => {
+    const clang = context.createOscillator();
+    const clangGain = context.createGain();
+    clang.type = index % 2 ? 'square' : 'sawtooth';
+    clang.frequency.setValueAtTime(frequency * amount, t + 0.008 * index);
+    clang.frequency.exponentialRampToValueAtTime(frequency * 0.36, t + 0.24 + index * 0.03);
+    clangGain.gain.setValueAtTime(0.22 / (index + 1), t + 0.008 * index);
+    clangGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.28 + index * 0.04);
+    clang.connect(clangGain);
+    clangGain.connect(master);
+    return clang;
+  });
+
+  boom.start(t);
+  crack.start(t);
+  rumble.start(t + 0.04);
+  metalNodes.forEach((node, index) => {
+    node.start(t + 0.008 * index);
+    node.stop(t + 0.32 + index * 0.04);
+  });
+  boom.stop(t + 0.62);
+  crack.stop(t + 0.22);
+  rumble.stop(t + 0.94);
+
+  window.setTimeout(() => {
+    master.disconnect();
+    distortion.disconnect();
+    limiter.disconnect();
+    if (context !== existingContext) context.close?.();
+  }, 1180);
+}
+
 function getGroundClippedWorldProjectile(startYVh, dxVw, dyVh, fullLifeMs, minLifeMs) {
   const groundHit = dyVh > 0 && Math.max(0, startYVh) <= dyVh;
   const ratio = groundHit ? clamp(Math.max(0, startYVh) / dyVh, 0, 1) : 1;
@@ -2492,8 +2611,9 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
     setBotDamage(next.damage);
     setBotSmokeParticles([]);
     setBotCrashed(true);
+    playPlaneBlastSound(null, next.crashImpact, sfxMuted);
     onBotMove(next);
-  }, [onBotMove]);
+  }, [onBotMove, sfxMuted]);
 
   const damageBotByBullet = useCallback(() => {
     const current = stateRef.current;
@@ -2950,6 +3070,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
         setBotDamage(next.damage ?? 2);
         setBotSmokeParticles([]);
         setBotCrashed(true);
+        playPlaneBlastSound(null, next.crashImpact, sfxMuted);
         renderBot(stateRef.current);
         frame = requestAnimationFrame(update);
         return;
@@ -2961,7 +3082,7 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [active, paused, playerApiRef, playerStateRef, onBotMove, crashBot]);
+  }, [active, paused, playerApiRef, playerStateRef, onBotMove, crashBot, sfxMuted]);
 
   if (!active) return null;
 
