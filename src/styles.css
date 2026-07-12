@@ -434,6 +434,11 @@ button {
   opacity: 0.46;
 }
 
+.room-board-control-spacer {
+  width: 28px;
+  height: 28px;
+}
+
 .room-board-mic {
   color: #eef8ff;
 }

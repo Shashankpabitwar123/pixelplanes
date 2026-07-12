@@ -1078,6 +1078,11 @@ function App() {
   const roomSocketRef = useRef(null);
   const liveKitRoomRef = useRef(null);
   const voiceAudioElementsRef = useRef(new Map());
+  const voiceLevelsRef = useRef({});
+  const localVoiceMeterRef = useRef({ frame: 0, cleanup: null });
+  const roomVoiceEnabledRef = useRef(roomVoiceEnabled);
+  const roomSpeakerEnabledRef = useRef(roomSpeakerEnabled);
+  const roomMutedPlayersRef = useRef(roomMutedPlayers);
   const musicAudioRef = useRef(null);
   const rainAudioRef = useRef(null);
   const rainSoundStartTimerRef = useRef(0);
@@ -1119,24 +1124,92 @@ function App() {
     setRemoteProjectiles(next);
   }, []);
   const setRemoteAudioMuted = useCallback((muted) => {
-    for (const element of voiceAudioElementsRef.current.values()) {
-      element.muted = muted;
-      element.volume = muted ? 0 : 1;
+    const globalMuted = Boolean(muted);
+    for (const record of voiceAudioElementsRef.current.values()) {
+      const element = record.element || record;
+      const playerMuted = record.playerId ? Boolean(roomMutedPlayersRef.current[record.playerId]) : false;
+      const shouldMute = globalMuted || playerMuted;
+      element.muted = shouldMute;
+      element.volume = shouldMute ? 0 : 1;
     }
   }, []);
+  const updateVoiceLevels = useCallback((updater) => {
+    setVoiceLevels((current) => {
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      voiceLevelsRef.current = next;
+      return next;
+    });
+  }, []);
+  const stopLocalVoiceMeter = useCallback(() => {
+    const meter = localVoiceMeterRef.current;
+    if (meter.frame) window.cancelAnimationFrame(meter.frame);
+    meter.cleanup?.();
+    localVoiceMeterRef.current = { frame: 0, cleanup: null };
+    const playerId = localRoomPlayerIdRef.current;
+    if (playerId) {
+      updateVoiceLevels((current) => ({
+        ...current,
+        [playerId]: { speaking: false, level: 0 },
+      }));
+    }
+  }, [updateVoiceLevels]);
+  const startLocalVoiceMeter = useCallback((publication, createAudioAnalyser) => {
+    const track = publication?.track;
+    if (!track || track.kind !== 'audio' || !createAudioAnalyser) {
+      stopLocalVoiceMeter();
+      return;
+    }
+
+    stopLocalVoiceMeter();
+    const analyser = createAudioAnalyser(track, {
+      cloneTrack: true,
+      fftSize: 512,
+      smoothingTimeConstant: 0.55,
+      minDecibels: -72,
+      maxDecibels: -18,
+    });
+
+    const tick = () => {
+      const playerId = localRoomPlayerIdRef.current;
+      const enabled = roomVoiceEnabledRef.current;
+      const volume = enabled ? analyser.calculateVolume() : 0;
+      const nextLevel = !enabled || volume < 0.018 ? 0 : volume > 0.16 ? 3 : volume > 0.075 ? 2 : 1;
+      const nextSpeaking = nextLevel > 0;
+
+      if (playerId) {
+        updateVoiceLevels((current) => {
+          const previous = current[playerId] || { speaking: false, level: 0 };
+          if (previous.speaking === nextSpeaking && previous.level === nextLevel) return current;
+          return {
+            ...current,
+            [playerId]: { speaking: nextSpeaking, level: nextLevel },
+          };
+        });
+      }
+
+      localVoiceMeterRef.current.frame = window.requestAnimationFrame(tick);
+    };
+
+    localVoiceMeterRef.current = {
+      frame: window.requestAnimationFrame(tick),
+      cleanup: analyser.cleanup,
+    };
+  }, [stopLocalVoiceMeter, updateVoiceLevels]);
   const disconnectRoomVoice = useCallback(() => {
+    stopLocalVoiceMeter();
     const liveKitRoom = liveKitRoomRef.current;
     if (liveKitRoom) {
       liveKitRoom.disconnect();
       liveKitRoomRef.current = null;
     }
-    for (const element of voiceAudioElementsRef.current.values()) {
+    for (const record of voiceAudioElementsRef.current.values()) {
+      const element = record.element || record;
       element.remove();
     }
     voiceAudioElementsRef.current.clear();
-    setVoiceLevels({});
+    updateVoiceLevels({});
     setVoiceStatus('idle');
-  }, []);
+  }, [stopLocalVoiceMeter, updateVoiceLevels]);
   const connectRoomVoice = useCallback(async () => {
     if (!MULTIPLAYER_API_URL || !roomLobby?.code || !localRoomPlayerId) return;
     const currentRoom = liveKitRoomRef.current;
@@ -1157,20 +1230,22 @@ function App() {
         throw new Error(voiceConfig.error || 'Voice is not available yet.');
       }
 
-      const { Room, RoomEvent, Track } = await import('livekit-client');
+      const { Room, RoomEvent, Track, createAudioAnalyser } = await import('livekit-client');
       const liveKitRoom = new Room();
       liveKitRoomRef.current = liveKitRoom;
 
-      liveKitRoom.on(RoomEvent.TrackSubscribed, (track, publication) => {
+      liveKitRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind !== Track.Kind.Audio) return;
+        const playerId = participant?.identity || publication?.participant?.identity || '';
         const audioElement = track.attach();
         audioElement.autoplay = true;
         audioElement.playsInline = true;
-        audioElement.muted = !roomSpeakerEnabled;
-        audioElement.volume = roomSpeakerEnabled ? 1 : 0;
+        const shouldMute = !roomSpeakerEnabledRef.current || Boolean(roomMutedPlayersRef.current[playerId]);
+        audioElement.muted = shouldMute;
+        audioElement.volume = shouldMute ? 0 : 1;
         audioElement.style.display = 'none';
         const audioId = publication.trackSid || track.sid || crypto.randomUUID();
-        voiceAudioElementsRef.current.set(audioId, audioElement);
+        voiceAudioElementsRef.current.set(audioId, { element: audioElement, playerId });
         document.body.appendChild(audioElement);
       });
 
@@ -1180,23 +1255,34 @@ function App() {
         if (audioId) voiceAudioElementsRef.current.delete(audioId);
       });
 
+      liveKitRoom.on(RoomEvent.LocalTrackPublished, (publication) => {
+        if (publication.track?.kind === Track.Kind.Audio && roomVoiceEnabledRef.current) {
+          startLocalVoiceMeter(publication, createAudioAnalyser);
+        }
+      });
+
       liveKitRoom.on(RoomEvent.ActiveSpeakersChanged, (participants) => {
-        const nextLevels = {};
+        const localPlayerId = localRoomPlayerIdRef.current;
+        const currentLevels = voiceLevelsRef.current;
+        const nextLevels = localPlayerId && currentLevels[localPlayerId] ? { [localPlayerId]: currentLevels[localPlayerId] } : {};
         participants.forEach((participant) => {
+          if (participant.identity === localPlayerId) return;
           nextLevels[participant.identity] = {
             speaking: participant.isSpeaking,
             level: Math.max(1, Math.min(3, Math.ceil((participant.audioLevel || 0) * 3))),
           };
         });
-        setVoiceLevels(nextLevels);
+        updateVoiceLevels(nextLevels);
       });
 
       liveKitRoom.on(RoomEvent.Disconnected, () => {
-        for (const element of voiceAudioElementsRef.current.values()) {
+        stopLocalVoiceMeter();
+        for (const record of voiceAudioElementsRef.current.values()) {
+          const element = record.element || record;
           element.remove();
         }
         voiceAudioElementsRef.current.clear();
-        setVoiceLevels({});
+        updateVoiceLevels({});
         setVoiceStatus('idle');
         if (liveKitRoomRef.current === liveKitRoom) {
           liveKitRoomRef.current = null;
@@ -1204,15 +1290,20 @@ function App() {
       });
 
       await liveKitRoom.connect(voiceConfig.url, voiceConfig.token);
-      await liveKitRoom.localParticipant.setMicrophoneEnabled(roomVoiceEnabled);
-      setRemoteAudioMuted(!roomSpeakerEnabled);
+      const publication = await liveKitRoom.localParticipant.setMicrophoneEnabled(roomVoiceEnabled);
+      if (roomVoiceEnabled && publication?.track) {
+        startLocalVoiceMeter(publication, createAudioAnalyser);
+      } else {
+        stopLocalVoiceMeter();
+      }
+      setRemoteAudioMuted(!roomSpeakerEnabledRef.current);
       setVoiceStatus('connected');
     } catch (error) {
       disconnectRoomVoice();
       setVoiceStatus('error');
       setRoomError(error.message);
     }
-  }, [disconnectRoomVoice, localRoomPlayerId, roomLobby?.code, roomSpeakerEnabled, roomVoiceEnabled, setRemoteAudioMuted]);
+  }, [disconnectRoomVoice, localRoomPlayerId, roomLobby?.code, roomVoiceEnabled, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, updateVoiceLevels]);
   const applyServerRoomState = useCallback((room, playerId = localRoomPlayerId) => {
     if (!room) return;
     setRoomLobby(room);
@@ -1738,6 +1829,22 @@ function App() {
   }, [localRoomPlayerId]);
 
   useEffect(() => {
+    roomVoiceEnabledRef.current = roomVoiceEnabled;
+  }, [roomVoiceEnabled]);
+
+  useEffect(() => {
+    roomSpeakerEnabledRef.current = roomSpeakerEnabled;
+  }, [roomSpeakerEnabled]);
+
+  useEffect(() => {
+    roomMutedPlayersRef.current = roomMutedPlayers;
+  }, [roomMutedPlayers]);
+
+  useEffect(() => {
+    voiceLevelsRef.current = voiceLevels;
+  }, [voiceLevels]);
+
+  useEffect(() => {
     let stopped = false;
     const timers = shootingStarTimersRef.current;
 
@@ -1877,15 +1984,31 @@ function App() {
   useEffect(() => {
     const liveKitRoom = liveKitRoomRef.current;
     if (!liveKitRoom || liveKitRoom.state !== 'connected') return;
-    liveKitRoom.localParticipant.setMicrophoneEnabled(roomVoiceEnabled).catch((error) => {
-      setVoiceStatus('error');
-      setRoomError(error.message);
-    });
-  }, [roomVoiceEnabled]);
+    let cancelled = false;
+    liveKitRoom.localParticipant.setMicrophoneEnabled(roomVoiceEnabled)
+      .then(async (publication) => {
+        if (cancelled) return;
+        if (!roomVoiceEnabled || !publication?.track) {
+          stopLocalVoiceMeter();
+          return;
+        }
+        const { createAudioAnalyser } = await import('livekit-client');
+        if (!cancelled) startLocalVoiceMeter(publication, createAudioAnalyser);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        stopLocalVoiceMeter();
+        setVoiceStatus('error');
+        setRoomError(error.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomVoiceEnabled, startLocalVoiceMeter, stopLocalVoiceMeter]);
 
   useEffect(() => {
     setRemoteAudioMuted(!roomSpeakerEnabled);
-  }, [roomSpeakerEnabled, setRemoteAudioMuted]);
+  }, [roomMutedPlayers, roomSpeakerEnabled, setRemoteAudioMuted]);
 
   useEffect(() => {
     if (gameMode !== 'room' || !gameStarted) return;
@@ -1900,7 +2023,7 @@ function App() {
     .map((player) => {
       const isLocalPlayer = localRoomPlayerId ? player.id === localRoomPlayerId : player.id === 'host';
       const micEnabled = isLocalPlayer ? roomVoiceEnabled : player.micEnabled !== false;
-      const speakerEnabled = isLocalPlayer ? roomSpeakerEnabled : !roomMutedPlayers[player.id] && player.speakerEnabled !== false;
+      const speakerEnabled = isLocalPlayer ? roomSpeakerEnabled : roomSpeakerEnabled && !roomMutedPlayers[player.id];
       const voiceActivity = voiceLevels[player.id] ?? { speaking: false, level: 0 };
       const voiceLevel = voiceActivity.speaking ? voiceActivity.level : 0;
       return {
@@ -2030,26 +2153,29 @@ function App() {
               <span className="room-rank">{index + 1}</span>
               <span className="room-board-name">{player.name}</span>
               <strong className="room-board-kills">{player.kills}</strong>
-              <button
-                className={`room-board-control room-board-mic${player.micEnabled ? '' : ' room-board-muted'}`}
-                type="button"
-                aria-label={player.micEnabled ? `Turn ${player.name} microphone off` : `Turn ${player.name} microphone on`}
-                aria-pressed={player.micEnabled}
-                disabled={!player.isLocalPlayer}
-                onClick={() => {
-                  if (player.isLocalPlayer) setRoomVoiceEnabled((enabled) => !enabled);
-                }}
-              >
-                <RoomMicIcon className="room-board-mic-icon" />
-              </button>
+              {player.isLocalPlayer ? (
+                <button
+                  className={`room-board-control room-board-mic${player.micEnabled ? '' : ' room-board-muted'}`}
+                  type="button"
+                  aria-label={player.micEnabled ? 'Turn your microphone off' : 'Turn your microphone on'}
+                  aria-pressed={player.micEnabled}
+                  onClick={toggleRoomVoice}
+                >
+                  <RoomMicIcon className="room-board-mic-icon" />
+                </button>
+              ) : (
+                <span className="room-board-control-spacer" aria-hidden="true" />
+              )}
               <button
                 className={`room-board-control room-board-speaker${player.speakerEnabled ? '' : ' room-board-muted'}`}
                 type="button"
-                aria-label={player.speakerEnabled ? `Turn ${player.name} speaker off` : `Turn ${player.name} speaker on`}
+                aria-label={player.isLocalPlayer
+                  ? player.speakerEnabled ? 'Mute all players' : 'Unmute all players'
+                  : player.speakerEnabled ? `Mute ${player.name}` : `Unmute ${player.name}`}
                 aria-pressed={player.speakerEnabled}
                 onClick={() => {
                   if (player.isLocalPlayer) {
-                    setRoomSpeakerEnabled((enabled) => !enabled);
+                    toggleRoomSpeaker();
                   } else {
                     toggleRoomPlayerMute(player.id);
                   }
