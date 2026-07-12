@@ -1870,6 +1870,57 @@ button {
   animation-delay: 0.51s;
 }
 
+.damage-smoke-layer {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  pointer-events: none;
+}
+
+.bot-damage-smoke-layer {
+  z-index: 11;
+}
+
+.damage-smoke-particle {
+  position: absolute;
+  width: clamp(12px, 1vw, 21px);
+  aspect-ratio: 1.5;
+  opacity: 0;
+  border-radius: 999px;
+  transform: translate(-50%, 50%) scale(0.28);
+  filter: blur(0.55px);
+  background:
+    radial-gradient(ellipse at 30% 46%, rgba(244, 248, 248, 0.78) 0 18%, rgba(145, 156, 159, 0.6) 34%, rgba(55, 63, 66, 0.3) 56%, transparent 74%),
+    radial-gradient(ellipse at 68% 56%, rgba(222, 230, 230, 0.54) 0 22%, rgba(93, 103, 107, 0.36) 48%, transparent 76%);
+  animation: damageSmokeParticle var(--damage-smoke-life, 1450ms) ease-out forwards;
+  will-change: transform, opacity;
+}
+
+.damage-smoke-particle::before,
+.damage-smoke-particle::after {
+  content: "";
+  position: absolute;
+  display: block;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.damage-smoke-particle::before {
+  left: 5%;
+  top: 22%;
+  width: 58%;
+  height: 56%;
+  background: radial-gradient(ellipse, rgba(238, 243, 243, 0.54) 0 24%, rgba(104, 114, 118, 0.32) 50%, transparent 74%);
+}
+
+.damage-smoke-particle::after {
+  right: 4%;
+  top: 6%;
+  width: 50%;
+  height: 62%;
+  background: radial-gradient(ellipse, rgba(191, 201, 203, 0.38) 0 30%, rgba(54, 62, 65, 0.22) 54%, transparent 78%);
+}
+
 .bullet-projectiles {
   position: absolute;
   z-index: 11;
@@ -2181,57 +2232,6 @@ button {
   left: 88.5%;
   top: 17%;
   background: var(--plane-back-light, #2cff65);
-}
-
-.plane-damage-smoke {
-  position: absolute;
-  z-index: 2;
-  left: -23%;
-  top: 48%;
-  width: 126%;
-  height: 88%;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-8%, -50%) rotate(var(--smoke-counter-angle, 0deg));
-  transform-origin: 8% 50%;
-  background: transparent;
-  filter: blur(0.34px);
-}
-
-.plane-damage-smoke::before,
-.plane-damage-smoke::after {
-  content: "";
-  position: absolute;
-  display: block;
-  border-radius: 999px;
-  background:
-    radial-gradient(ellipse 12% 18% at 18% 52%, rgba(246, 249, 249, 0.34) 0 30%, rgba(116, 126, 130, 0.28) 42%, transparent 72%),
-    radial-gradient(ellipse 20% 28% at 34% 44%, rgba(236, 241, 241, 0.76) 0 22%, rgba(126, 137, 141, 0.58) 38%, rgba(37, 43, 46, 0.24) 58%, transparent 76%),
-    radial-gradient(ellipse 26% 32% at 58% 57%, rgba(220, 228, 228, 0.7) 0 24%, rgba(98, 108, 112, 0.5) 40%, rgba(29, 34, 36, 0.2) 62%, transparent 80%),
-    radial-gradient(ellipse 22% 30% at 78% 42%, rgba(205, 215, 216, 0.5) 0 28%, rgba(74, 82, 86, 0.34) 48%, transparent 78%);
-  filter: blur(0.5px);
-}
-
-.plane-damage-smoke::before {
-  left: 0;
-  top: 6%;
-  width: 112%;
-  height: 88%;
-  animation: planeDamageSmoke 1.26s ease-out infinite;
-}
-
-.plane-damage-smoke::after {
-  left: 10%;
-  top: -10%;
-  width: 118%;
-  height: 96%;
-  opacity: 0.78;
-  animation: planeDamageSmoke 1.26s ease-out infinite;
-  animation-delay: -630ms;
-}
-
-.plane-damaged .plane-damage-smoke {
-  opacity: 1;
 }
 
 .scene-dark .plane-nav-light {
@@ -2774,25 +2774,25 @@ button {
   }
 }
 
-@keyframes planeDamageSmoke {
+@keyframes damageSmokeParticle {
   0% {
     opacity: 0;
-    transform: translate(7%, -3%) scale(0.48);
+    transform: translate(-50%, 50%) scale(0.25);
   }
 
-  18% {
-    opacity: 0.86;
-    transform: translate(18%, -4%) scale(0.82);
+  14% {
+    opacity: var(--damage-smoke-opacity, 0.58);
+    transform: translate(-50%, 50%) scale(0.52);
   }
 
-  56% {
-    opacity: 0.58;
-    transform: translate(38%, -8%) scale(1.18);
+  58% {
+    opacity: 0.38;
+    transform: translate(calc(-50% + var(--damage-smoke-dx, 7vw)), calc(50% + var(--damage-smoke-dy, 0vh))) scale(0.9);
   }
 
   100% {
     opacity: 0;
-    transform: translate(var(--smoke-dx, 60%), var(--smoke-dy, -18%)) scale(1.72);
+    transform: translate(calc(-50% + var(--damage-smoke-dx, 7vw)), calc(50% + var(--damage-smoke-dy, 0vh))) scale(var(--damage-smoke-scale, 1.1));
   }
 }
 
