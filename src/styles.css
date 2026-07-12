@@ -2412,19 +2412,19 @@ button {
 .plane-search-light {
   position: absolute;
   z-index: 0;
-  left: 3%;
-  top: 48%;
-  width: clamp(86px, 11vw, 220px);
-  height: clamp(24px, 3.9vw, 74px);
-  border-radius: 999px;
+  left: 4%;
+  top: 49%;
+  width: clamp(96px, 13vw, 260px);
+  height: clamp(34px, 5vw, 96px);
   opacity: 0;
   pointer-events: none;
-  transform: translate(-96%, -50%) scaleX(0.96);
+  transform: translate(-98%, -50%) scaleX(0.96);
   transform-origin: 100% 50%;
+  clip-path: polygon(100% 44%, 0 0, 0 100%, 100% 56%);
   background:
-    radial-gradient(ellipse at 98% 50%, rgba(255, 247, 174, 0.78) 0%, rgba(255, 225, 91, 0.36) 20%, rgba(255, 235, 132, 0.16) 48%, transparent 76%),
-    linear-gradient(to left, rgba(255, 236, 126, 0.3), rgba(255, 244, 176, 0.06) 56%, transparent 100%);
-  filter: blur(1.3px);
+    radial-gradient(ellipse at 98% 50%, rgba(255, 247, 174, 0.82) 0%, rgba(255, 228, 84, 0.38) 12%, transparent 24%),
+    linear-gradient(to left, rgba(255, 236, 126, 0.34) 0%, rgba(255, 244, 176, 0.17) 46%, rgba(255, 248, 196, 0.02) 100%);
+  filter: blur(0.9px);
   mix-blend-mode: screen;
 }
 
@@ -2872,12 +2872,12 @@ button {
 @keyframes searchLightFlicker {
   0%,
   100% {
-    transform: translate(-96%, -50%) scaleX(0.96);
+    transform: translate(-98%, -50%) scaleX(0.96);
     filter: blur(1.2px) brightness(1);
   }
 
   45% {
-    transform: translate(-96%, -50%) scaleX(1.04);
+    transform: translate(-98%, -50%) scaleX(1.04);
     filter: blur(1.1px) brightness(1.16);
   }
 }
