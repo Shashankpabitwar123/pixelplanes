@@ -818,16 +818,19 @@ function App() {
       void fuelGaugeRef.current.offsetWidth;
       fuelGaugeRef.current.classList.add('fuel-gauge-refill-pulse');
     }
-    const timeoutId = window.setTimeout(() => {
+    const stationTimeoutId = window.setTimeout(() => {
       setFuelStationPulses((current) => {
         const next = { ...current };
         delete next[stationIndex];
         return next;
       });
-      fuelGaugeRef.current?.classList.remove('fuel-gauge-refill-pulse');
-      fuelPulseTimersRef.current = fuelPulseTimersRef.current.filter((timeout) => timeout !== timeoutId);
+      fuelPulseTimersRef.current = fuelPulseTimersRef.current.filter((timeout) => timeout !== stationTimeoutId);
     }, 1000);
-    fuelPulseTimersRef.current.push(timeoutId);
+    const meterTimeoutId = window.setTimeout(() => {
+      fuelGaugeRef.current?.classList.remove('fuel-gauge-refill-pulse');
+      fuelPulseTimersRef.current = fuelPulseTimersRef.current.filter((timeout) => timeout !== meterTimeoutId);
+    }, 2000);
+    fuelPulseTimersRef.current.push(stationTimeoutId, meterTimeoutId);
   }, []);
   const updateAmmoStatus = useCallback((nextStatus) => {
     setAmmoStatus((current) =>

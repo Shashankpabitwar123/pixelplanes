@@ -1229,7 +1229,7 @@ button {
 
 .fuel-gauge-refill-pulse,
 .fuel-gauge.fuel-zone-0.fuel-gauge-refill-pulse {
-  animation: fuelGaugeRefillPulse 1s ease-out forwards;
+  animation: fuelGaugeRefillPulse 2s ease-out forwards;
 }
 
 @keyframes fuelBoxDangerPulse {
