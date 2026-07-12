@@ -989,6 +989,7 @@ function App() {
   const [roomTheme, setRoomTheme] = useState('dark');
   const [roomPlayerName, setRoomPlayerName] = useState('');
   const [roomLobby, setRoomLobby] = useState(null);
+  const [roomVoiceEnabled, setRoomVoiceEnabled] = useState(true);
   const [droppings, setDroppings] = useState([]);
   const [ammoStatus, setAmmoStatus] = useState({ count: MAX_BULLETS, reloading: false });
   const [rocketCount, setRocketCount] = useState(MAX_ROCKETS);
@@ -1690,28 +1691,40 @@ function App() {
                   <span>Code</span>
                   <strong>{roomLobby.code}</strong>
                 </div>
-                <div className={`room-theme-switch room-theme-${roomTheme}`} aria-label="Room theme">
+                <div className="room-settings-row">
+                  <div className={`room-theme-switch room-theme-switch-compact room-theme-${roomTheme}`} aria-label="Room theme">
+                    <button
+                      className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
+                      type="button"
+                      aria-pressed={roomTheme === 'dark'}
+                      onClick={() => {
+                        setRoomTheme('dark');
+                        setTheme('dark');
+                      }}
+                    >
+                      Dark
+                    </button>
+                    <button
+                      className={`room-rule-button${roomTheme === 'light' ? ' room-rule-active' : ''}`}
+                      type="button"
+                      aria-pressed={roomTheme === 'light'}
+                      onClick={() => {
+                        setRoomTheme('light');
+                        setTheme('light');
+                      }}
+                    >
+                      Light
+                    </button>
+                  </div>
                   <button
-                    className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
+                    className={`room-voice-toggle${roomVoiceEnabled ? ' room-voice-enabled' : ''}`}
                     type="button"
-                    aria-pressed={roomTheme === 'dark'}
-                    onClick={() => {
-                      setRoomTheme('dark');
-                      setTheme('dark');
-                    }}
+                    aria-pressed={roomVoiceEnabled}
+                    aria-label={roomVoiceEnabled ? 'Voice enabled' : 'Voice disabled'}
+                    onClick={() => setRoomVoiceEnabled((enabled) => !enabled)}
                   >
-                    Dark
-                  </button>
-                  <button
-                    className={`room-rule-button${roomTheme === 'light' ? ' room-rule-active' : ''}`}
-                    type="button"
-                    aria-pressed={roomTheme === 'light'}
-                    onClick={() => {
-                      setRoomTheme('light');
-                      setTheme('light');
-                    }}
-                  >
-                    Light
+                    <span className="room-voice-icon" aria-hidden="true" />
+                    <span>{roomVoiceEnabled ? 'Voice On' : 'Voice Off'}</span>
                   </button>
                 </div>
                 <div className="room-player-grid" aria-label="Room players">
