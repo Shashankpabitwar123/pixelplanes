@@ -676,7 +676,7 @@ button {
 }
 
 .start-card {
-  width: min(430px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
   min-height: 210px;
   display: flex;
   flex-direction: column;
@@ -712,6 +712,10 @@ button {
   grid-template-columns: repeat(2, minmax(118px, 1fr));
   gap: 12px;
   width: 100%;
+}
+
+.start-actions-home {
+  grid-template-columns: repeat(3, minmax(118px, 1fr));
 }
 
 .start-option,
@@ -3189,6 +3193,10 @@ button {
 
   .start-title {
     font-size: 28px;
+  }
+
+  .start-actions-home {
+    grid-template-columns: 1fr;
   }
 
   .start-option,

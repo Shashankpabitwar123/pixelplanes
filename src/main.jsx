@@ -868,6 +868,7 @@ function App() {
   const [gameStarted, setGameStarted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [startScreen, setStartScreen] = useState('home');
+  const [gameMode, setGameMode] = useState('bots');
   const [restartSignal, setRestartSignal] = useState(0);
   const [roomCode, setRoomCode] = useState('');
   const [roomTheme, setRoomTheme] = useState('dark');
@@ -912,7 +913,15 @@ function App() {
     setPaused((current) => !current);
   }, [gameStarted]);
   const armBotStart = useCallback(() => {
+    setGameMode('bots');
     setStartScreen('bot-ready');
+    setMusicOpen(false);
+    setHelpOpen(false);
+    setPlaneMenuOpen(false);
+  }, []);
+  const armTrainingStart = useCallback(() => {
+    setGameMode('training');
+    setStartScreen('training-ready');
     setMusicOpen(false);
     setHelpOpen(false);
     setPlaneMenuOpen(false);
@@ -999,6 +1008,7 @@ function App() {
     setGameStarted(false);
     setPaused(false);
     setStartScreen('home');
+    setGameMode('bots');
     setMusicOpen(false);
     setHelpOpen(false);
     setPlaneMenuOpen(false);
@@ -1032,8 +1042,8 @@ function App() {
     if (!dot) return;
     dot.style.left = `${Math.max(2, Math.min(98, (botState.x / WORLD_WIDTH) * 100))}%`;
     dot.style.top = `${Math.max(2, Math.min(98, 100 - ((botState.y + 50) / WORLD_HEIGHT) * 100))}%`;
-    dot.classList.toggle('map-bot-dot-active', gameStarted && Boolean(botState.engaged));
-  }, [gameStarted]);
+    dot.classList.toggle('map-bot-dot-active', gameMode === 'bots' && gameStarted && Boolean(botState.engaged));
+  }, [gameMode, gameStarted]);
   const addDropping = useCallback((x) => {
     const id = `${Date.now()}-${Math.random()}`;
     setDroppings((items) => [...items, { id, x }]);
@@ -1286,13 +1296,16 @@ function App() {
       )}
       {!gameStarted && (
         <div className="start-overlay" aria-label="Game start menu">
-          <div className={`start-card${startScreen === 'bot-ready' ? ' start-card-slim' : ''}`}>
+          <div className={`start-card${startScreen === 'bot-ready' || startScreen === 'training-ready' ? ' start-card-slim' : ''}`}>
             {startScreen === 'home' && (
               <>
                 <div className="start-title">Bit Planes</div>
-                <div className="start-actions">
+                <div className="start-actions start-actions-home">
                   <button className="start-option start-primary" type="button" onClick={armBotStart}>
                     Start
+                  </button>
+                  <button className="start-option" type="button" onClick={armTrainingStart}>
+                    Training
                   </button>
                   <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
                     Room
@@ -1316,7 +1329,7 @@ function App() {
                 </button>
               </>
             )}
-            {startScreen === 'bot-ready' && (
+            {(startScreen === 'bot-ready' || startScreen === 'training-ready') && (
               <div className="bot-start-prompt">
                 <span>Click</span>
                 <kbd>W</kbd>
@@ -1340,7 +1353,10 @@ function App() {
                   <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
                     Back
                   </button>
-                  <button className="start-option start-primary" type="button" onClick={startGame}>
+                  <button className="start-option start-primary" type="button" onClick={() => {
+                    setGameMode('room');
+                    startGame();
+                  }}>
                     Join
                   </button>
                 </div>
@@ -1377,7 +1393,10 @@ function App() {
                   <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
                     Back
                   </button>
-                  <button className="start-option start-primary" type="button" onClick={startGame}>
+                  <button className="start-option start-primary" type="button" onClick={() => {
+                    setGameMode('room');
+                    startGame();
+                  }}>
                     Start
                   </button>
                 </div>
@@ -1405,7 +1424,7 @@ function App() {
             }}
           />
         ))}
-        {botStateRefs.current.map((botState, index) => (
+        {gameMode === 'bots' && botStateRefs.current.map((botState, index) => (
           <span
             key={index}
             ref={(node) => {
@@ -1521,13 +1540,13 @@ function App() {
             controlsEnabled={gameStarted && !paused}
             paused={paused}
             restartSignal={restartSignal}
-            startArmed={startScreen === 'bot-ready'}
+            startArmed={startScreen === 'bot-ready' || startScreen === 'training-ready'}
             onPowerStart={startGame}
             planeColor={planeColor}
             planeLightCombo={planeLightCombo}
             sfxMuted={sfxMuted}
           />
-          {botStateRefs.current.map((_, index) => (
+          {gameMode === 'bots' && botStateRefs.current.map((_, index) => (
             <BotPlane
               key={index}
               botIndex={index}
