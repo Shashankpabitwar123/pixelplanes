@@ -1616,7 +1616,7 @@ function App() {
                   onChange={(event) => setRoomPlayerName(event.target.value)}
                 />
                 <div className="room-create-controls">
-                  <div className="room-theme-switch" aria-label="Room theme">
+                  <div className={`room-theme-switch room-theme-${roomTheme}`} aria-label="Room theme">
                     <button
                       className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
                       type="button"

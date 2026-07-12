@@ -859,14 +859,59 @@ button {
 }
 
 .room-theme-switch {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(96px, 1fr));
-  gap: 8px;
   width: 100%;
+  height: 48px;
+  padding: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(30, 47, 62, 0.24);
+  border-radius: 999px;
+  background: rgba(30, 47, 62, 0.22);
+  box-shadow:
+    inset 0 2px 5px rgba(12, 25, 35, 0.22),
+    inset 0 -2px 0 rgba(255, 255, 255, 0.12);
+}
+
+.room-theme-switch::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff66a 0%, #ffb52c 100%);
+  box-shadow:
+    0 0 12px rgba(255, 211, 54, 0.62),
+    inset 0 -2px 0 rgba(109, 58, 5, 0.24);
+  transition: transform 160ms ease;
+}
+
+.room-theme-switch.room-theme-light::before {
+  transform: translateX(100%);
 }
 
 .room-theme-switch .room-rule-button {
+  position: relative;
+  z-index: 1;
+  height: 100%;
   min-width: 0;
+  border: 0;
+  border-radius: 999px;
+  color: rgba(238, 248, 255, 0.82);
+  background: transparent;
+  box-shadow: none;
+  font-size: 16px;
+  transition: color 160ms ease;
+}
+
+.room-theme-switch .room-rule-active {
+  color: #14100a;
+  background: transparent;
+  box-shadow: none;
 }
 
 .room-lobby-header {
@@ -1717,6 +1762,24 @@ button {
 
 .scene-dark .room-code-input::placeholder {
   color: rgba(238, 248, 255, 0.56);
+}
+
+.scene-dark .room-theme-switch {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(10, 20, 38, 0.48);
+}
+
+.scene-dark .room-theme-switch .room-rule-button {
+  color: rgba(238, 248, 255, 0.8);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.scene-dark .room-theme-switch .room-rule-active {
+  color: #fff7bd;
+  background: transparent;
+  box-shadow: none;
 }
 
 .scene-dark .plane-color-active {
