@@ -825,6 +825,9 @@ function App() {
       return next;
     });
   }, []);
+  const resetCurrentKills = useCallback(() => {
+    setKillCount(0);
+  }, []);
   const restartGame = useCallback(() => {
     setGameStarted(false);
     setPaused(false);
@@ -1341,6 +1344,7 @@ function App() {
             onFuelChange={updateFuelGauge}
             onFuelRefill={triggerFuelRefillFeedback}
             onKill={recordPlayerKill}
+            onPlayerDeath={resetCurrentKills}
             onAmmoChange={updateAmmoStatus}
             onRocketChange={updateRocketStatus}
             onPlaneState={updatePlayerState}
@@ -1441,6 +1445,7 @@ function PlayablePlane({
   onFuelChange,
   onFuelRefill,
   onKill,
+  onPlayerDeath,
   onAmmoChange,
   onRocketChange,
   onPlaneState,
@@ -1564,6 +1569,7 @@ function PlayablePlane({
       setDamageSmokeParticles([]);
       setCrashed(true);
       crashSoundRef.current?.(next.crashImpact);
+      onPlayerDeath();
       onPlaneState(next);
       if (engineAudioRef.current) {
         engineAudioRef.current.master.gain.setTargetAtTime(0, engineAudioRef.current.context.currentTime, 0.025);
@@ -1597,7 +1603,7 @@ function PlayablePlane({
     return () => {
       if (playerApiRef.current) playerApiRef.current = null;
     };
-  }, [playerApiRef, onPlaneState]);
+  }, [playerApiRef, onPlayerDeath, onPlaneState]);
 
   useEffect(() => {
     sfxMutedRef.current = sfxMuted;
@@ -2562,6 +2568,7 @@ function PlayablePlane({
           damageSmokeLastEmitRef.current = 0;
           setDamageSmokeParticles([]);
           crashSoundRef.current?.(next.crashImpact);
+          onPlayerDeath();
         }
         crashedRef.current = next.crashed;
         setCrashed(next.crashed);
@@ -2611,7 +2618,7 @@ function PlayablePlane({
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [onMove, onFuelChange, onFuelRefill, onKill, onAmmoChange, onRocketChange, onPlaneState, botStateRefs, botApiRefs]);
+  }, [onMove, onFuelChange, onFuelRefill, onKill, onPlayerDeath, onAmmoChange, onRocketChange, onPlaneState, botStateRefs, botApiRefs]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
