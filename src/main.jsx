@@ -165,6 +165,16 @@ const fogBanks = Array.from({ length: 68 }, (_, index) => ({
   delay: `${-(seededRandom(index + 5801) * 9).toFixed(2)}s`,
 })).sort((a, b) => a.x - b.x);
 
+const rainDrops = Array.from({ length: 150 }, (_, index) => ({
+  id: index,
+  left: seededRandom(index + 6101) * 100,
+  top: seededRandom(index + 7101) * 108 - 8,
+  length: 14 + seededRandom(index + 8101) * 26,
+  opacity: 0.28 + seededRandom(index + 9101) * 0.44,
+  duration: 420 + seededRandom(index + 10101) * 340,
+  delay: `${-(seededRandom(index + 11101) * 1.2).toFixed(2)}s`,
+}));
+
 const stars = Array.from({ length: 720 }, (_, index) => ({
   id: index,
   x: 3 + seededRandom(index + 701) * (WORLD_WIDTH - 6),
@@ -631,6 +641,63 @@ function updateDamageSmokeParticles(current, plane, previousPlane, now, active, 
   return changed ? next : current;
 }
 
+function createRainAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+  const context = new AudioContextClass();
+  context.resume?.();
+  const duration = 2.4;
+  const bufferLength = Math.floor(context.sampleRate * duration);
+  const buffer = context.createBuffer(1, bufferLength, context.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let index = 0; index < bufferLength; index += 1) {
+    data[index] = Math.random() * 2 - 1;
+  }
+
+  const source = context.createBufferSource();
+  const highpass = context.createBiquadFilter();
+  const lowpass = context.createBiquadFilter();
+  const textureFilter = context.createBiquadFilter();
+  const master = context.createGain();
+
+  source.buffer = buffer;
+  source.loop = true;
+  highpass.type = 'highpass';
+  highpass.frequency.value = 520;
+  lowpass.type = 'lowpass';
+  lowpass.frequency.value = 5200;
+  textureFilter.type = 'peaking';
+  textureFilter.frequency.value = 1800;
+  textureFilter.Q.value = 0.85;
+  textureFilter.gain.value = 4.4;
+  master.gain.value = 0.0001;
+
+  source.connect(highpass);
+  highpass.connect(lowpass);
+  lowpass.connect(textureFilter);
+  textureFilter.connect(master);
+  master.connect(context.destination);
+  source.start();
+
+  return {
+    context,
+    gain: master.gain,
+    stop: () => {
+      const t = context.currentTime;
+      master.gain.cancelScheduledValues(t);
+      master.gain.setTargetAtTime(0.0001, t, 0.08);
+      window.setTimeout(() => {
+        source.stop();
+        master.disconnect();
+        textureFilter.disconnect();
+        lowpass.disconnect();
+        highpass.disconnect();
+        context.close?.();
+      }, 240);
+    },
+  };
+}
+
 function playPlaneBulletHitSound(existingContext = null, muted = false) {
   if (muted) return;
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -888,6 +955,7 @@ function App() {
   const [gameMode, setGameMode] = useState('bots');
   const [restartSignal, setRestartSignal] = useState(0);
   const [fogActive, setFogActive] = useState(false);
+  const [rainActive, setRainActive] = useState(false);
   const [roomCode, setRoomCode] = useState('');
   const [roomTheme, setRoomTheme] = useState('dark');
   const [droppings, setDroppings] = useState([]);
@@ -915,6 +983,7 @@ function App() {
   const playerApiRef = useRef(null);
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
   const musicAudioRef = useRef(null);
+  const rainAudioRef = useRef(null);
   const fuelPulseTimersRef = useRef([]);
   const shootingStarTimersRef = useRef([]);
   const startGame = useCallback(() => {
@@ -1095,6 +1164,8 @@ function App() {
 
   useEffect(() => () => {
     fuelPulseTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    rainAudioRef.current?.stop();
+    rainAudioRef.current = null;
     if (!musicAudioRef.current) return;
     musicAudioRef.current.pause();
     musicAudioRef.current.src = '';
@@ -1161,6 +1232,47 @@ function App() {
       window.clearTimeout(timer);
     };
   }, []);
+
+  useEffect(() => {
+    let stopped = false;
+    let timer = 0;
+
+    const scheduleRain = (delay) => {
+      timer = window.setTimeout(() => {
+        if (stopped) return;
+        setRainActive(true);
+        timer = window.setTimeout(() => {
+          if (stopped) return;
+          setRainActive(false);
+          scheduleRain(36000 + Math.random() * 52000);
+        }, 14000 + Math.random() * 11000);
+      }, delay);
+    };
+
+    scheduleRain(15000 + Math.random() * 17000);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!rainActive || sfxMuted) {
+      rainAudioRef.current?.stop();
+      rainAudioRef.current = null;
+      return;
+    }
+
+    if (!rainAudioRef.current) {
+      rainAudioRef.current = createRainAudio();
+    }
+    const rainAudio = rainAudioRef.current;
+    if (!rainAudio) return;
+    rainAudio.context.resume?.();
+    const t = rainAudio.context.currentTime;
+    rainAudio.gain.cancelScheduledValues(t);
+    rainAudio.gain.setTargetAtTime(0.18, t, 0.35);
+  }, [rainActive, sfxMuted]);
 
   useEffect(() => {
     const resumeFromPause = (event) => {
@@ -1654,6 +1766,21 @@ function App() {
             ))}
           </div>
         </div>
+      </div>
+      <div className={`rain-layer${rainActive ? ' rain-layer-active' : ''}`} aria-hidden="true">
+        {rainDrops.map((drop) => (
+          <i
+            key={drop.id}
+            style={{
+              left: `${drop.left}%`,
+              top: `${drop.top}%`,
+              height: `${drop.length}px`,
+              opacity: drop.opacity,
+              '--rain-speed': `${drop.duration}ms`,
+              animationDelay: drop.delay,
+            }}
+          />
+        ))}
       </div>
     </main>
   );

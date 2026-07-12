@@ -179,6 +179,52 @@ button {
   transform: translateY(-50%);
 }
 
+.rain-layer {
+  position: absolute;
+  z-index: 18;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  transition: opacity 900ms ease;
+}
+
+.rain-layer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.52;
+  background:
+    linear-gradient(to bottom, rgba(165, 199, 216, 0.16), rgba(111, 152, 173, 0.06) 42%, transparent 74%),
+    radial-gradient(ellipse at 50% 96%, rgba(184, 210, 220, 0.18), transparent 46%);
+  filter: blur(1px);
+}
+
+.rain-layer-active {
+  opacity: 1;
+}
+
+.rain-layer i {
+  position: absolute;
+  display: block;
+  width: 1.5px;
+  border-radius: 999px;
+  background: linear-gradient(to bottom, rgba(250, 254, 255, 0), rgba(232, 246, 255, 0.82), rgba(119, 176, 210, 0.18));
+  transform: rotate(14deg) translateY(-26vh);
+  animation: rainFall var(--rain-speed, 640ms) linear infinite;
+  will-change: transform;
+}
+
+.scene-dark .rain-layer::before {
+  background:
+    linear-gradient(to bottom, rgba(105, 145, 168, 0.14), rgba(68, 105, 132, 0.08) 42%, transparent 74%),
+    radial-gradient(ellipse at 50% 96%, rgba(93, 127, 148, 0.18), transparent 46%);
+}
+
+.scene-dark .rain-layer i {
+  background: linear-gradient(to bottom, rgba(240, 250, 255, 0), rgba(170, 211, 235, 0.66), rgba(72, 117, 154, 0.2));
+}
+
 .music-selector,
 .pause-toggle,
 .restart-toggle,
@@ -2879,6 +2925,15 @@ button {
   45% {
     transform: translate(-98%, -50%) scaleX(1.04);
     filter: blur(1.1px) brightness(1.16);
+  }
+}
+
+@keyframes rainFall {
+  from {
+    transform: rotate(14deg) translateY(-26vh);
+  }
+  to {
+    transform: rotate(14deg) translateY(128vh);
   }
 }
 
