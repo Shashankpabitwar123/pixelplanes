@@ -1171,6 +1171,11 @@ button {
   animation: fuelBoxDangerPulse 0.82s ease-in-out infinite;
 }
 
+.fuel-gauge-refill-pulse,
+.fuel-gauge.fuel-zone-0.fuel-gauge-refill-pulse {
+  animation: fuelGaugeRefillPulse 1s ease-out forwards;
+}
+
 @keyframes fuelBoxDangerPulse {
   0%,
   100% {
@@ -1186,6 +1191,25 @@ button {
       0 0 0 2px rgba(255, 42, 58, 0.34),
       0 0 16px rgba(255, 42, 58, 0.66),
       0 8px 24px rgba(255, 42, 58, 0.34);
+  }
+}
+
+@keyframes fuelGaugeRefillPulse {
+  0%,
+  100% {
+    border-color: rgba(255, 255, 255, 0.48);
+    background: rgba(255, 255, 255, 0.36);
+    box-shadow: 0 8px 20px rgba(31, 65, 86, 0.12);
+  }
+
+  38%,
+  68% {
+    border-color: rgba(40, 255, 110, 0.96);
+    background: rgba(40, 255, 110, 0.2);
+    box-shadow:
+      0 0 0 2px rgba(40, 255, 110, 0.34),
+      0 0 18px rgba(40, 255, 110, 0.72),
+      0 8px 24px rgba(40, 255, 110, 0.32);
   }
 }
 
@@ -1419,6 +1443,11 @@ button {
 
 .scene-dark .fuel-gauge.fuel-zone-0 {
   animation-name: fuelBoxDangerPulseDark;
+}
+
+.scene-dark .fuel-gauge-refill-pulse,
+.scene-dark .fuel-gauge.fuel-zone-0.fuel-gauge-refill-pulse {
+  animation-name: fuelGaugeRefillPulse;
 }
 
 @keyframes fuelBoxDangerPulseDark {
@@ -1668,6 +1697,21 @@ button {
   width: clamp(44px, 3.7vw, 70px);
 }
 
+.fuel-station::before {
+  content: "";
+  position: absolute;
+  inset: -5px -7px -3px;
+  z-index: 1;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.fuel-station-refill::before {
+  animation: fuelStationRefillPulse 1s ease-out forwards;
+}
+
 .fuel-tank {
   position: relative;
   z-index: 2;
@@ -1675,6 +1719,37 @@ button {
   display: block;
   filter: drop-shadow(0 7px 6px rgba(38, 34, 24, 0.18));
   shape-rendering: geometricPrecision;
+}
+
+@keyframes fuelStationRefillPulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+    border-color: rgba(40, 255, 110, 0);
+    box-shadow: none;
+  }
+
+  16% {
+    opacity: 1;
+  }
+
+  42%,
+  68% {
+    opacity: 1;
+    transform: scale(1.03);
+    border-color: rgba(40, 255, 110, 0.98);
+    box-shadow:
+      0 0 0 2px rgba(40, 255, 110, 0.22),
+      0 0 18px rgba(40, 255, 110, 0.74),
+      inset 0 0 12px rgba(40, 255, 110, 0.22);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.09);
+    border-color: rgba(40, 255, 110, 0);
+    box-shadow: none;
+  }
 }
 
 .fuel-beacon {

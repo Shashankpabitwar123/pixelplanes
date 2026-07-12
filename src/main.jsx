@@ -699,6 +699,7 @@ function App() {
   const [droppings, setDroppings] = useState([]);
   const [ammoStatus, setAmmoStatus] = useState({ count: MAX_BULLETS, reloading: false });
   const [rocketCount, setRocketCount] = useState(MAX_ROCKETS);
+  const [fuelStationPulses, setFuelStationPulses] = useState({});
   const [musicOpen, setMusicOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [planeMenuOpen, setPlaneMenuOpen] = useState(false);
@@ -718,6 +719,7 @@ function App() {
   const playerApiRef = useRef(null);
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
   const musicAudioRef = useRef(null);
+  const fuelPulseTimersRef = useRef([]);
   const shootingStarTimersRef = useRef([]);
   const startGame = useCallback(() => {
     setGameStarted(true);
@@ -766,6 +768,24 @@ function App() {
     fuelGaugeRef.current.classList.remove('fuel-zone-0', 'fuel-zone-1', 'fuel-zone-2', 'fuel-zone-3');
     fuelGaugeRef.current.classList.add(`fuel-zone-${zone}`);
   }, []);
+  const triggerFuelRefillFeedback = useCallback((stationIndex) => {
+    setFuelStationPulses((current) => ({ ...current, [stationIndex]: Date.now() }));
+    if (fuelGaugeRef.current) {
+      fuelGaugeRef.current.classList.remove('fuel-gauge-refill-pulse');
+      void fuelGaugeRef.current.offsetWidth;
+      fuelGaugeRef.current.classList.add('fuel-gauge-refill-pulse');
+    }
+    const timeoutId = window.setTimeout(() => {
+      setFuelStationPulses((current) => {
+        const next = { ...current };
+        delete next[stationIndex];
+        return next;
+      });
+      fuelGaugeRef.current?.classList.remove('fuel-gauge-refill-pulse');
+      fuelPulseTimersRef.current = fuelPulseTimersRef.current.filter((timeout) => timeout !== timeoutId);
+    }, 1000);
+    fuelPulseTimersRef.current.push(timeoutId);
+  }, []);
   const updateAmmoStatus = useCallback((nextStatus) => {
     setAmmoStatus((current) =>
       current.count === nextStatus.count && current.reloading === nextStatus.reloading ? current : nextStatus,
@@ -782,6 +802,10 @@ function App() {
     setHelpOpen(false);
     setPlaneMenuOpen(false);
     setDroppings([]);
+    setFuelStationPulses({});
+    fuelPulseTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    fuelPulseTimersRef.current = [];
+    fuelGaugeRef.current?.classList.remove('fuel-gauge-refill-pulse');
     setAmmoStatus({ count: MAX_BULLETS, reloading: false });
     setRocketCount(MAX_ROCKETS);
     playerStateRef.current = createInitialPlaneState();
@@ -840,6 +864,7 @@ function App() {
   }, []);
 
   useEffect(() => () => {
+    fuelPulseTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
     if (!musicAudioRef.current) return;
     musicAudioRef.current.pause();
     musicAudioRef.current.src = '';
@@ -1260,7 +1285,7 @@ function App() {
             <Hut key={index} className={`hut hut-${hut.variant}`} variant={hut.variant} style={{ left: `${hut.x}vw` }} />
           ))}
           {fuelTankPlacements.map((x, index) => (
-            <FuelTank key={index} style={{ left: `${x}vw` }} />
+            <FuelTank key={index} active={Boolean(fuelStationPulses[index])} style={{ left: `${x}vw` }} />
           ))}
           {hayPlacements.map((hay, index) =>
             hay.type === 'bale' ? (
@@ -1272,6 +1297,7 @@ function App() {
           <PlayablePlane
             onMove={updateCamera}
             onFuelChange={updateFuelGauge}
+            onFuelRefill={triggerFuelRefillFeedback}
             onAmmoChange={updateAmmoStatus}
             onRocketChange={updateRocketStatus}
             onPlaneState={updatePlayerState}
@@ -1370,6 +1396,7 @@ function BulletMeter({ count, reloading, rocketCount }) {
 function PlayablePlane({
   onMove,
   onFuelChange,
+  onFuelRefill,
   onAmmoChange,
   onRocketChange,
   onPlaneState,
@@ -1399,6 +1426,7 @@ function PlayablePlane({
   const damageLevelRef = useRef(0);
   const damageSmokeParticlesRef = useRef([]);
   const damageSmokeLastEmitRef = useRef(0);
+  const fuelRefillFeedbackRef = useRef({ stationIndex: -1, time: 0 });
   const crashedRef = useRef(false);
   const ammoRef = useRef(MAX_BULLETS);
   const reloadingRef = useRef(false);
@@ -1437,6 +1465,7 @@ function PlayablePlane({
     damageLevelRef.current = 0;
     damageSmokeParticlesRef.current = [];
     damageSmokeLastEmitRef.current = 0;
+    fuelRefillFeedbackRef.current = { stationIndex: -1, time: 0 };
     ammoRef.current = MAX_BULLETS;
     reloadingRef.current = false;
     lastShotRef.current = 0;
@@ -2303,12 +2332,30 @@ function PlayablePlane({
       const shapePoints = planeModel.hitPoints.map((point) => getPlanePoint(next, point));
       const hitHay = hayObstacles.some((hay) => shapePoints.some((point) => pointHitsHay(point, hay)));
       const hitWorldEdge = shapePoints.some((point) => point.x <= 0 || point.x >= WORLD_WIDTH);
-      const hitFuelStation = fuelStationZones.some((station) =>
+      const fuelStationIndex = fuelStationZones.findIndex((station) =>
         shapePoints.some(
           (point) => point.y > 0 && point.y < station.height && point.x > station.x && point.x < station.x + station.width,
         ),
       );
-      if (hitFuelStation) next.fuel = FUEL_SECONDS;
+      if (fuelStationIndex >= 0) {
+        const hadDamage = (next.damage ?? 0) > 0;
+        const shouldRefill = next.fuel < FUEL_SECONDS - 0.05 || hadDamage;
+        const lastFeedback = fuelRefillFeedbackRef.current;
+        const canPulse = lastFeedback.stationIndex !== fuelStationIndex || now - lastFeedback.time > 1200;
+        next.fuel = FUEL_SECONDS;
+        if (hadDamage) {
+          next.damage = 0;
+          damageLevelRef.current = 0;
+          damageSmokeParticlesRef.current = [];
+          damageSmokeLastEmitRef.current = 0;
+          setDamageLevel(0);
+          setDamageSmokeParticles([]);
+        }
+        if (shouldRefill && canPulse) {
+          fuelRefillFeedbackRef.current = { stationIndex: fuelStationIndex, time: now };
+          onFuelRefill(fuelStationIndex);
+        }
+      }
       const groundLowestPoint = Math.min(...planeModel.groundPoints.map((point) => getPlanePoint(next, point).y));
       const tireLowestPoint = Math.min(...planeModel.tirePoints.map((point) => getPlanePoint(next, point).y));
       const bodyLowestPoint = Math.min(...planeModel.bodyGroundPoints.map((point) => getPlanePoint(next, point).y));
@@ -2411,6 +2458,7 @@ function PlayablePlane({
           damageLevelRef.current = 0;
           damageSmokeParticlesRef.current = [];
           damageSmokeLastEmitRef.current = 0;
+          fuelRefillFeedbackRef.current = { stationIndex: -1, time: 0 };
           if (reloadTimerRef.current) {
             window.clearTimeout(reloadTimerRef.current);
             reloadTimerRef.current = null;
@@ -2517,7 +2565,7 @@ function PlayablePlane({
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [onMove, onFuelChange, onAmmoChange, onRocketChange, onPlaneState, botStateRefs, botApiRefs]);
+  }, [onMove, onFuelChange, onFuelRefill, onAmmoChange, onRocketChange, onPlaneState, botStateRefs, botApiRefs]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
@@ -3478,9 +3526,9 @@ function Hut({ className, variant, style }) {
   );
 }
 
-function FuelTank({ style }) {
+function FuelTank({ style, active }) {
   return (
-    <div className="fuel-station" style={style}>
+    <div className={`fuel-station${active ? ' fuel-station-refill' : ''}`} style={style}>
       <span className="fuel-beacon" aria-hidden="true" />
       <svg className="fuel-tank" viewBox="0 0 118 166">
         <path className="fuel-shadow" d="M33 157h76v7H33z" />
