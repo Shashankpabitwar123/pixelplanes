@@ -423,7 +423,7 @@ button {
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 4px;
-  color: #6dff8b;
+  color: #eef8ff;
   background: rgba(18, 29, 47, 0.34);
   cursor: pointer;
 }
@@ -434,102 +434,39 @@ button {
 }
 
 .room-board-mic {
-  color: #d8ffd6;
+  color: #eef8ff;
+}
+
+.room-board-mic-icon,
+.room-board-speaker-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  color: currentColor;
+  transform: translate(-50%, -50%);
+  filter: none;
+  --audio-icon-cut: rgba(18, 29, 47, 0.92);
 }
 
 .room-board-mic-icon {
-  position: absolute;
-  left: 8px;
-  top: 4px;
-  width: 8px;
-  height: 12px;
-  border: 3px solid currentColor;
-  border-radius: 8px;
-  box-shadow: 0 0 4px currentColor;
-}
-
-.room-board-mic-icon::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -8px;
-  width: 3px;
-  height: 7px;
-  border-radius: 2px;
-  background: currentColor;
-  transform: translateX(-50%);
-}
-
-.room-board-mic-icon::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -10px;
-  width: 12px;
-  height: 3px;
-  border-radius: 2px;
-  background: currentColor;
-  transform: translateX(-50%);
+  width: 18px;
+  height: 18px;
 }
 
 .room-board-speaker {
-  color: #6dff8b;
+  color: #eef8ff;
 }
 
 .room-board-speaker-icon {
-  position: absolute;
-  left: 3px;
-  top: 7px;
-  width: 6px;
-  height: 10px;
-  background: currentColor;
-  border-radius: 1px;
-  filter: drop-shadow(0 0 4px currentColor);
-  overflow: visible;
-}
-
-.room-board-speaker-icon::before {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: -3px;
-  width: 9px;
-  height: 16px;
-  background: currentColor;
-  clip-path: polygon(0 34%, 100% 14%, 100% 86%, 0 66%);
-}
-
-.room-board-speaker-icon::after {
-  content: '';
-  position: absolute;
-  left: 15px;
-  top: -5px;
-  width: 8px;
-  height: 18px;
-  border: 2px solid currentColor;
-  border-left: 0;
-  border-top-color: transparent;
-  border-bottom-color: transparent;
-  border-radius: 0 10px 10px 0;
-  box-shadow: 4px 0 0 -1px currentColor;
-  opacity: 0.92;
+  width: 20px;
+  height: 20px;
 }
 
 .room-board-muted {
-  color: #ff6154;
-}
-
-.room-board-muted::after {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 11px;
-  width: 15px;
-  height: 3px;
-  border-radius: 2px;
-  background: #ff5148;
-  box-shadow: 0 0 6px rgba(255, 81, 72, 0.72);
-  transform: rotate(-42deg);
+  color: #ff5148;
+  border-color: rgba(255, 81, 72, 0.42);
+  background: rgba(80, 22, 28, 0.34);
 }
 
 .room-voice-bars {
@@ -1175,110 +1112,40 @@ button {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border: 1px solid rgba(30, 47, 62, 0.24);
+  border: 1px solid rgba(255, 81, 72, 0.36);
   border-radius: 7px;
-  color: rgba(23, 44, 59, 0.78);
-  background: rgba(228, 235, 239, 0.62);
-  box-shadow: inset 0 -2px 0 rgba(40, 55, 67, 0.14);
+  color: #ff5148;
+  background: rgba(255, 81, 72, 0.13);
+  box-shadow: inset 0 -2px 0 rgba(80, 22, 28, 0.2);
   font-size: 14px;
   font-weight: 900;
   cursor: pointer;
 }
 
 .room-voice-enabled {
-  color: #fff7bd;
-  border-color: rgba(78, 255, 142, 0.62);
-  background: rgba(36, 105, 71, 0.4);
-  box-shadow:
-    0 0 10px rgba(78, 255, 142, 0.4),
-    inset 0 -2px 0 rgba(78, 255, 142, 0.14);
+  color: #eef8ff;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(228, 235, 239, 0.56);
+  box-shadow: inset 0 -2px 0 rgba(40, 55, 67, 0.14);
+}
+
+.room-voice-icon,
+.room-speaker-icon {
+  flex: 0 0 auto;
+  display: block;
+  color: currentColor;
+  filter: none;
+  --audio-icon-cut: rgba(28, 40, 56, 0.92);
 }
 
 .room-voice-icon {
-  position: relative;
-  width: 16px;
-  height: 20px;
-  display: inline-block;
-  border: 3px solid currentColor;
-  border-radius: 9px 9px 7px 7px;
-  box-shadow: 0 0 7px currentColor;
-}
-
-.room-voice-icon::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -9px;
-  width: 3px;
-  height: 8px;
-  background: currentColor;
-  transform: translateX(-50%);
-}
-
-.room-voice-icon::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -12px;
-  width: 14px;
-  height: 3px;
-  border-radius: 2px;
-  background: currentColor;
-  transform: translateX(-50%);
-}
-
-.room-voice-toggle:not(.room-voice-enabled) .room-voice-icon {
-  box-shadow: none;
+  width: 24px;
+  height: 24px;
 }
 
 .room-speaker-icon {
-  position: relative;
-  width: 24px;
-  height: 20px;
-  display: inline-block;
-}
-
-.room-speaker-icon::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 6px;
-  width: 7px;
-  height: 8px;
-  border-radius: 1px;
-  background: currentColor;
-  box-shadow: 0 0 7px currentColor;
-}
-
-.room-speaker-icon::after {
-  content: '';
-  position: absolute;
-  left: 7px;
-  top: 2px;
   width: 16px;
-  height: 16px;
-  background:
-    radial-gradient(ellipse at left center, transparent 0 38%, currentColor 40% 49%, transparent 52%),
-    linear-gradient(90deg, currentColor 0 44%, transparent 45%);
-  clip-path: polygon(0 30%, 42% 4%, 42% 96%, 0 70%, 0 30%, 56% 14%, 100% 50%, 56% 86%);
-  filter: drop-shadow(0 0 5px currentColor);
-}
-
-.room-voice-toggle:not(.room-voice-enabled) .room-speaker-icon::before,
-.room-voice-toggle:not(.room-voice-enabled) .room-speaker-icon::after {
-  box-shadow: none;
-  filter: none;
-}
-
-.room-voice-toggle:not(.room-voice-enabled)::after {
-  content: '';
-  position: absolute;
-  width: 28px;
-  height: 4px;
-  border-radius: 3px;
-  background: #ff5148;
-  box-shadow: 0 0 7px rgba(255, 81, 72, 0.65);
-  transform: rotate(-42deg);
+  height: 24px;
 }
 
 .room-lobby-actions {
@@ -2180,18 +2047,16 @@ button {
 }
 
 .scene-dark .room-voice-toggle {
-  color: rgba(238, 248, 255, 0.78);
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(10, 20, 38, 0.48);
+  color: #ff5148;
+  border-color: rgba(255, 81, 72, 0.38);
+  background: rgba(80, 22, 28, 0.24);
 }
 
 .scene-dark .room-voice-enabled {
-  color: #d8ffd6;
-  border-color: rgba(78, 255, 142, 0.68);
-  background: rgba(36, 105, 71, 0.36);
-  box-shadow:
-    0 0 11px rgba(78, 255, 142, 0.44),
-    inset 0 -2px 0 rgba(78, 255, 142, 0.14);
+  color: #eef8ff;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(10, 20, 38, 0.48);
+  box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.06);
 }
 
 .scene-dark .room-delete-button {

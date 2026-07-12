@@ -116,6 +116,26 @@ function pickRoomPlaneColor() {
   return PLANE_COLOR_IDS[Math.floor(Math.random() * PLANE_COLOR_IDS.length)];
 }
 
+function RoomMicIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <path d="M32 5c8.3 0 15 6.7 15 15v16c0 8.3-6.7 15-15 15s-15-6.7-15-15V20C17 11.7 23.7 5 32 5Z" fill="currentColor" />
+      <path d="M13 28v7c0 10.5 8.5 19 19 19s19-8.5 19-19v-7" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <path d="M32 54v7M22 61h20" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <path d="M21 21h22M21 27h22M21 33h22" fill="none" stroke="var(--audio-icon-cut, rgba(18, 29, 47, 0.9))" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function RoomSpeakerIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <path d="M8 24h13L39 10v44L21 40H8V24Z" fill="currentColor" />
+      <path d="M46 23c3.1 2.1 5 5.4 5 9s-1.9 6.9-5 9M52 15c5.8 4.1 9 10.1 9 17s-3.2 12.9-9 17" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const PLANE_LIGHT_COMBOS = {
   classic: {
     label: 'Red and green',
@@ -1526,7 +1546,7 @@ function App() {
                   if (player.isLocalPlayer) setRoomVoiceEnabled((enabled) => !enabled);
                 }}
               >
-                <span className="room-board-mic-icon" aria-hidden="true" />
+                <RoomMicIcon className="room-board-mic-icon" />
               </button>
               <button
                 className={`room-board-control room-board-speaker${player.speakerEnabled ? '' : ' room-board-muted'}`}
@@ -1541,7 +1561,7 @@ function App() {
                   }
                 }}
               >
-                <span className="room-board-speaker-icon" aria-hidden="true" />
+                <RoomSpeakerIcon className="room-board-speaker-icon" />
               </button>
               <span className={`room-voice-bars${player.speaking ? ' room-voice-speaking' : ''}`} aria-hidden="true">
                 {[1, 2, 3].map((level) => (
@@ -1801,7 +1821,7 @@ function App() {
                       aria-label={roomVoiceEnabled ? 'Microphone enabled' : 'Microphone disabled'}
                       onClick={() => setRoomVoiceEnabled((enabled) => !enabled)}
                     >
-                      <span className="room-voice-icon" aria-hidden="true" />
+                      <RoomMicIcon className="room-voice-icon" />
                       <span>{roomVoiceEnabled ? 'Mic On' : 'Mic Off'}</span>
                     </button>
                     <button
@@ -1811,7 +1831,7 @@ function App() {
                       aria-label={roomSpeakerEnabled ? 'Speaker enabled' : 'Speaker disabled'}
                       onClick={() => setRoomSpeakerEnabled((enabled) => !enabled)}
                     >
-                      <span className="room-speaker-icon" aria-hidden="true" />
+                      <RoomSpeakerIcon className="room-speaker-icon" />
                       <span>{roomSpeakerEnabled ? 'Speaker On' : 'Speaker Off'}</span>
                     </button>
                   </div>
