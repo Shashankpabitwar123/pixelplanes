@@ -1175,10 +1175,6 @@ function App() {
     setKillCount((current) => (gameMode === 'room' ? Math.max(0, current - 1) : 0));
   }, [gameMode]);
   const toggleRoomPlayerMute = useCallback((playerId) => {
-    if (playerId === 'host') {
-      setRoomVoiceEnabled((enabled) => !enabled);
-      return;
-    }
     setRoomMutedPlayers((current) => ({ ...current, [playerId]: !current[playerId] }));
   }, []);
   const restartGame = useCallback(() => {
@@ -1394,13 +1390,18 @@ function App() {
   const isRoomGame = gameStarted && gameMode === 'room';
   const roomLeaderboardRows = (roomPlayers.length ? roomPlayers : [{ id: 'host', name: 'Player 1', color: planeColor, role: 'Host' }])
     .map((player) => {
-      const muted = player.id === 'host' ? !roomVoiceEnabled : Boolean(roomMutedPlayers[player.id]);
+      const isLocalPlayer = player.id === 'host';
+      const micEnabled = isLocalPlayer ? roomVoiceEnabled : true;
+      const speakerMuted = !isLocalPlayer && Boolean(roomMutedPlayers[player.id]);
+      const voiceLevel = 0;
       return {
         ...player,
         kills: player.id === 'host' ? killCount : 0,
-        muted,
-        speaking: !muted,
-        voiceLevel: player.id === 'host' ? 3 : 0,
+        isLocalPlayer,
+        micEnabled,
+        speakerMuted,
+        speaking: micEnabled && voiceLevel > 0,
+        voiceLevel,
       };
     })
     .sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name));
@@ -1515,10 +1516,23 @@ function App() {
               <span className="room-board-name">{player.name}</span>
               <strong className="room-board-kills">{player.kills}</strong>
               <button
-                className={`room-board-speaker${player.muted ? ' room-board-muted' : ''}`}
+                className={`room-board-control room-board-mic${player.micEnabled ? '' : ' room-board-muted'}`}
                 type="button"
-                aria-label={player.muted ? `Unmute ${player.name}` : `Mute ${player.name}`}
-                aria-pressed={!player.muted}
+                aria-label={player.micEnabled ? `Turn ${player.name} microphone off` : `Turn ${player.name} microphone on`}
+                aria-pressed={player.micEnabled}
+                disabled={!player.isLocalPlayer}
+                onClick={() => {
+                  if (player.isLocalPlayer) setRoomVoiceEnabled((enabled) => !enabled);
+                }}
+              >
+                <span className="room-board-mic-icon" aria-hidden="true" />
+              </button>
+              <button
+                className={`room-board-control room-board-speaker${player.speakerMuted ? ' room-board-muted' : ''}`}
+                type="button"
+                aria-label={player.speakerMuted ? `Unmute ${player.name}` : `Mute ${player.name}`}
+                aria-pressed={!player.speakerMuted}
+                disabled={player.isLocalPlayer}
                 onClick={() => toggleRoomPlayerMute(player.id)}
               >
                 <span className="room-board-speaker-icon" aria-hidden="true" />

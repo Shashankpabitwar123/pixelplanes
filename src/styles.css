@@ -348,7 +348,7 @@ button {
   z-index: 22;
   left: 20px;
   top: 150px;
-  width: 250px;
+  width: 282px;
   box-sizing: border-box;
   padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.48);
@@ -370,9 +370,9 @@ button {
 
 .room-leaderboard-row {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) 26px 26px 34px;
+  grid-template-columns: 22px minmax(0, 1fr) 26px 24px 24px 34px;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   min-height: 32px;
   padding: 4px 6px;
   border-radius: 4px;
@@ -416,7 +416,7 @@ button {
     0 2px 0 rgba(42, 32, 0, 0.3);
 }
 
-.room-board-speaker {
+.room-board-control {
   position: relative;
   width: 24px;
   height: 24px;
@@ -428,12 +428,60 @@ button {
   cursor: pointer;
 }
 
+.room-board-control:disabled {
+  cursor: default;
+  opacity: 0.46;
+}
+
+.room-board-mic {
+  color: #d8ffd6;
+}
+
+.room-board-mic-icon {
+  position: absolute;
+  left: 8px;
+  top: 4px;
+  width: 8px;
+  height: 12px;
+  border: 3px solid currentColor;
+  border-radius: 8px;
+  box-shadow: 0 0 4px currentColor;
+}
+
+.room-board-mic-icon::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 3px;
+  height: 7px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: translateX(-50%);
+}
+
+.room-board-mic-icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: translateX(-50%);
+}
+
+.room-board-speaker {
+  color: #6dff8b;
+}
+
 .room-board-speaker-icon {
   position: absolute;
   left: 5px;
-  top: 8px;
-  width: 5px;
-  height: 8px;
+  top: 9px;
+  width: 6px;
+  height: 7px;
   background: currentColor;
   border-radius: 1px;
   filter: drop-shadow(0 0 4px currentColor);
@@ -442,20 +490,19 @@ button {
 .room-board-speaker-icon::before {
   content: '';
   position: absolute;
-  left: 4px;
-  top: -2px;
+  left: 5px;
+  top: -3px;
   width: 0;
   height: 0;
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
-  border-right: 8px solid currentColor;
-  transform: rotate(180deg);
+  border-left: 9px solid currentColor;
 }
 
 .room-board-speaker-icon::after {
   content: '';
   position: absolute;
-  left: 13px;
+  left: 15px;
   top: -2px;
   width: 8px;
   height: 12px;
@@ -3917,7 +3964,7 @@ button {
   .room-leaderboard {
     left: 12px;
     top: 138px;
-    width: 220px;
+    width: min(282px, calc(100vw - 24px));
   }
 
   .sfx-toggle {
