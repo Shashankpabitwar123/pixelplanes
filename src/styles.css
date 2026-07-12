@@ -782,6 +782,10 @@ button {
   grid-template-columns: repeat(3, minmax(118px, 1fr));
 }
 
+.start-actions-single {
+  grid-template-columns: 1fr;
+}
+
 .start-option,
 .start-back,
 .room-rule-button {

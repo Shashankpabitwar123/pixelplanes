@@ -1618,10 +1618,7 @@ function App() {
                   aria-label="Room code"
                   onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
                 />
-                <div className="start-actions">
-                  <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
-                    Back
-                  </button>
+                <div className="start-actions start-actions-single">
                   <button className="start-option start-primary" type="button" onClick={() => {
                     setGameMode('room');
                     startGame();
@@ -1629,6 +1626,9 @@ function App() {
                     Join
                   </button>
                 </div>
+                <button className="start-back" type="button" onClick={() => setStartScreen('room')}>
+                  Back
+                </button>
               </>
             )}
             {startScreen === 'create' && (
