@@ -93,15 +93,13 @@ const PLANE_COLOR_ASSETS = {
   },
   green: {
     label: 'Green',
-    staticSrc: '/assets/exact-plane.png',
-    noPropSrc: '/assets/exact-plane-no-prop.png',
-    filter: 'hue-rotate(94deg) saturate(1.55) brightness(1.02)',
+    staticSrc: '/assets/exact-plane-green.png',
+    noPropSrc: '/assets/exact-plane-no-prop-green.png',
   },
   cyan: {
     label: 'Cyan',
-    staticSrc: '/assets/exact-plane.png',
-    noPropSrc: '/assets/exact-plane-no-prop.png',
-    filter: 'hue-rotate(28deg) saturate(1.35) brightness(1.08)',
+    staticSrc: '/assets/exact-plane-cyan.png',
+    noPropSrc: '/assets/exact-plane-no-prop-cyan.png',
   },
 };
 
