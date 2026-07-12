@@ -415,6 +415,93 @@ function updateDamageSmokeParticles(current, plane, previousPlane, now, active, 
   return changed ? next : current;
 }
 
+function playPlaneBulletHitSound(existingContext = null, muted = false) {
+  if (muted) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  const context = existingContext && existingContext.state !== 'closed' ? existingContext : AudioContextClass ? new AudioContextClass() : null;
+  if (!context) return;
+  context.resume?.();
+
+  const t = context.currentTime;
+  const limiter = context.createDynamicsCompressor();
+  limiter.threshold.setValueAtTime(-11, t);
+  limiter.knee.setValueAtTime(10, t);
+  limiter.ratio.setValueAtTime(7, t);
+  limiter.attack.setValueAtTime(0.002, t);
+  limiter.release.setValueAtTime(0.12, t);
+  limiter.connect(context.destination);
+
+  const master = context.createGain();
+  master.gain.setValueAtTime(0.0001, t);
+  master.gain.exponentialRampToValueAtTime(0.82, t + 0.006);
+  master.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+  master.connect(limiter);
+
+  const makeNoise = (seconds, power = 2.4) => {
+    const bufferLength = Math.floor(context.sampleRate * seconds);
+    const buffer = context.createBuffer(1, bufferLength, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let index = 0; index < bufferLength; index += 1) {
+      const fade = 1 - index / bufferLength;
+      data[index] = (Math.random() * 2 - 1) * Math.pow(fade, power);
+    }
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    return source;
+  };
+
+  const metalPing = context.createOscillator();
+  const pingGain = context.createGain();
+  const pingFilter = context.createBiquadFilter();
+  metalPing.type = 'triangle';
+  metalPing.frequency.setValueAtTime(980, t);
+  metalPing.frequency.exponentialRampToValueAtTime(420, t + 0.1);
+  pingFilter.type = 'bandpass';
+  pingFilter.frequency.setValueAtTime(1240, t);
+  pingFilter.Q.value = 4.4;
+  pingGain.gain.setValueAtTime(0.32, t);
+  pingGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  metalPing.connect(pingFilter);
+  pingFilter.connect(pingGain);
+  pingGain.connect(master);
+
+  const punch = context.createOscillator();
+  const punchGain = context.createGain();
+  punch.type = 'sawtooth';
+  punch.frequency.setValueAtTime(150, t);
+  punch.frequency.exponentialRampToValueAtTime(62, t + 0.09);
+  punchGain.gain.setValueAtTime(0.52, t);
+  punchGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+  punch.connect(punchGain);
+  punchGain.connect(master);
+
+  const grit = makeNoise(0.16, 2.9);
+  const gritFilter = context.createBiquadFilter();
+  const gritGain = context.createGain();
+  gritFilter.type = 'bandpass';
+  gritFilter.frequency.setValueAtTime(2100, t);
+  gritFilter.frequency.exponentialRampToValueAtTime(760, t + 0.09);
+  gritFilter.Q.value = 1.3;
+  gritGain.gain.setValueAtTime(0.72, t);
+  gritGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+  grit.connect(gritFilter);
+  gritFilter.connect(gritGain);
+  gritGain.connect(master);
+
+  metalPing.start(t);
+  punch.start(t);
+  grit.start(t);
+  metalPing.stop(t + 0.2);
+  punch.stop(t + 0.13);
+  grit.stop(t + 0.17);
+
+  window.setTimeout(() => {
+    master.disconnect();
+    limiter.disconnect();
+    if (context !== existingContext) context.close?.();
+  }, 340);
+}
+
 function getGroundClippedWorldProjectile(startYVh, dxVw, dyVh, fullLifeMs, minLifeMs) {
   const groundHit = dyVh > 0 && Math.max(0, startYVh) <= dyVh;
   const ratio = groundHit ? clamp(Math.max(0, startYVh) / dyVh, 0, 1) : 1;
@@ -1064,6 +1151,7 @@ function App() {
             playerApiRef={playerApiRef}
             botApiRef={botApiRef}
             onBotMove={updateBotLocator}
+            sfxMuted={sfxMuted}
           />
           <div className="grass-plants">
             {mapGrassPlants.map((plant, index) => (
@@ -1275,6 +1363,7 @@ function PlayablePlane({
         };
         stateRef.current = next;
         damageLevelRef.current = nextDamage;
+        playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current);
         setDamageLevel(nextDamage);
         onPlaneState(next);
       },
@@ -2357,7 +2446,7 @@ function PlayablePlane({
   );
 }
 
-function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef, botApiRef, onBotMove }) {
+function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef, botApiRef, onBotMove, sfxMuted }) {
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
@@ -2420,9 +2509,10 @@ function BotPlane({ active, paused, restartSignal, playerStateRef, playerApiRef,
     };
     stateRef.current = next;
     botDamageRef.current = nextDamage;
+    playPlaneBulletHitSound(null, sfxMuted);
     setBotDamage(nextDamage);
     onBotMove(next);
-  }, [crashBot, onBotMove]);
+  }, [crashBot, onBotMove, sfxMuted]);
 
   useEffect(() => {
     if (!botApiRef) return undefined;
