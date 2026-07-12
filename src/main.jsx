@@ -1785,21 +1785,23 @@ function App() {
           </div>
         </div>
       </div>
-      <div className={`rain-layer${rainActive ? ' rain-layer-active' : ''}`} aria-hidden="true">
-        {rainDrops.map((drop) => (
-          <i
-            key={drop.id}
-            style={{
-              left: `${drop.left}%`,
-              top: `${drop.top}%`,
-              height: `${drop.length}px`,
-              opacity: drop.opacity,
-              '--rain-speed': `${drop.duration}ms`,
-              animationDelay: drop.delay,
-            }}
-          />
-        ))}
-      </div>
+      {rainActive && (
+        <div key={`rain-${theme}`} className="rain-layer rain-layer-active" aria-hidden="true">
+          {rainDrops.map((drop) => (
+            <i
+              key={drop.id}
+              style={{
+                left: `${drop.left}%`,
+                top: `${drop.top}%`,
+                height: `${drop.length}px`,
+                opacity: drop.opacity,
+                '--rain-speed': `${drop.duration}ms`,
+                animationDelay: drop.delay,
+              }}
+            />
+          ))}
+        </div>
+      )}
     </main>
   );
 }
