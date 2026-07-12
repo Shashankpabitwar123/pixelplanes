@@ -663,13 +663,13 @@ function createRainAudio() {
   source.buffer = buffer;
   source.loop = true;
   highpass.type = 'highpass';
-  highpass.frequency.value = 520;
+  highpass.frequency.value = 420;
   lowpass.type = 'lowpass';
-  lowpass.frequency.value = 5200;
+  lowpass.frequency.value = 3600;
   textureFilter.type = 'peaking';
-  textureFilter.frequency.value = 1800;
-  textureFilter.Q.value = 0.85;
-  textureFilter.gain.value = 4.4;
+  textureFilter.frequency.value = 1450;
+  textureFilter.Q.value = 0.72;
+  textureFilter.gain.value = 2.1;
   master.gain.value = 0.0001;
 
   source.connect(highpass);
@@ -688,9 +688,10 @@ function createRainAudio() {
       stopped = true;
       const t = context.currentTime;
       master.gain.cancelScheduledValues(t);
-      master.gain.setValueAtTime(0, t);
+      master.gain.setValueAtTime(Math.max(master.gain.value, 0.0001), t);
+      master.gain.exponentialRampToValueAtTime(0.0001, t + 0.52);
       try {
-        source.stop(t + 0.01);
+        source.stop(t + 0.58);
       } catch {
         // The rain source may already be stopped during rapid weather toggles.
       }
@@ -700,7 +701,7 @@ function createRainAudio() {
         lowpass.disconnect();
         highpass.disconnect();
         context.close?.();
-      }, 60);
+      }, 700);
     },
   };
 }
@@ -1283,7 +1284,7 @@ function App() {
       rainAudio.context.resume?.();
       const t = rainAudio.context.currentTime;
       rainAudio.gain.cancelScheduledValues(t);
-      rainAudio.gain.setTargetAtTime(0.18, t, 0.35);
+      rainAudio.gain.setTargetAtTime(0.105, t, 0.38);
     }, 850);
 
     return () => {
