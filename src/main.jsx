@@ -1644,6 +1644,8 @@ function PlayablePlane({
   const reloadingRef = useRef(false);
   const reloadTimerRef = useRef(null);
   const lastShotRef = useRef(0);
+  const fireQueuedRef = useRef(false);
+  const fireBulletRef = useRef(null);
   const rocketsRef = useRef(MAX_ROCKETS);
   const lastRocketRef = useRef(0);
   const projectilesRef = useRef([]);
@@ -1682,6 +1684,7 @@ function PlayablePlane({
     ammoRef.current = MAX_BULLETS;
     reloadingRef.current = false;
     lastShotRef.current = 0;
+    fireQueuedRef.current = false;
     rocketsRef.current = MAX_ROCKETS;
     lastRocketRef.current = 0;
     crashedRef.current = false;
@@ -2046,14 +2049,14 @@ function PlayablePlane({
       }, 820);
     };
 
-    const fireBullet = () => {
-      const now = performance.now();
+    const fireBulletFromPlane = (planeState, now) => {
       if (crashedRef.current || ammoRef.current <= 0 || now - lastShotRef.current < BULLET_COOLDOWN_MS) return;
       lastShotRef.current = now;
       playBulletSound();
 
-      const trajectory = bulletTrajectoryRef.current ?? getBulletTrajectory(stateRef.current);
-      const projectile = createBulletProjectile(stateRef.current, now, 'player-bullet', trajectory);
+      const trajectory = getBulletTrajectory(planeState);
+      bulletTrajectoryRef.current = trajectory;
+      const projectile = createBulletProjectile(planeState, now, 'player-bullet', trajectory);
 
       projectilesRef.current = [...projectilesRef.current, projectile];
       setProjectiles(projectilesRef.current);
@@ -2069,6 +2072,11 @@ function PlayablePlane({
       setAmmo(nextAmmo, reloadingRef.current);
       startReload();
     };
+
+    const queueBulletFire = () => {
+      fireQueuedRef.current = true;
+    };
+    fireBulletRef.current = fireBulletFromPlane;
 
     const fireRocket = () => {
       const now = performance.now();
@@ -2318,7 +2326,7 @@ function PlayablePlane({
       }
       event.preventDefault();
       if (action === 'fire') {
-        if (pressed && !event.repeat) fireBullet();
+        if (pressed && !event.repeat && !pausedRef.current) queueBulletFire();
         return;
       }
       if (action === 'rocket') {
@@ -2352,6 +2360,7 @@ function PlayablePlane({
       rocketTimeoutsRef.current = [];
       projectilesRef.current = [];
       rocketProjectilesRef.current = [];
+      fireBulletRef.current = null;
       const audio = engineAudioRef.current;
       crashSoundRef.current = null;
       if (audio) {
@@ -2634,6 +2643,7 @@ function PlayablePlane({
 
       if (pausedRef.current) {
         accumulator = 0;
+        fireQueuedRef.current = false;
         renderPlane(next);
         frame = requestAnimationFrame(update);
         return;
@@ -2661,6 +2671,7 @@ function PlayablePlane({
           ammoRef.current = MAX_BULLETS;
           reloadingRef.current = false;
           lastShotRef.current = 0;
+          fireQueuedRef.current = false;
           rocketsRef.current = MAX_ROCKETS;
           lastRocketRef.current = 0;
           setProjectiles([]);
@@ -2694,6 +2705,10 @@ function PlayablePlane({
       }
 
       stateRef.current = next;
+      if (fireQueuedRef.current) {
+        fireQueuedRef.current = false;
+        fireBulletRef.current?.(next, now);
+      }
       updatePlayerBulletRenders(now);
       updatePlayerRockets(now);
       scanBotHits(now);
