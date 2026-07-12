@@ -1062,6 +1062,33 @@ function App() {
     });
     setStartScreen('room-waiting');
   }, [roomPlayerName]);
+  const leaveRoomLobby = useCallback(() => {
+    if (!roomLobby) {
+      setStartScreen('room');
+      return;
+    }
+
+    const remainingPlayers = roomLobby.players.filter((player) => player.id !== 'host');
+    if (!remainingPlayers.length) {
+      setRoomLobby(null);
+      setStartScreen('room');
+      return;
+    }
+
+    const nextHost = remainingPlayers[Math.floor(Math.random() * remainingPlayers.length)];
+    const nextPlayers = [
+      { ...nextHost, role: 'Host' },
+      ...remainingPlayers
+        .filter((player) => player.id !== nextHost.id)
+        .map((player) => ({ ...player, role: 'Player' })),
+    ];
+    setRoomLobby({ ...roomLobby, players: nextPlayers });
+    setStartScreen('room');
+  }, [roomLobby]);
+  const deleteRoomLobby = useCallback(() => {
+    setRoomLobby(null);
+    setStartScreen('room');
+  }, []);
   const updateCamera = useCallback((camera) => {
     if (worldRef.current) {
       worldRef.current.style.transform = `translate(${-camera.x}vw, ${camera.y}vh)`;
@@ -1348,6 +1375,7 @@ function App() {
 
   const roomPlayers = roomLobby?.players ?? [];
   const roomSlots = Array.from({ length: ROOM_MAX_PLAYERS }, (_, index) => roomPlayers[index] ?? null);
+  const roomIsHost = roomPlayers[0]?.id === 'host';
 
   return (
     <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}`} aria-label="Animated Bitplanes background">
@@ -1662,7 +1690,7 @@ function App() {
                   <span>Code</span>
                   <strong>{roomLobby.code}</strong>
                 </div>
-                <div className="room-rule-row" aria-label="Room theme">
+                <div className={`room-theme-switch room-theme-${roomTheme}`} aria-label="Room theme">
                   <button
                     className={`room-rule-button${roomTheme === 'dark' ? ' room-rule-active' : ''}`}
                     type="button"
@@ -1715,13 +1743,17 @@ function App() {
                     );
                   })}
                 </div>
-                <div className="start-actions">
-                  <button className="start-option" type="button" onClick={() => {
-                    setRoomLobby(null);
-                    setStartScreen('room');
-                  }}>
-                    Leave
-                  </button>
+                <div className="room-lobby-actions">
+                  <div className={`room-lobby-admin-actions${roomIsHost ? '' : ' room-lobby-admin-actions-single'}`}>
+                    <button className="start-option room-small-action" type="button" onClick={leaveRoomLobby}>
+                      Leave
+                    </button>
+                    {roomIsHost && (
+                      <button className="start-option room-small-action room-delete-button" type="button" onClick={deleteRoomLobby}>
+                        Delete Room
+                      </button>
+                    )}
+                  </div>
                   <button className="start-option start-primary" type="button" disabled>
                     Start
                   </button>

@@ -867,7 +867,7 @@ button {
   padding: 4px;
   overflow: hidden;
   border: 1px solid rgba(30, 47, 62, 0.24);
-  border-radius: 999px;
+  border-radius: 7px;
   background: rgba(30, 47, 62, 0.22);
   box-shadow:
     inset 0 2px 5px rgba(12, 25, 35, 0.22),
@@ -882,7 +882,7 @@ button {
   bottom: 4px;
   left: 4px;
   width: calc(50% - 4px);
-  border-radius: 999px;
+  border-radius: 5px;
   background: linear-gradient(180deg, #fff66a 0%, #ffb52c 100%);
   box-shadow:
     0 0 12px rgba(255, 211, 54, 0.62),
@@ -900,8 +900,8 @@ button {
   height: 100%;
   min-width: 0;
   border: 0;
-  border-radius: 999px;
-  color: rgba(238, 248, 255, 0.82);
+  border-radius: 5px;
+  color: rgba(23, 44, 59, 0.76);
   background: transparent;
   box-shadow: none;
   font-size: 16px;
@@ -912,6 +912,35 @@ button {
   color: #14100a;
   background: transparent;
   box-shadow: none;
+}
+
+.room-lobby-actions {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.92fr) minmax(160px, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.room-lobby-admin-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.room-lobby-admin-actions-single {
+  grid-template-columns: 1fr;
+}
+
+.room-small-action {
+  height: 48px;
+  padding-inline: 8px;
+  font-size: 15px;
+}
+
+.room-delete-button {
+  color: #ffefe8;
+  border-color: rgba(255, 104, 74, 0.48);
+  background: rgba(104, 39, 35, 0.42);
 }
 
 .room-lobby-header {
@@ -1780,6 +1809,12 @@ button {
   color: #fff7bd;
   background: transparent;
   box-shadow: none;
+}
+
+.scene-dark .room-delete-button {
+  color: #ffe8df;
+  border-color: rgba(255, 104, 74, 0.42);
+  background: rgba(118, 41, 36, 0.5);
 }
 
 .scene-dark .plane-color-active {
@@ -3639,6 +3674,10 @@ button {
   }
 
   .room-create-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .room-lobby-actions {
     grid-template-columns: 1fr;
   }
 
