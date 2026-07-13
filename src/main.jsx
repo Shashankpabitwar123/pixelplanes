@@ -354,6 +354,7 @@ function createInitialPlaneState(spawnX = START_X) {
     crashImpact: 1,
     damage: 0,
     fuel: FUEL_SECONDS,
+    searchLightOn: false,
   };
 }
 
@@ -386,6 +387,18 @@ function getSyncedRoomWeather(weather, now) {
   return {
     fog: syncedWeatherCycleActive(elapsed, seed, 'fog', 4500, 6500, 13000, 9000, 22000, 28000),
     rain: syncedWeatherCycleActive(elapsed, seed, 'rain', 15000, 17000, 14000, 11000, 36000, 52000),
+  };
+}
+
+function getSyncedCowPottyPlan(seed, cowId, cycle) {
+  const label = `cow:${cowId}`;
+  const pottyStart = 0.2 + seededWeatherUnit(seed, `${label}:start`, cycle) * 0.56;
+  return {
+    cycle,
+    active: seededWeatherUnit(seed, `${label}:active`, cycle) < 0.22,
+    x: 24 + seededWeatherUnit(seed, `${label}:x`, cycle) * (WORLD_WIDTH - 70),
+    start: pottyStart,
+    end: pottyStart + 0.045,
   };
 }
 
@@ -1579,6 +1592,10 @@ function App() {
     if (Number.isFinite(room.serverNow)) {
       roomServerTimeOffsetRef.current = room.serverNow - Date.now();
     }
+    if (room.weather?.state) {
+      setFogActive(Boolean(room.weather.state.fog));
+      setRainActive(Boolean(room.weather.state.rain));
+    }
     const effectivePlayerId = playerId || localRoomPlayerIdRef.current;
     if (effectivePlayerId) {
       localRoomPlayerIdRef.current = effectivePlayerId;
@@ -1723,6 +1740,13 @@ function App() {
       if (message.type === 'player_left') {
         const playerName = `${message.playerName || 'A player'}`.trim() || 'A player';
         pushRoomNotification(`${playerName} left the room`);
+      }
+      if (message.type === 'weather_state') {
+        if (Number.isFinite(message.serverNow)) {
+          roomServerTimeOffsetRef.current = message.serverNow - Date.now();
+        }
+        setFogActive(Boolean(message.fog));
+        setRainActive(Boolean(message.rain));
       }
       if (message.type === 'room_deleted') {
         setRoomLobby(null);
@@ -2372,6 +2396,7 @@ function App() {
   const roomSlots = Array.from({ length: ROOM_MAX_PLAYERS }, (_, index) => roomPlayers[index] ?? null);
   const roomIsHost = roomLobby?.hostId ? roomLobby.hostId === localRoomPlayerId : roomPlayers[0]?.id === 'host';
   const isRoomGame = gameStarted && gameMode === 'room';
+  const roomEnvironment = roomLobby?.weather?.seed ? roomLobby.weather : null;
   const roomPlayerIndex = roomPlayers.findIndex((player) => player.id === localRoomPlayerId);
   const roomSpawnX = isRoomGame && roomPlayerIndex >= 0
     ? START_X + ROOM_SPAWN_OFFSETS[roomPlayerIndex % ROOM_SPAWN_OFFSETS.length]
@@ -3099,10 +3124,14 @@ function App() {
               cows.slice(0, 2).map((cow, index) => (
                 <Cow
                   key={`${offset}-${index}`}
+                  cowId={`${offset}-${index}`}
                   {...cow}
                   duration={240 + ((offset + index * 17) % 70)}
                   delay={cow.delay - offset * 0.7 - index * 8}
                   grazeAt={28 + ((offset * 3 + index * 47) % (WORLD_WIDTH - 70))}
+                  syncSeed={roomEnvironment?.seed}
+                  syncStartedAt={roomEnvironment?.startedAt}
+                  serverTimeOffsetRef={roomServerTimeOffsetRef}
                   onPotty={addDropping}
                 />
               )),
@@ -3232,6 +3261,7 @@ function PlayablePlane({
   const projectileTimeoutsRef = useRef([]);
   const rocketTimeoutsRef = useRef([]);
   const stateRef = useRef(createInitialPlaneState(spawnX));
+  const searchLightOnRef = useRef(false);
   const [projectiles, setProjectiles] = useState([]);
   const [rocketProjectiles, setRocketProjectiles] = useState([]);
   const [rocketsRemaining, setRocketsRemaining] = useState(MAX_ROCKETS);
@@ -3256,6 +3286,7 @@ function PlayablePlane({
     projectileElementRefs.current.clear();
     const next = createInitialPlaneState(spawnX);
     stateRef.current = next;
+    searchLightOnRef.current = false;
     bulletTrajectoryRef.current = getBulletTrajectory(next);
     smokePreviousPlaneRef.current = null;
     damageLevelRef.current = 0;
@@ -3928,7 +3959,18 @@ function PlayablePlane({
         return;
       }
       if (action === 'light') {
-        if (pressed && !event.repeat) setSearchLightOn((active) => !active);
+        if (pressed && !event.repeat) {
+          setSearchLightOn((active) => {
+            const nextLightOn = !active;
+            searchLightOnRef.current = nextLightOn;
+            stateRef.current = {
+              ...stateRef.current,
+              searchLightOn: nextLightOn,
+            };
+            onPlaneState(stateRef.current);
+            return nextLightOn;
+          });
+        }
         return;
       }
       if (pressed) {
@@ -4295,6 +4337,7 @@ function PlayablePlane({
       if (next.crashed) {
         if (now - next.crashTime > 1450) {
           next = createInitialPlaneState(spawnX);
+          searchLightOnRef.current = false;
           bulletTrajectoryRef.current = getBulletTrajectory(next);
           smokePreviousPlaneRef.current = null;
           damageLevelRef.current = 0;
@@ -4330,6 +4373,7 @@ function PlayablePlane({
           setDamageLevel(0);
           setDamageSmokeParticles([]);
           setCrashed(false);
+          setSearchLightOn(false);
         }
         stateRef.current = next;
         renderPlane(next);
@@ -4349,6 +4393,7 @@ function PlayablePlane({
       }
 
       stateRef.current = next;
+      next.searchLightOn = searchLightOnRef.current && !next.crashed;
       if (fireQueuedRef.current) {
         fireQueuedRef.current = false;
         fireBulletRef.current?.(next, now);
@@ -4560,7 +4605,7 @@ function RemotePlane({ player, entry, fogActive }) {
           rocketsRemaining={0}
           planeColor={player.color || 'blue'}
           planeLightCombo="classic"
-          searchLightActive={fogActive && !crashed}
+          searchLightActive={Boolean(plane.searchLightOn) && !crashed}
           searchLightFog={fogActive}
           propellerActive={visibleThrust > 0.05}
         />
@@ -5527,28 +5572,38 @@ function FuelTank({ style, active }) {
   );
 }
 
-function Cow({ delay, duration, graze, grazeAt, onPotty }) {
+function Cow({ cowId, delay, duration, graze, grazeAt, syncSeed, syncStartedAt, serverTimeOffsetRef, onPotty }) {
   const [motion, setMotion] = useState({ x: -14, eating: false });
   const pottyActiveRef = useRef(false);
   const pottyPlanRef = useRef({ cycle: null, active: false, x: 0, start: 0, end: 0 });
 
   useEffect(() => {
     let frame = 0;
+    const syncedStartedAt = Number(syncStartedAt);
+    const synced = Boolean(syncSeed) && Number.isFinite(syncedStartedAt);
     const start = performance.now() / 1000;
+    pottyActiveRef.current = false;
+    pottyPlanRef.current = { cycle: null, active: false, x: 0, start: 0, end: 0 };
 
     const update = () => {
-      const elapsed = performance.now() / 1000 - start - delay;
+      const elapsed = synced
+        ? ((Date.now() + (serverTimeOffsetRef?.current || 0) - syncedStartedAt) / 1000) - delay
+        : performance.now() / 1000 - start - delay;
       const cycle = Math.floor(elapsed / duration);
       const progress = ((elapsed % duration) + duration) % duration / duration;
       if (pottyPlanRef.current.cycle !== cycle) {
-        const pottyStart = 0.2 + Math.random() * 0.56;
-        pottyPlanRef.current = {
-          cycle,
-          active: Math.random() < 0.22,
-          x: 24 + Math.random() * (WORLD_WIDTH - 70),
-          start: pottyStart,
-          end: pottyStart + 0.045,
-        };
+        if (synced) {
+          pottyPlanRef.current = getSyncedCowPottyPlan(syncSeed, cowId, cycle);
+        } else {
+          const pottyStart = 0.2 + Math.random() * 0.56;
+          pottyPlanRef.current = {
+            cycle,
+            active: Math.random() < 0.22,
+            x: 24 + Math.random() * (WORLD_WIDTH - 70),
+            start: pottyStart,
+            end: pottyStart + 0.045,
+          };
+        }
       }
       const nextMotion = getCowMotion(progress, graze, pottyPlanRef.current, grazeAt);
       if (nextMotion.potty && !pottyActiveRef.current) {
@@ -5561,7 +5616,7 @@ function Cow({ delay, duration, graze, grazeAt, onPotty }) {
 
     update();
     return () => cancelAnimationFrame(frame);
-  }, [delay, duration, graze, grazeAt, onPotty]);
+  }, [cowId, delay, duration, graze, grazeAt, onPotty, serverTimeOffsetRef, syncSeed, syncStartedAt]);
 
   return (
     <div className={`cow${motion.eating ? ' cow-eating' : motion.potty ? ' cow-pottying' : ' cow-walking'}`} style={{ transform: `translateX(${motion.x}vw)` }}>

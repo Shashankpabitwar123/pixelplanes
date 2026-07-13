@@ -11,6 +11,7 @@ const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const PLANE_COLORS = ['blue', 'red', 'yellow', 'purple', 'green', 'cyan'];
 const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 const HIT_DEDUPE_TTL_MS = 20_000;
+const ROOM_WEATHER_STATE_INTERVAL_MS = 500;
 const WORLD_WIDTH = 700;
 const WORLD_HEIGHT = 400;
 
@@ -102,6 +103,46 @@ function ensureRoomWeather(room) {
   return room.weather;
 }
 
+function seededWeatherUnit(seed, label, index) {
+  const input = `${seed}:${label}:${index}`;
+  let hash = 2166136261;
+  for (let position = 0; position < input.length; position += 1) {
+    hash ^= input.charCodeAt(position);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
+}
+
+function syncedWeatherCycleActive(elapsed, seed, label, initialBase, initialRange, durationBase, durationRange, gapBase, gapRange) {
+  let cursor = initialBase + seededWeatherUnit(seed, label, 0) * initialRange;
+  for (let cycle = 0; cycle < 512; cycle += 1) {
+    const duration = durationBase + seededWeatherUnit(seed, label, cycle * 2 + 1) * durationRange;
+    if (elapsed >= cursor && elapsed < cursor + duration) return true;
+    cursor += duration + gapBase + seededWeatherUnit(seed, label, cycle * 2 + 2) * gapRange;
+    if (cursor > elapsed) return false;
+  }
+  return false;
+}
+
+function getSyncedRoomWeather(weather, now = Date.now()) {
+  const startedAt = Number(weather?.startedAt);
+  const seed = String(weather?.seed || '');
+  if (!Number.isFinite(startedAt) || !seed) return { fog: false, rain: false };
+  const elapsed = Math.max(0, now - startedAt);
+  return {
+    fog: syncedWeatherCycleActive(elapsed, seed, 'fog', 4500, 6500, 13000, 9000, 22000, 28000),
+    rain: syncedWeatherCycleActive(elapsed, seed, 'rain', 15000, 17000, 14000, 11000, 36000, 52000),
+  };
+}
+
+function serializeWeather(room, now = Date.now()) {
+  const weather = ensureRoomWeather(room);
+  return {
+    ...weather,
+    state: getSyncedRoomWeather(weather, now),
+  };
+}
+
 function finiteNumber(value, fallback = 0, min = -Infinity, max = Infinity) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
@@ -120,6 +161,7 @@ function sanitizePlaneState(state = {}) {
     crashed: Boolean(state.crashed),
     damage: finiteNumber(state.damage, 0, 0, 2),
     fuel: finiteNumber(state.fuel, 20, 0, 20),
+    searchLightOn: Boolean(state.searchLightOn),
   };
 }
 
@@ -170,6 +212,7 @@ function roomForSocket(socket) {
 }
 
 function serializeRoom(room) {
+  const now = Date.now();
   const players = Array.from(room.players.values()).map((player) => ({
     id: player.id,
     name: player.name,
@@ -190,10 +233,25 @@ function serializeRoom(room) {
     maxPlayers: ROOM_MAX_PLAYERS,
     started: room.started,
     createdAt: room.createdAt,
-    serverNow: Date.now(),
-    weather: ensureRoomWeather(room),
+    serverNow: now,
+    weather: serializeWeather(room, now),
     players,
   };
+}
+
+function broadcastRoomWeatherState(room, now = Date.now()) {
+  if (!room.sockets.size) return;
+  const weather = ensureRoomWeather(room);
+  const state = getSyncedRoomWeather(weather, now);
+  for (const peer of room.sockets.values()) {
+    send(peer, {
+      type: 'weather_state',
+      serverNow: now,
+      weather,
+      fog: state.fog,
+      rain: state.rain,
+    });
+  }
 }
 
 function broadcastRoomState(room) {
@@ -721,6 +779,13 @@ setInterval(() => {
     }
   }
 }, 60_000).unref();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const room of rooms.values()) {
+    broadcastRoomWeatherState(room, now);
+  }
+}, ROOM_WEATHER_STATE_INTERVAL_MS).unref();
 
 server.listen(PORT, () => {
   initDb().catch((error) => console.warn('[db] init skipped:', error.message));
