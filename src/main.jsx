@@ -1072,6 +1072,7 @@ function App() {
   const [localRoomPlayerId, setLocalRoomPlayerId] = useState('');
   const [roomConnectionStatus, setRoomConnectionStatus] = useState('idle');
   const [roomError, setRoomError] = useState('');
+  const [roomNotifications, setRoomNotifications] = useState([]);
   const [voiceStatus, setVoiceStatus] = useState('idle');
   const [voiceLevels, setVoiceLevels] = useState({});
   const [roomVoiceEnabled, setRoomVoiceEnabled] = useState(true);
@@ -1125,6 +1126,7 @@ function App() {
   const rainAudioRef = useRef(null);
   const rainSoundStartTimerRef = useRef(0);
   const fuelPulseTimersRef = useRef([]);
+  const roomNotificationTimersRef = useRef([]);
   const shootingStarTimersRef = useRef([]);
   const startGame = useCallback(() => {
     setGameStarted(true);
@@ -1150,6 +1152,20 @@ function App() {
     }
     socket.send(JSON.stringify(message));
     return true;
+  }, []);
+  const clearRoomNotifications = useCallback(() => {
+    roomNotificationTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    roomNotificationTimersRef.current = [];
+    setRoomNotifications([]);
+  }, []);
+  const pushRoomNotification = useCallback((message) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setRoomNotifications((current) => [...current.slice(-2), { id, message }]);
+    const timeout = window.setTimeout(() => {
+      setRoomNotifications((current) => current.filter((notification) => notification.id !== id));
+      roomNotificationTimersRef.current = roomNotificationTimersRef.current.filter((timer) => timer !== timeout);
+    }, 3400);
+    roomNotificationTimersRef.current.push(timeout);
   }, []);
   const replaceRemotePlayerStates = useCallback((updater) => {
     const next = typeof updater === 'function' ? updater(remotePlayerStatesRef.current) : updater;
@@ -1704,11 +1720,16 @@ function App() {
           };
         });
       }
+      if (message.type === 'player_left') {
+        const playerName = `${message.playerName || 'A player'}`.trim() || 'A player';
+        pushRoomNotification(`${playerName} left the room`);
+      }
       if (message.type === 'room_deleted') {
         setRoomLobby(null);
         setRoomMutedPlayers({});
         replaceRemotePlayerStates({});
         replaceRemoteProjectiles([]);
+        clearRoomNotifications();
         setRoomError('Room was deleted by the host.');
         setStartScreen('room');
       }
@@ -1717,6 +1738,7 @@ function App() {
         setRoomMutedPlayers({});
         replaceRemotePlayerStates({});
         replaceRemoteProjectiles([]);
+        clearRoomNotifications();
         setStartScreen('room');
       }
       if (message.type === 'room_error') {
@@ -1738,7 +1760,7 @@ function App() {
         reject(new Error('Could not connect to multiplayer server.'));
       }
     });
-  }), [applyServerRoomState, localRoomPlayerId, replaceRemotePlayerStates, replaceRemoteProjectiles, startGame]);
+  }), [applyServerRoomState, clearRoomNotifications, localRoomPlayerId, pushRoomNotification, replaceRemotePlayerStates, replaceRemoteProjectiles, startGame]);
   const pauseGame = useCallback(() => {
     if (!gameStarted) return;
     setPaused((current) => !current);
@@ -1824,6 +1846,7 @@ function App() {
       disconnectRoomVoice();
       setRoomLobby(null);
       setRoomMutedPlayers({});
+      clearRoomNotifications();
       setStartScreen('room');
       return;
     }
@@ -1836,6 +1859,7 @@ function App() {
     const remainingPlayers = roomLobby.players.filter((player) => player.id !== 'host');
     if (!remainingPlayers.length) {
       setRoomLobby(null);
+      clearRoomNotifications();
       setStartScreen('room');
       return;
     }
@@ -1848,8 +1872,9 @@ function App() {
         .map((player) => ({ ...player, role: 'Player' })),
     ];
     setRoomLobby({ ...roomLobby, players: nextPlayers });
+    clearRoomNotifications();
     setStartScreen('room');
-  }, [disconnectRoomSocket, disconnectRoomVoice, roomLobby, sendRoomMessage]);
+  }, [clearRoomNotifications, disconnectRoomSocket, disconnectRoomVoice, roomLobby, sendRoomMessage]);
   const deleteRoomLobby = useCallback(() => {
     if (sendRoomMessage({ type: 'delete_room' })) {
       disconnectRoomSocket();
@@ -1857,8 +1882,9 @@ function App() {
     }
     setRoomLobby(null);
     setRoomMutedPlayers({});
+    clearRoomNotifications();
     setStartScreen('room');
-  }, [disconnectRoomSocket, disconnectRoomVoice, sendRoomMessage]);
+  }, [clearRoomNotifications, disconnectRoomSocket, disconnectRoomVoice, sendRoomMessage]);
   const applyRoomTheme = useCallback((nextTheme) => {
     setRoomTheme(nextTheme);
     setTheme(nextTheme);
@@ -2034,6 +2060,7 @@ function App() {
     setGameMode('bots');
     setRoomLobby(null);
     setRoomMutedPlayers({});
+    clearRoomNotifications();
     setMusicOpen(false);
     setHelpOpen(false);
     setPlaneMenuOpen(false);
@@ -2057,7 +2084,7 @@ function App() {
     updateCamera({ x: getCameraX(START_X), y: getCameraY(0) });
     updateFuelGauge(1);
     setRestartSignal((signal) => signal + 1);
-  }, [disconnectRoomSocket, updateCamera, updateFuelGauge]);
+  }, [clearRoomNotifications, disconnectRoomSocket, updateCamera, updateFuelGauge]);
   const updatePlayerState = useCallback((nextState) => {
     playerStateRef.current = nextState;
     if (gameMode !== 'room' || !gameStarted || !localRoomPlayerIdRef.current) return;
@@ -2110,6 +2137,7 @@ function App() {
 
   useEffect(() => () => {
     fuelPulseTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    roomNotificationTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
     window.clearTimeout(rainSoundStartTimerRef.current);
     rainAudioRef.current?.stop();
     rainAudioRef.current = null;
@@ -2376,6 +2404,15 @@ function App() {
   return (
     <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}`} aria-label="Animated Bitplanes background">
       <div className="sky-gradient" />
+      {roomNotifications.length > 0 && (
+        <div className="room-notification-stack" aria-live="polite" aria-atomic="false">
+          {roomNotifications.map((notification) => (
+            <div key={notification.id} className="room-notification">
+              {notification.message}
+            </div>
+          ))}
+        </div>
+      )}
 
       <button
         className={`pause-toggle${paused ? ' pause-toggle-active' : ''}`}

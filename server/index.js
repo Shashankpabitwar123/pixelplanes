@@ -229,6 +229,15 @@ function leaveRoom(socket, reason = 'left') {
     room.hostId = remaining[Math.floor(Math.random() * remaining.length)];
   }
 
+  for (const peerSocket of room.sockets.values()) {
+    send(peerSocket, {
+      type: 'player_left',
+      playerId: session.playerId,
+      playerName: leavingPlayer?.name || 'A player',
+      reason,
+    });
+  }
+
   logRoomEvent(room.code, 'player_left', {
     reason,
     playerId: session.playerId,
