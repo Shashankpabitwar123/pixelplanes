@@ -210,7 +210,11 @@ function App() {
       const shouldMute = globalMuted || playerMuted;
       element.muted = shouldMute;
       element.volume = shouldMute ? 0 : 1;
-      if (!shouldMute) element.play?.().catch(() => {});
+      if (!shouldMute) {
+        element.play?.().catch(() => {
+          setVoiceStatus('playback-blocked');
+        });
+      }
     }
   }, []);
   const requestMicrophonePermission = useCallback(async () => {
@@ -340,7 +344,6 @@ function App() {
     }
   }, [updateVoiceLevels]);
   const startLocalVoiceMeter = useCallback((publication, createAudioAnalyser) => {
-    if (localVoiceMeterRef.current.source === 'browser') return;
     const track = publication?.track;
     if (!track || track.kind !== 'audio' || !createAudioAnalyser) {
       stopLocalVoiceMeter();
@@ -378,51 +381,71 @@ function App() {
     };
 
     localVoiceMeterRef.current = {
+      source: 'livekit',
       frame: window.requestAnimationFrame(tick),
       cleanup: analyser.cleanup,
     };
   }, [stopLocalVoiceMeter, updateVoiceLevels]);
-  const unlockRoomAudio = useCallback(() => {
+  const unlockRoomAudio = useCallback(async () => {
     const liveKitRoom = liveKitRoomRef.current;
-    liveKitRoom?.startAudio?.().catch(() => {});
+    let blocked = false;
+    try {
+      await liveKitRoom?.startAudio?.();
+    } catch {
+      blocked = true;
+    }
     for (const record of voiceAudioElementsRef.current.values()) {
       const element = record.element || record;
-      element.play?.().catch(() => {});
+      if (element.muted || element.volume === 0) continue;
+      try {
+        await element.play?.();
+      } catch {
+        blocked = true;
+      }
     }
+    if (blocked && roomSpeakerEnabledRef.current) {
+      setVoiceStatus('playback-blocked');
+      return false;
+    }
+    if (liveKitRoom?.state === 'connected') setVoiceStatus('connected');
+    return true;
   }, []);
-  const publishLocalVoiceTrack = useCallback(async (liveKitRoom, Track) => {
+  const publishLocalVoiceTrack = useCallback(async (liveKitRoom, Track, createAudioAnalyser) => {
     if (!roomVoiceEnabledRef.current) return null;
-    const micAllowed = await requestMicrophonePermission();
-    if (!micAllowed) return null;
-
-    const micTrack = localVoiceTrackRef.current;
-    if (!micTrack || micTrack.readyState !== 'live') return null;
-    micTrack.enabled = true;
 
     const existingPublication = getLocalAudioPublication(liveKitRoom, localVoicePublicationRef.current);
     if (existingPublication?.track) {
       localVoicePublicationRef.current = existingPublication;
+      localVoiceTrackRef.current = existingPublication.track;
+      startLocalVoiceMeter(existingPublication, createAudioAnalyser);
       return existingPublication;
     }
 
-    const publication = await liveKitRoom.localParticipant.publishTrack(micTrack, {
-      source: Track.Source.Microphone,
+    stopLocalVoiceMeter();
+    const publication = await liveKitRoom.localParticipant.setMicrophoneEnabled(true, {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    }, {
       name: 'pixelplanes-mic',
+      source: Track.Source.Microphone,
     });
     localVoicePublicationRef.current = publication;
+    localVoiceTrackRef.current = publication?.track || null;
+    startLocalVoiceMeter(publication, createAudioAnalyser);
     return publication;
-  }, [getLocalAudioPublication, requestMicrophonePermission]);
+  }, [getLocalAudioPublication, startLocalVoiceMeter, stopLocalVoiceMeter]);
   const unpublishLocalVoiceTrack = useCallback(() => {
     const liveKitRoom = liveKitRoomRef.current;
-    const micTrack = localVoiceTrackRef.current;
-    if (liveKitRoom && micTrack) {
+    if (liveKitRoom) {
       try {
-        const result = liveKitRoom.localParticipant.unpublishTrack(micTrack, false);
+        const result = liveKitRoom.localParticipant.setMicrophoneEnabled(false);
         result?.catch?.(() => {});
       } catch {
         // The room may already be disconnected. The local meter cleanup below still releases the track.
       }
     }
+    localVoiceTrackRef.current = null;
     localVoicePublicationRef.current = null;
     stopLocalVoiceMeter();
   }, [stopLocalVoiceMeter]);
@@ -484,8 +507,13 @@ function App() {
           track,
         });
         document.body.appendChild(audioElement);
-        liveKitRoom.startAudio?.().catch(() => {});
-        audioElement.play?.().catch(() => {});
+        unlockRoomAudio();
+      });
+
+      liveKitRoom.on(RoomEvent.TrackSubscriptionFailed, (_trackSid, participant) => {
+        const playerName = participant?.name || participant?.identity || 'player';
+        setVoiceStatus('error');
+        setRoomError(`Could not subscribe to ${playerName}'s voice.`);
       });
 
       liveKitRoom.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
@@ -507,6 +535,17 @@ function App() {
       liveKitRoom.on(RoomEvent.LocalTrackPublished, (publication) => {
         if (publication.track?.kind === Track.Kind.Audio && roomVoiceEnabledRef.current) {
           startLocalVoiceMeter(publication, createAudioAnalyser);
+        }
+      });
+
+      liveKitRoom.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+        if (liveKitRoom.canPlaybackAudio) {
+          setVoiceStatus('connected');
+          return;
+        }
+        if (roomSpeakerEnabledRef.current) {
+          setVoiceStatus('playback-blocked');
+          pushRoomNotification('Tap the speaker button or game screen to hear voice');
         }
       });
 
@@ -541,7 +580,7 @@ function App() {
 
       await liveKitRoom.connect(voiceConfig.url, voiceConfig.token);
       if (roomVoiceEnabledRef.current) {
-        const micPublication = await publishLocalVoiceTrack(liveKitRoom, Track);
+        const micPublication = await publishLocalVoiceTrack(liveKitRoom, Track, createAudioAnalyser);
         if (!micPublication?.track) {
           setRoomError('Voice connected, but microphone publish failed.');
         }
@@ -556,7 +595,7 @@ function App() {
       setVoiceStatus('error');
       setRoomError(error.message);
     }
-  }, [disconnectRoomVoice, localRoomPlayerId, publishLocalVoiceTrack, roomLobby?.code, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, unlockRoomAudio, unpublishLocalVoiceTrack, updateVoiceLevels]);
+  }, [disconnectRoomVoice, localRoomPlayerId, publishLocalVoiceTrack, pushRoomNotification, roomLobby?.code, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, unlockRoomAudio, unpublishLocalVoiceTrack, updateVoiceLevels]);
   const applyServerRoomState = useCallback((room, playerId = localRoomPlayerId) => {
     if (!room) return;
     setRoomLobby(room);
@@ -917,15 +956,17 @@ function App() {
       return;
     }
 
-    const micAllowed = await requestMicrophonePermission();
-    if (!micAllowed) return;
+    const liveKitRoom = liveKitRoomRef.current;
+    if (!liveKitRoom || liveKitRoom.state !== 'connected') {
+      const micAllowed = await requestMicrophonePermission();
+      if (!micAllowed) return;
+    }
     roomVoiceEnabledRef.current = true;
     setRoomVoiceEnabled(true);
-    const liveKitRoom = liveKitRoomRef.current;
     if (liveKitRoom?.state === 'connected') {
       try {
-        const { Track } = await import('livekit-client');
-        await publishLocalVoiceTrack(liveKitRoom, Track);
+        const { Track, createAudioAnalyser } = await import('livekit-client');
+        await publishLocalVoiceTrack(liveKitRoom, Track, createAudioAnalyser);
       } catch (error) {
         roomVoiceEnabledRef.current = false;
         setRoomVoiceEnabled(false);
@@ -1339,10 +1380,10 @@ function App() {
     if (!liveKitRoom || liveKitRoom.state !== 'connected') return;
     let cancelled = false;
     import('livekit-client')
-      .then(async ({ Track }) => {
+      .then(async ({ Track, createAudioAnalyser }) => {
         if (cancelled) return;
         if (roomVoiceEnabled) {
-          const micPublication = await publishLocalVoiceTrack(liveKitRoom, Track);
+          const micPublication = await publishLocalVoiceTrack(liveKitRoom, Track, createAudioAnalyser);
           if (!cancelled && !micPublication?.track) {
             setVoiceStatus('error');
             setRoomError('Microphone could not be published to voice chat.');
