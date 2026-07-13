@@ -83,10 +83,14 @@ import {
   normalizeAngle,
 } from './game/core.jsx';
 
-const ROOM_STATE_SEND_INTERVAL_MS = 50;
-const REMOTE_INTERPOLATION_DELAY_MS = 100;
-const REMOTE_MAX_INTERPOLATION_DELAY_MS = 240;
+const ROOM_STATE_SEND_INTERVAL_MS = 40;
+const REMOTE_INTERPOLATION_DELAY_MS = 130;
+const REMOTE_MAX_INTERPOLATION_DELAY_MS = 300;
 const REMOTE_MAX_PREDICTION_SECONDS = 0.22;
+const REMOTE_SNAPSHOT_BUFFER_SIZE = 12;
+const REMOTE_DISPLAY_SMOOTHING = 22;
+const REMOTE_DISPLAY_SNAP_DISTANCE = 42;
+const REMOTE_DISPLAY_MAX_DT_SECONDS = 0.06;
 
 function App() {
   const [theme, setTheme] = useState('dark');
@@ -209,21 +213,41 @@ function App() {
     const receivedAt = performance.now();
     const current = remotePlayerStatesRef.current;
     const existing = current[playerId];
+    if (
+      Number.isFinite(serverAt) &&
+      Number.isFinite(existing?.serverAt) &&
+      serverAt < existing.serverAt
+    ) {
+      return;
+    }
     const packetGap = existing?.at ? receivedAt - existing.at : ROOM_STATE_SEND_INTERVAL_MS;
     const gapError = Math.abs(packetGap - ROOM_STATE_SEND_INTERVAL_MS);
     const jitter = existing?.jitter == null
       ? gapError
       : existing.jitter + (gapError - existing.jitter) * 0.18;
-    current[playerId] = {
-      previousState: existing?.state || state,
-      previousAt: existing?.at || receivedAt,
-      state: {
-        ...existing?.state,
-        ...state,
+    const nextState = {
+      ...existing?.state,
+      ...state,
+    };
+    const snapshots = [
+      ...(existing?.snapshots || []),
+      {
+        state: nextState,
+        at: receivedAt,
+        serverAt,
       },
+    ].slice(-REMOTE_SNAPSHOT_BUFFER_SIZE);
+    const previousSnapshot = snapshots.length > 1
+      ? snapshots[snapshots.length - 2]
+      : null;
+    current[playerId] = {
+      previousState: previousSnapshot?.state || existing?.state || nextState,
+      previousAt: previousSnapshot?.at || existing?.at || receivedAt,
+      state: nextState,
       at: receivedAt,
       serverAt,
       jitter,
+      snapshots,
     };
   }, []);
   const replaceRemoteProjectiles = useCallback((updater) => {
@@ -3758,23 +3782,77 @@ function interpolateRemotePlane(entry, now) {
     REMOTE_MAX_INTERPOLATION_DELAY_MS,
   );
   const renderAt = now - interpolationDelay;
+  const snapshots = Array.isArray(entry.snapshots) ? entry.snapshots : [];
+
+  if (snapshots.length >= 2) {
+    if (renderAt <= snapshots[0].at) {
+      return interpolatePlaneSnapshot(snapshots[0], snapshots[1], 0);
+    }
+
+    for (let index = 1; index < snapshots.length; index += 1) {
+      const from = snapshots[index - 1];
+      const to = snapshots[index];
+      if (renderAt <= to.at) {
+        const windowMs = Math.max(1, to.at - from.at);
+        return interpolatePlaneSnapshot(from, to, clamp((renderAt - from.at) / windowMs, 0, 1));
+      }
+    }
+
+    const latest = snapshots[snapshots.length - 1];
+    const latestState = latest.state || plane;
+    const predictionSeconds = clamp((renderAt - latest.at) / 1000, 0, REMOTE_MAX_PREDICTION_SECONDS);
+    return {
+      x: (latestState.x ?? 0) + (latestState.vx || 0) * predictionSeconds,
+      y: (latestState.y ?? 0) + (latestState.vy || 0) * predictionSeconds,
+      angle: latestState.angle || 0,
+    };
+  }
+
   const packetWindow = Math.max(1, currentAt - previousAt);
 
   if (renderAt <= currentAt && previousAt < currentAt) {
     const t = clamp((renderAt - previousAt) / packetWindow, 0, 1);
-    const angleDelta = normalizeAngle((plane.angle || 0) - (previous.angle || 0));
-    return {
-      x: (previous.x || 0) + ((plane.x || 0) - (previous.x || 0)) * t,
-      y: (previous.y || 0) + ((plane.y || 0) - (previous.y || 0)) * t,
-      angle: normalizeAngle((previous.angle || 0) + angleDelta * t),
-    };
+    return interpolatePlaneStates(previous, plane, t);
   }
 
   const predictionSeconds = clamp((renderAt - currentAt) / 1000, 0, REMOTE_MAX_PREDICTION_SECONDS);
   return {
-    x: (plane.x || 0) + (plane.vx || 0) * predictionSeconds,
-    y: (plane.y || 0) + (plane.vy || 0) * predictionSeconds,
+    x: (plane.x ?? 0) + (plane.vx || 0) * predictionSeconds,
+    y: (plane.y ?? 0) + (plane.vy || 0) * predictionSeconds,
     angle: plane.angle || 0,
+  };
+}
+
+function interpolatePlaneSnapshot(from, to, t) {
+  return interpolatePlaneStates(from?.state || {}, to?.state || from?.state || {}, t);
+}
+
+function interpolatePlaneStates(from, to, t) {
+  const fromAngle = from.angle || 0;
+  const angleDelta = normalizeAngle((to.angle || 0) - fromAngle);
+  return {
+    x: (from.x ?? 0) + ((to.x ?? 0) - (from.x ?? 0)) * t,
+    y: (from.y ?? 0) + ((to.y ?? 0) - (from.y ?? 0)) * t,
+    angle: normalizeAngle(fromAngle + angleDelta * t),
+  };
+}
+
+function smoothRemoteDisplay(previous, target, now) {
+  if (!previous) {
+    return { ...target, at: now };
+  }
+  const distance = Math.hypot((target.x ?? 0) - (previous.x ?? 0), (target.y ?? 0) - (previous.y ?? 0));
+  if (!Number.isFinite(distance) || distance > REMOTE_DISPLAY_SNAP_DISTANCE) {
+    return { ...target, at: now };
+  }
+  const dt = clamp((now - (previous.at || now)) / 1000, 0, REMOTE_DISPLAY_MAX_DT_SECONDS);
+  const alpha = 1 - Math.exp(-REMOTE_DISPLAY_SMOOTHING * dt);
+  const angleDelta = normalizeAngle((target.angle || 0) - (previous.angle || 0));
+  return {
+    x: (previous.x ?? 0) + ((target.x ?? 0) - (previous.x ?? 0)) * alpha,
+    y: (previous.y ?? 0) + ((target.y ?? 0) - (previous.y ?? 0)) * alpha,
+    angle: normalizeAngle((previous.angle || 0) + angleDelta * alpha),
+    at: now,
   };
 }
 
@@ -3806,6 +3884,7 @@ function RoomPlayerMapDot({ playerId, statesRef }) {
 function RemotePlane({ player, statesRef, fogActive }) {
   const planeRef = useRef(null);
   const blastRef = useRef(null);
+  const displayRef = useRef(null);
   const [visual, setVisual] = useState({
     visible: false,
     crashed: false,
@@ -3825,6 +3904,7 @@ function RemotePlane({ player, statesRef, fogActive }) {
     const update = (now) => {
       const currentEntry = statesRef.current[player.id];
       if (!currentEntry?.state) {
+        displayRef.current = null;
         if (planeRef.current) planeRef.current.style.display = 'none';
         if (blastRef.current) blastRef.current.style.display = 'none';
         if (visualRef.current.visible) {
@@ -3843,8 +3923,14 @@ function RemotePlane({ player, statesRef, fogActive }) {
         return;
       }
       const plane = currentEntry.state;
-      const display = interpolateRemotePlane(currentEntry, now);
       const crashed = Boolean(plane.crashed);
+      const targetDisplay = interpolateRemotePlane(currentEntry, now);
+      if (displayRef.current?.crashed !== crashed) {
+        displayRef.current = null;
+      }
+      const display = smoothRemoteDisplay(displayRef.current, targetDisplay, now);
+      display.crashed = crashed;
+      displayRef.current = display;
       const damaged = (plane.damage ?? 0) > 0 && !crashed;
       const visibleThrust = Math.max(plane.thrust || 0, plane.throttle || 0);
       if (planeRef.current) {
