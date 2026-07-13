@@ -165,12 +165,21 @@ function App() {
   const [fuelStationPulses, setFuelStationPulses] = useState({});
   const [musicOpen, setMusicOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fieldGuideOpen, setFieldGuideOpen] = useState(false);
   const [planeMenuOpen, setPlaneMenuOpen] = useState(false);
   const [planeColor, setPlaneColor] = useState('blue');
   const [planeLightCombo, setPlaneLightCombo] = useState('classic');
   const [activeTrackId, setActiveTrackId] = useState(null);
   const [musicVolume, setMusicVolume] = useState(0.32);
   const [sfxMuted, setSfxMuted] = useState(false);
+  const [soundLevels, setSoundLevels] = useState({
+    engine: 0.8,
+    ammo: 0.85,
+    rocket: 0.8,
+    rain: 0.8,
+  });
+  const [planeLightIntensity, setPlaneLightIntensity] = useState(0.9);
   const [shootingStars, setShootingStars] = useState([]);
   const [remoteProjectiles, setRemoteProjectiles] = useState([]);
   const measuredFrameRate = useMeasuredFrameRate();
@@ -217,6 +226,8 @@ function App() {
     setStartScreen('home');
     setMusicOpen(false);
     setHelpOpen(false);
+    setSettingsOpen(false);
+    setFieldGuideOpen(false);
     setPlaneMenuOpen(false);
     setKillCount(0);
   }, []);
@@ -1516,6 +1527,15 @@ function App() {
     if (musicAudioRef.current) musicAudioRef.current.volume = nextVolume;
   }, []);
 
+  const updateSoundLevel = useCallback((kind, event) => {
+    const nextLevel = Number(event.target.value) / 100;
+    setSoundLevels((levels) => ({ ...levels, [kind]: nextLevel }));
+  }, []);
+
+  const updatePlaneLightIntensity = useCallback((event) => {
+    setPlaneLightIntensity(Number(event.target.value) / 100);
+  }, []);
+
   useEffect(() => () => {
     fuelPulseTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
     roomNotificationTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
@@ -1668,14 +1688,14 @@ function App() {
       rainAudio.context.resume?.();
       const t = rainAudio.context.currentTime;
       rainAudio.gain.cancelScheduledValues(t);
-      rainAudio.gain.setTargetAtTime(0.105, t, 0.38);
+      rainAudio.gain.setTargetAtTime(0.105 * soundLevels.rain, t, 0.38);
     }, 850);
 
     return () => {
       window.clearTimeout(rainSoundStartTimerRef.current);
       rainSoundStartTimerRef.current = 0;
     };
-  }, [rainActive, sfxMuted]);
+  }, [rainActive, sfxMuted, soundLevels.rain]);
 
   useEffect(() => {
     const resumeFromPause = (event) => {
@@ -1814,6 +1834,8 @@ function App() {
         onClick={() => {
           setMusicOpen((open) => !open);
           setHelpOpen(false);
+          setSettingsOpen(false);
+          setFieldGuideOpen(false);
           setPlaneMenuOpen(false);
         }}
       >
@@ -1836,6 +1858,8 @@ function App() {
         onClick={() => {
           setHelpOpen((open) => !open);
           setMusicOpen(false);
+          setSettingsOpen(false);
+          setFieldGuideOpen(false);
           setPlaneMenuOpen(false);
         }}
       >
@@ -1850,6 +1874,8 @@ function App() {
           setPlaneMenuOpen((open) => !open);
           setMusicOpen(false);
           setHelpOpen(false);
+          setSettingsOpen(false);
+          setFieldGuideOpen(false);
         }}
       >
         <img
@@ -2029,6 +2055,34 @@ function App() {
                   </button>
                   <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
                     Room
+                  </button>
+                </div>
+                <div className="start-utility-actions" aria-label="Game settings and information">
+                  <button
+                    className={`start-utility-button${settingsOpen ? ' start-utility-active' : ''}`}
+                    type="button"
+                    aria-label="Open sound and light settings"
+                    aria-expanded={settingsOpen}
+                    title="Settings"
+                    onClick={() => {
+                      setSettingsOpen((open) => !open);
+                      setFieldGuideOpen(false);
+                    }}
+                  >
+                    <img src="/assets/settings-gear-icon.png" alt="" draggable="false" aria-hidden="true" />
+                  </button>
+                  <button
+                    className={`start-utility-button${fieldGuideOpen ? ' start-utility-active' : ''}`}
+                    type="button"
+                    aria-label="Open the Bit Planes field guide"
+                    aria-expanded={fieldGuideOpen}
+                    title="Field guide"
+                    onClick={() => {
+                      setFieldGuideOpen((open) => !open);
+                      setSettingsOpen(false);
+                    }}
+                  >
+                    <img src="/assets/field-guide-icon.png" alt="" draggable="false" aria-hidden="true" />
                   </button>
                 </div>
               </>
@@ -2259,6 +2313,119 @@ function App() {
               </>
             )}
           </div>
+          {settingsOpen && startScreen === 'home' && (
+            <section className="start-utility-overlay" aria-label="Flight deck sound settings">
+              <div className="sound-settings-panel" role="dialog" aria-modal="true" aria-labelledby="sound-settings-title">
+                <div className="sound-settings-heading">
+                  <div>
+                    <span className="sound-settings-kicker">Hangar controls</span>
+                    <h2 id="sound-settings-title">Flight Deck Settings</h2>
+                  </div>
+                  <button className="panel-close-button" type="button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button>
+                </div>
+                <div className="sound-settings-grid">
+                  {[
+                    ['engine', 'Propeller', 'Engine and rotor'],
+                    ['ammo', 'Ammo', 'Bullets and impacts'],
+                    ['rocket', 'Rockets', 'Launch and trail'],
+                    ['rain', 'Rain', 'Weather ambience'],
+                  ].map(([kind, label, description]) => (
+                    <label className="sound-setting" key={kind}>
+                      <span className="sound-setting-copy"><strong>{label}</strong><small>{description}</small></span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={Math.round(soundLevels[kind] * 100)}
+                        aria-label={`${label} volume`}
+                        onChange={(event) => updateSoundLevel(kind, event)}
+                      />
+                      <output>{Math.round(soundLevels[kind] * 100)}%</output>
+                    </label>
+                  ))}
+                  <label className="sound-setting sound-setting-lights">
+                    <span className="sound-setting-copy"><strong>Plane lights</strong><small>Night beacon intensity</small></span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={Math.round(planeLightIntensity * 100)}
+                      aria-label="Plane blinking light intensity"
+                      onChange={updatePlaneLightIntensity}
+                    />
+                    <output>{Math.round(planeLightIntensity * 100)}%</output>
+                  </label>
+                </div>
+                <p className="sound-settings-note">Music stays in the music button, so you can tune it separately.</p>
+              </div>
+            </section>
+          )}
+          {fieldGuideOpen && startScreen === 'home' && (
+            <section className="start-utility-overlay field-guide-overlay" aria-label="Bit Planes field guide">
+              <article className="field-guide-panel" role="dialog" aria-modal="true" aria-labelledby="field-guide-title">
+                <header className="field-guide-masthead">
+                  <div className="field-guide-stamp">VOL. 01<br />SKY EDITION</div>
+                  <div>
+                    <span className="field-guide-kicker">The Bit Planes Gazette</span>
+                    <h2 id="field-guide-title">Pilot's Field Guide</h2>
+                    <p>Everything needed to fly, fight, refuel, and keep the sky yours.</p>
+                  </div>
+                  <button className="panel-close-button field-guide-close" type="button" aria-label="Close field guide" onClick={() => setFieldGuideOpen(false)}>×</button>
+                </header>
+                <div className="field-guide-grid">
+                  <section className="field-guide-story field-guide-story-flight">
+                    <div className="field-guide-art guide-plane-art"><img src="/assets/exact-plane.png" alt="Blue Bit Plane" draggable="false" /></div>
+                    <div className="field-guide-copy">
+                      <span className="field-guide-number">01</span>
+                      <h3>Take to the sky</h3>
+                      <p>Hold <kbd>W</kbd> or <kbd>↑</kbd> to build speed. Use <kbd>A</kbd>/<kbd>D</kbd> or the arrow keys to turn. Release thrust and gravity takes over.</p>
+                    </div>
+                  </section>
+                  <section className="field-guide-story field-guide-story-fuel">
+                    <div className="field-guide-art guide-fuel-art"><FuelTank active={false} /></div>
+                    <div className="field-guide-copy">
+                      <span className="field-guide-number">02</span>
+                      <h3>Find fuel stations</h3>
+                      <p>The purple dots on your locator mark fuel stations. Touch one to refill 20 seconds of fuel and repair first-hit propeller damage.</p>
+                    </div>
+                  </section>
+                  <section className="field-guide-story field-guide-story-weapons">
+                    <div className="field-guide-art guide-weapons-art" aria-hidden="true"><span className="guide-bullet-art" /><span className="guide-rocket-art" /></div>
+                    <div className="field-guide-copy">
+                      <span className="field-guide-number">03</span>
+                      <h3>Fight with intent</h3>
+                      <p><kbd>Space</kbd> fires seven bullets that refill automatically. <kbd>R</kbd> fires a rocket that guides toward a target for four seconds, then flies straight.</p>
+                    </div>
+                  </section>
+                  <section className="field-guide-story field-guide-story-damage">
+                    <div className="field-guide-art guide-damage-art"><img src="/assets/exact-plane-purple.png" alt="Enemy purple Bit Plane" draggable="false" /></div>
+                    <div className="field-guide-copy">
+                      <span className="field-guide-number">04</span>
+                      <h3>Watch the smoke</h3>
+                      <p>One hit damages the propeller and starts smoke. A second hit blasts the plane. Land gently on the green runway; hay, hard landings, and map edges are dangerous.</p>
+                    </div>
+                  </section>
+                  <section className="field-guide-story field-guide-story-weather">
+                    <div className="field-guide-art guide-weather-art"><img src="/assets/theme-lightbulb-icon.svg" alt="Plane light" draggable="false" /><span>FOG</span><i>RAIN</i></div>
+                    <div className="field-guide-copy">
+                      <span className="field-guide-number">05</span>
+                      <h3>Fly through weather</h3>
+                      <p>Fog sits low over the field. Press <kbd>L</kbd> to shine the nose light through it. Rain and fog are shared with every pilot in the same room.</p>
+                    </div>
+                  </section>
+                  <section className="field-guide-story field-guide-story-room">
+                    <div className="field-guide-art guide-room-art"><img src="/assets/music-note-icon-transparent.png" alt="Music note" draggable="false" /><span className="guide-room-dot guide-room-dot-you" /><span className="guide-room-dot guide-room-dot-fuel" /><span className="guide-room-dot guide-room-dot-enemy" /></div>
+                    <div className="field-guide-copy">
+                      <span className="field-guide-number">06</span>
+                      <h3>Choose your sky</h3>
+                      <p>Start fights bots. Training removes them. In Room mode, share the code, choose your mic and speaker, and fly with up to six pilots.</p>
+                    </div>
+                  </section>
+                </div>
+                <footer className="field-guide-footer">A quiet landing keeps you flying. A fuel stop keeps you alive. A clear line of fire wins the dogfight.</footer>
+              </article>
+            </section>
+          )}
         </div>
       )}
       {paused && (
@@ -2442,6 +2609,8 @@ function App() {
             planeColor={planeColor}
             planeLightCombo={planeLightCombo}
             sfxMuted={sfxMuted}
+            audioSettings={soundLevels}
+            lightIntensity={planeLightIntensity}
             fogActive={fogActive}
           />
           {remoteRoomPlanes.map((player) => (
@@ -2585,6 +2754,8 @@ function PlayablePlane({
   planeColor,
   planeLightCombo,
   sfxMuted,
+  audioSettings,
+  lightIntensity,
   fogActive,
 }) {
   const keysRef = useRef(new Set());
@@ -2594,6 +2765,7 @@ function PlayablePlane({
   const engineAudioRef = useRef(null);
   const crashSoundRef = useRef(null);
   const sfxMutedRef = useRef(sfxMuted);
+  const audioSettingsRef = useRef(audioSettings);
   const controlsEnabledRef = useRef(controlsEnabled);
   const pausedRef = useRef(paused);
   const startArmedRef = useRef(startArmed);
@@ -2754,6 +2926,10 @@ function PlayablePlane({
   }, [sfxMuted]);
 
   useEffect(() => {
+    audioSettingsRef.current = audioSettings;
+  }, [audioSettings]);
+
+  useEffect(() => {
     controlsEnabledRef.current = controlsEnabled;
     if (controlsEnabled) return;
     keysRef.current.clear();
@@ -2857,7 +3033,7 @@ function PlayablePlane({
       const shotVolume = 3.4;
       const master = context.createGain();
       master.gain.setValueAtTime(0.0001, t);
-      master.gain.exponentialRampToValueAtTime(0.52 * shotVolume, t + 0.006);
+      master.gain.exponentialRampToValueAtTime(0.52 * shotVolume * (audioSettingsRef.current?.ammo ?? 1), t + 0.006);
       master.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
       master.connect(limiter);
 
@@ -2959,7 +3135,7 @@ function PlayablePlane({
 
       const master = context.createGain();
       master.gain.setValueAtTime(0.0001, t);
-      master.gain.exponentialRampToValueAtTime(1.12, t + 0.018);
+      master.gain.exponentialRampToValueAtTime(1.12 * (audioSettingsRef.current?.rocket ?? 1), t + 0.018);
       master.gain.exponentialRampToValueAtTime(0.0001, t + 0.72);
       master.connect(limiter);
 
@@ -3805,7 +3981,9 @@ function PlayablePlane({
         const audio = engineAudioRef.current;
         if (audio) {
           const t = audio.context.currentTime;
-          const gain = planeState.crashed || sfxMutedRef.current ? 0 : Math.min(0.13, visibleThrust * 0.11);
+          const gain = planeState.crashed || sfxMutedRef.current
+            ? 0
+            : Math.min(0.13, visibleThrust * 0.11) * (audioSettingsRef.current?.engine ?? 1);
           audio.master.gain.setTargetAtTime(gain, t, 0.045);
           audio.rotor.frequency.setTargetAtTime(46 + visibleThrust * 96, t, 0.04);
           audio.buzz.frequency.setTargetAtTime(115 + visibleThrust * 220, t, 0.04);
@@ -3854,6 +4032,7 @@ function PlayablePlane({
           rocketsRemaining={rocketsRemaining}
           planeColor={planeColor}
           planeLightCombo={planeLightCombo}
+          lightIntensity={lightIntensity}
           searchLightActive={searchLightOn && !crashed}
           searchLightFog={fogActive}
         />
@@ -4906,7 +5085,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   );
 }
 
-function BitPlane({ rocketsRemaining, planeColor, planeLightCombo, searchLightActive = false, searchLightFog = false, propellerActive = false }) {
+function BitPlane({ rocketsRemaining, planeColor, planeLightCombo, lightIntensity = 1, searchLightActive = false, searchLightFog = false, propellerActive = false }) {
   const planeAssets = PLANE_COLOR_ASSETS[planeColor] || PLANE_COLOR_ASSETS.blue;
   const lightCombo = PLANE_LIGHT_COMBOS[planeLightCombo] || PLANE_LIGHT_COMBOS.classic;
   return (
@@ -4921,6 +5100,7 @@ function BitPlane({ rocketsRemaining, planeColor, planeLightCombo, searchLightAc
         '--plane-back-light-glow': lightCombo.backGlow,
         '--plane-back-light-glow-soft': lightCombo.backGlowSoft,
         '--plane-back-light-glow-wide': lightCombo.backGlowWide,
+        '--plane-light-intensity': lightIntensity,
         '--plane-body-filter': planeAssets.filter || 'none',
       }}
     >
