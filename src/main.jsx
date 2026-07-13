@@ -61,6 +61,7 @@ const MUSIC_TRACKS = [
 
 const HIGH_SCORE_STORAGE_KEY = 'bitplanes-high-score';
 const ROOM_MAX_PLAYERS = 6;
+const ROOM_SPAWN_OFFSETS = [-84, -50, -17, 17, 50, 84];
 const MULTIPLAYER_WS_URL = import.meta.env.VITE_WS_URL || '';
 const MULTIPLAYER_API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -335,9 +336,9 @@ const planeModel = {
   ],
 };
 
-function createInitialPlaneState() {
+function createInitialPlaneState(spawnX = START_X) {
   return {
-    x: START_X,
+    x: spawnX,
     y: 0,
     vx: 0,
     vy: 0,
@@ -1078,6 +1079,8 @@ function App() {
   const roomSocketRef = useRef(null);
   const liveKitRoomRef = useRef(null);
   const voiceAudioElementsRef = useRef(new Map());
+  const localVoiceTrackRef = useRef(null);
+  const localVoicePublicationRef = useRef(null);
   const voiceLevelsRef = useRef({});
   const localVoiceMeterRef = useRef({ source: '', frame: 0, cleanup: null });
   const roomVoiceEnabledRef = useRef(roomVoiceEnabled);
@@ -1134,7 +1137,7 @@ function App() {
     }
   }, []);
   const requestMicrophonePermission = useCallback(async () => {
-    if (localVoiceMeterRef.current.source === 'browser') {
+    if (localVoiceMeterRef.current.source === 'browser' && localVoiceTrackRef.current?.readyState === 'live') {
       setRoomError('');
       return true;
     }
@@ -1151,14 +1154,23 @@ function App() {
           autoGainControl: true,
         },
       });
+      const [micTrack] = stream.getAudioTracks();
+      if (!micTrack) {
+        stream.getTracks().forEach((track) => track.stop());
+        setRoomError('No microphone track was found.');
+        return false;
+      }
 
       const previousMeter = localVoiceMeterRef.current;
       if (previousMeter.frame) window.cancelAnimationFrame(previousMeter.frame);
       previousMeter.cleanup?.();
+      localVoiceTrackRef.current = micTrack;
+      localVoicePublicationRef.current = null;
 
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) {
         stream.getTracks().forEach((track) => track.stop());
+        localVoiceTrackRef.current = null;
         setRoomError('Microphone meter is not available in this browser.');
         return false;
       }
@@ -1212,6 +1224,10 @@ function App() {
           source.disconnect();
           stream.getTracks().forEach((track) => track.stop());
           context.close?.();
+          if (localVoiceTrackRef.current === micTrack) {
+            localVoiceTrackRef.current = null;
+            localVoicePublicationRef.current = null;
+          }
         },
       };
       setRoomError('');
@@ -1289,8 +1305,52 @@ function App() {
       cleanup: analyser.cleanup,
     };
   }, [stopLocalVoiceMeter, updateVoiceLevels]);
-  const disconnectRoomVoice = useCallback(() => {
+  const unlockRoomAudio = useCallback(() => {
+    const liveKitRoom = liveKitRoomRef.current;
+    liveKitRoom?.startAudio?.().catch(() => {});
+    for (const record of voiceAudioElementsRef.current.values()) {
+      const element = record.element || record;
+      element.play?.().catch(() => {});
+    }
+  }, []);
+  const publishLocalVoiceTrack = useCallback(async (liveKitRoom, Track) => {
+    if (!roomVoiceEnabledRef.current) return null;
+    const micAllowed = await requestMicrophonePermission();
+    if (!micAllowed) return null;
+
+    const micTrack = localVoiceTrackRef.current;
+    if (!micTrack || micTrack.readyState !== 'live') return null;
+    micTrack.enabled = true;
+
+    const existingPublication = getLocalAudioPublication(liveKitRoom, localVoicePublicationRef.current);
+    if (existingPublication?.track) {
+      localVoicePublicationRef.current = existingPublication;
+      return existingPublication;
+    }
+
+    const publication = await liveKitRoom.localParticipant.publishTrack(micTrack, {
+      source: Track.Source.Microphone,
+      name: 'pixelplanes-mic',
+    });
+    localVoicePublicationRef.current = publication;
+    return publication;
+  }, [getLocalAudioPublication, requestMicrophonePermission]);
+  const unpublishLocalVoiceTrack = useCallback(() => {
+    const liveKitRoom = liveKitRoomRef.current;
+    const micTrack = localVoiceTrackRef.current;
+    if (liveKitRoom && micTrack) {
+      try {
+        const result = liveKitRoom.localParticipant.unpublishTrack(micTrack, false);
+        result?.catch?.(() => {});
+      } catch {
+        // The room may already be disconnected. The local meter cleanup below still releases the track.
+      }
+    }
+    localVoicePublicationRef.current = null;
     stopLocalVoiceMeter();
+  }, [stopLocalVoiceMeter]);
+  const disconnectRoomVoice = useCallback(() => {
+    unpublishLocalVoiceTrack();
     const liveKitRoom = liveKitRoomRef.current;
     if (liveKitRoom) {
       liveKitRoom.disconnect();
@@ -1303,7 +1363,7 @@ function App() {
     voiceAudioElementsRef.current.clear();
     updateVoiceLevels({});
     setVoiceStatus('idle');
-  }, [stopLocalVoiceMeter, updateVoiceLevels]);
+  }, [unpublishLocalVoiceTrack, updateVoiceLevels]);
   const connectRoomVoice = useCallback(async () => {
     if (!MULTIPLAYER_API_URL || !roomLobby?.code || !localRoomPlayerId) return;
     const currentRoom = liveKitRoomRef.current;
@@ -1341,6 +1401,7 @@ function App() {
         const audioId = publication.trackSid || track.sid || crypto.randomUUID();
         voiceAudioElementsRef.current.set(audioId, { element: audioElement, playerId });
         document.body.appendChild(audioElement);
+        audioElement.play?.().catch(() => {});
       });
 
       liveKitRoom.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
@@ -1384,21 +1445,23 @@ function App() {
       });
 
       await liveKitRoom.connect(voiceConfig.url, voiceConfig.token);
-      const publication = await liveKitRoom.localParticipant.setMicrophoneEnabled(roomVoiceEnabled);
-      const micPublication = getLocalAudioPublication(liveKitRoom, publication);
-      if (roomVoiceEnabled && micPublication?.track) {
-        startLocalVoiceMeter(micPublication, createAudioAnalyser);
+      if (roomVoiceEnabledRef.current) {
+        const micPublication = await publishLocalVoiceTrack(liveKitRoom, Track);
+        if (!micPublication?.track) {
+          setRoomError('Voice connected, but microphone publish failed.');
+        }
       } else {
-        stopLocalVoiceMeter();
+        unpublishLocalVoiceTrack();
       }
       setRemoteAudioMuted(!roomSpeakerEnabledRef.current);
+      unlockRoomAudio();
       setVoiceStatus('connected');
     } catch (error) {
       disconnectRoomVoice();
       setVoiceStatus('error');
       setRoomError(error.message);
     }
-  }, [disconnectRoomVoice, getLocalAudioPublication, localRoomPlayerId, roomLobby?.code, roomVoiceEnabled, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, updateVoiceLevels]);
+  }, [disconnectRoomVoice, localRoomPlayerId, publishLocalVoiceTrack, roomLobby?.code, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, unlockRoomAudio, unpublishLocalVoiceTrack, updateVoiceLevels]);
   const applyServerRoomState = useCallback((room, playerId = localRoomPlayerId) => {
     if (!room) return;
     setRoomLobby(room);
@@ -1406,6 +1469,7 @@ function App() {
     setTheme(room.theme || 'dark');
     const effectivePlayerId = playerId || localRoomPlayerIdRef.current;
     if (effectivePlayerId) {
+      localRoomPlayerIdRef.current = effectivePlayerId;
       setLocalRoomPlayerId(effectivePlayerId);
       const localPlayer = room.players?.find((player) => player.id === effectivePlayerId);
       if (localPlayer?.color) setPlaneColor(localPlayer.color);
@@ -1463,6 +1527,7 @@ function App() {
         applyServerRoomState(message.room, localRoomPlayerIdRef.current);
         setGameMode('room');
         startGame();
+        setRestartSignal((signal) => signal + 1);
       }
       if (message.type === 'remote_player_state') {
         if (!message.playerId || message.playerId === localRoomPlayerIdRef.current) return;
@@ -1703,6 +1768,8 @@ function App() {
   }, [sendRoomMessage]);
   const toggleRoomVoice = useCallback(async () => {
     if (roomVoiceEnabled) {
+      roomVoiceEnabledRef.current = false;
+      unpublishLocalVoiceTrack();
       setRoomVoiceEnabled(false);
       sendRoomMessage({
         type: 'update_audio_settings',
@@ -1714,13 +1781,27 @@ function App() {
 
     const micAllowed = await requestMicrophonePermission();
     if (!micAllowed) return;
+    roomVoiceEnabledRef.current = true;
     setRoomVoiceEnabled(true);
+    const liveKitRoom = liveKitRoomRef.current;
+    if (liveKitRoom?.state === 'connected') {
+      try {
+        const { Track } = await import('livekit-client');
+        await publishLocalVoiceTrack(liveKitRoom, Track);
+      } catch (error) {
+        roomVoiceEnabledRef.current = false;
+        setRoomVoiceEnabled(false);
+        setVoiceStatus('error');
+        setRoomError(error.message);
+        return;
+      }
+    }
     sendRoomMessage({
       type: 'update_audio_settings',
       micEnabled: true,
       speakerEnabled: roomSpeakerEnabled,
     });
-  }, [requestMicrophonePermission, roomSpeakerEnabled, roomVoiceEnabled, sendRoomMessage]);
+  }, [publishLocalVoiceTrack, requestMicrophonePermission, roomSpeakerEnabled, roomVoiceEnabled, sendRoomMessage, unpublishLocalVoiceTrack]);
   const toggleRoomSpeaker = useCallback(() => {
     setRoomSpeakerEnabled((enabled) => {
       const nextEnabled = !enabled;
@@ -1729,9 +1810,10 @@ function App() {
         micEnabled: roomVoiceEnabled,
         speakerEnabled: nextEnabled,
       });
+      if (nextEnabled) window.setTimeout(unlockRoomAudio, 0);
       return nextEnabled;
     });
-  }, [roomVoiceEnabled, sendRoomMessage]);
+  }, [roomVoiceEnabled, sendRoomMessage, unlockRoomAudio]);
   const updateCamera = useCallback((camera) => {
     if (worldRef.current) {
       worldRef.current.style.transform = `translate(${-camera.x}vw, ${camera.y}vh)`;
@@ -2096,31 +2178,43 @@ function App() {
     const liveKitRoom = liveKitRoomRef.current;
     if (!liveKitRoom || liveKitRoom.state !== 'connected') return;
     let cancelled = false;
-    liveKitRoom.localParticipant.setMicrophoneEnabled(roomVoiceEnabled)
-      .then(async (publication) => {
+    import('livekit-client')
+      .then(async ({ Track }) => {
         if (cancelled) return;
-        const micPublication = getLocalAudioPublication(liveKitRoom, publication);
-        if (!roomVoiceEnabled || !micPublication?.track) {
-          stopLocalVoiceMeter();
-          return;
+        if (roomVoiceEnabled) {
+          const micPublication = await publishLocalVoiceTrack(liveKitRoom, Track);
+          if (!cancelled && !micPublication?.track) {
+            setVoiceStatus('error');
+            setRoomError('Microphone could not be published to voice chat.');
+          }
+        } else {
+          unpublishLocalVoiceTrack();
         }
-        const { createAudioAnalyser } = await import('livekit-client');
-        if (!cancelled) startLocalVoiceMeter(micPublication, createAudioAnalyser);
       })
       .catch((error) => {
         if (cancelled) return;
-        stopLocalVoiceMeter();
+        unpublishLocalVoiceTrack();
         setVoiceStatus('error');
         setRoomError(error.message);
       });
     return () => {
       cancelled = true;
     };
-  }, [getLocalAudioPublication, roomVoiceEnabled, startLocalVoiceMeter, stopLocalVoiceMeter]);
+  }, [publishLocalVoiceTrack, roomVoiceEnabled, unpublishLocalVoiceTrack]);
 
   useEffect(() => {
     setRemoteAudioMuted(!roomSpeakerEnabled);
   }, [roomMutedPlayers, roomSpeakerEnabled, setRemoteAudioMuted]);
+
+  useEffect(() => {
+    const unlock = () => unlockRoomAudio();
+    window.addEventListener('pointerdown', unlock, true);
+    window.addEventListener('keydown', unlock, true);
+    return () => {
+      window.removeEventListener('pointerdown', unlock, true);
+      window.removeEventListener('keydown', unlock, true);
+    };
+  }, [unlockRoomAudio]);
 
   useEffect(() => {
     if (gameMode !== 'room' || !gameStarted) return;
@@ -2131,6 +2225,10 @@ function App() {
   const roomSlots = Array.from({ length: ROOM_MAX_PLAYERS }, (_, index) => roomPlayers[index] ?? null);
   const roomIsHost = roomLobby?.hostId ? roomLobby.hostId === localRoomPlayerId : roomPlayers[0]?.id === 'host';
   const isRoomGame = gameStarted && gameMode === 'room';
+  const roomPlayerIndex = roomPlayers.findIndex((player) => player.id === localRoomPlayerId);
+  const roomSpawnX = isRoomGame && roomPlayerIndex >= 0
+    ? START_X + ROOM_SPAWN_OFFSETS[roomPlayerIndex % ROOM_SPAWN_OFFSETS.length]
+    : START_X;
   const roomLeaderboardRows = (roomPlayers.length ? roomPlayers : [{ id: 'host', name: 'Player 1', color: planeColor, role: 'Host' }])
     .map((player) => {
       const isLocalPlayer = localRoomPlayerId ? player.id === localRoomPlayerId : player.id === 'host';
@@ -2797,6 +2895,7 @@ function App() {
             botTargetsActive={gameMode === 'bots'}
             controlsEnabled={gameStarted && !paused}
             paused={paused}
+            spawnX={roomSpawnX}
             restartSignal={restartSignal}
             startArmed={startScreen === 'bot-ready' || startScreen === 'training-ready'}
             onPowerStart={startGame}
@@ -2935,6 +3034,7 @@ function PlayablePlane({
   botTargetsActive,
   controlsEnabled,
   paused,
+  spawnX = START_X,
   restartSignal,
   startArmed,
   onPowerStart,
@@ -2959,7 +3059,7 @@ function PlayablePlane({
   const damageSmokeParticlesRef = useRef([]);
   const damageSmokeLastEmitRef = useRef(0);
   const fuelRefillFeedbackRef = useRef({ stationIndex: -1, time: 0 });
-  const bulletTrajectoryRef = useRef(getBulletTrajectory(createInitialPlaneState()));
+  const bulletTrajectoryRef = useRef(getBulletTrajectory(createInitialPlaneState(spawnX)));
   const crashedRef = useRef(false);
   const ammoRef = useRef(MAX_BULLETS);
   const reloadingRef = useRef(false);
@@ -2975,7 +3075,7 @@ function PlayablePlane({
   const projectileElementRefs = useRef(new Map());
   const projectileTimeoutsRef = useRef([]);
   const rocketTimeoutsRef = useRef([]);
-  const stateRef = useRef(createInitialPlaneState());
+  const stateRef = useRef(createInitialPlaneState(spawnX));
   const [projectiles, setProjectiles] = useState([]);
   const [rocketProjectiles, setRocketProjectiles] = useState([]);
   const [rocketsRemaining, setRocketsRemaining] = useState(MAX_ROCKETS);
@@ -2998,7 +3098,7 @@ function PlayablePlane({
     projectilesRef.current = [];
     rocketProjectilesRef.current = [];
     projectileElementRefs.current.clear();
-    const next = createInitialPlaneState();
+    const next = createInitialPlaneState(spawnX);
     stateRef.current = next;
     bulletTrajectoryRef.current = getBulletTrajectory(next);
     smokePreviousPlaneRef.current = null;
@@ -3033,7 +3133,7 @@ function PlayablePlane({
       planeRef.current.style.setProperty('--thrust', 0);
       planeRef.current.querySelector('.plane-visual')?.classList.remove('prop-spinning');
     }
-  }, [restartSignal, onAmmoChange, onRocketChange, onMove, onFuelChange, onPlaneState]);
+  }, [restartSignal, spawnX, onAmmoChange, onRocketChange, onMove, onFuelChange, onPlaneState]);
 
   useEffect(() => {
     if (!playerApiRef) return undefined;
@@ -4038,7 +4138,7 @@ function PlayablePlane({
 
       if (next.crashed) {
         if (now - next.crashTime > 1450) {
-          next = createInitialPlaneState();
+          next = createInitialPlaneState(spawnX);
           bulletTrajectoryRef.current = getBulletTrajectory(next);
           smokePreviousPlaneRef.current = null;
           damageLevelRef.current = 0;
@@ -4178,7 +4278,7 @@ function PlayablePlane({
 
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [onMove, onFuelChange, onFuelRefill, onKill, onPlayerDeath, onAmmoChange, onRocketChange, onPlaneState, onRoomHit, onRoomCrash, roomTargetStatesRef, botStateRefs, botApiRefs, botTargetsActive]);
+  }, [spawnX, onMove, onFuelChange, onFuelRefill, onKill, onPlayerDeath, onAmmoChange, onRocketChange, onPlaneState, onRoomHit, onRoomCrash, roomTargetStatesRef, botStateRefs, botApiRefs, botTargetsActive]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
@@ -4186,7 +4286,7 @@ function PlayablePlane({
         ref={planeRef}
         className={`player-plane${crashed ? ' plane-crashed' : ''}${damageLevel > 0 && !crashed ? ' plane-damaged' : ''}`}
         style={{
-          transform: `translate(${START_X}vw, 0vh) rotate(16deg)`,
+          transform: `translate(${spawnX}vw, 0vh) rotate(16deg)`,
           '--thrust': 0,
         }}
       >
