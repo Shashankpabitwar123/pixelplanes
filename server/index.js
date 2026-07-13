@@ -566,6 +566,9 @@ function relayPlayerState(socket, payload) {
   const player = room.players.get(playerId);
   if (!player) return;
   const state = sanitizePlaneState(payload.state);
+  const seq = Number.isSafeInteger(Number(payload.seq)) && Number(payload.seq) > 0
+    ? Number(payload.seq)
+    : 0;
   player.state = state;
   player.damage = state.damage;
   player.alive = !state.crashed && state.damage < 2;
@@ -573,6 +576,7 @@ function relayPlayerState(socket, payload) {
     type: 'remote_player_state',
     playerId,
     state,
+    seq,
     at: Date.now(),
   };
   for (const [peerId, peer] of room.sockets.entries()) {

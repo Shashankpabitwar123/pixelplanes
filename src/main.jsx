@@ -91,6 +91,8 @@ const REMOTE_SNAPSHOT_BUFFER_SIZE = 12;
 const REMOTE_DISPLAY_SMOOTHING = 22;
 const REMOTE_DISPLAY_SNAP_DISTANCE = 42;
 const REMOTE_DISPLAY_MAX_DT_SECONDS = 0.06;
+const RTC_STATE_CHANNEL_LABEL = 'pixelplanes-state';
+const RTC_STATE_CHANNEL_MAX_BUFFERED_BYTES = 64 * 1024;
 
 function App() {
   const [theme, setTheme] = useState('dark');
@@ -142,6 +144,7 @@ function App() {
   const roomDamageEventIdsRef = useRef(new Set());
   const localRoomPlayerIdRef = useRef('');
   const lastRoomStateSentRef = useRef(0);
+  const roomStateSeqRef = useRef(0);
   const botStateRefs = useRef(createInitialBotStates());
   const playerApiRef = useRef(null);
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
@@ -181,6 +184,7 @@ function App() {
     }
     setLocalRoomPlayerId('');
     setRoomConnectionStatus('idle');
+    roomStateSeqRef.current = 0;
   }, []);
   const sendRoomMessage = useCallback((message) => {
     const socket = roomSocketRef.current;
@@ -208,14 +212,21 @@ function App() {
     const next = typeof updater === 'function' ? updater(remotePlayerStatesRef.current) : updater;
     remotePlayerStatesRef.current = next;
   }, []);
-  const updateRemotePlayerState = useCallback((playerId, state, serverAt = 0) => {
+  const updateRemotePlayerState = useCallback((playerId, state, serverAt = 0, sequence = 0) => {
     if (!playerId || playerId === localRoomPlayerIdRef.current) return;
     const receivedAt = performance.now();
     const current = remotePlayerStatesRef.current;
     const existing = current[playerId];
+    const packetSequence = Number.isFinite(Number(sequence)) ? Number(sequence) : 0;
+    if (packetSequence > 0 && Number.isFinite(existing?.seq) && existing.seq > 0 && packetSequence <= existing.seq) {
+      return;
+    }
     if (
+      packetSequence <= 0 &&
       Number.isFinite(serverAt) &&
+      serverAt > 0 &&
       Number.isFinite(existing?.serverAt) &&
+      existing.serverAt > 0 &&
       serverAt < existing.serverAt
     ) {
       return;
@@ -246,6 +257,7 @@ function App() {
       state: nextState,
       at: receivedAt,
       serverAt,
+      seq: packetSequence || existing?.seq || 0,
       jitter,
       snapshots,
     };
@@ -401,6 +413,43 @@ function App() {
     });
   }, [sendRoomMessage]);
 
+  const setupRtcStateChannel = useCallback((remotePlayerId, peerRecord, channel) => {
+    if (!remotePlayerId || !peerRecord || !channel) return;
+    peerRecord.stateChannel = channel;
+    channel.binaryType = 'arraybuffer';
+    channel.addEventListener('message', (event) => {
+      let message;
+      try {
+        message = JSON.parse(String(event.data || '{}'));
+      } catch {
+        return;
+      }
+      if (message.type !== 'player_state' || !message.state) return;
+      updateRemotePlayerState(remotePlayerId, message.state, 0, message.seq || 0);
+    });
+  }, [updateRemotePlayerState]);
+
+  const sendRoomStateDataChannel = useCallback((state, seq) => {
+    if (gameMode !== 'room' || !gameStarted) return false;
+    let sent = false;
+    const message = JSON.stringify({
+      type: 'player_state',
+      state,
+      seq,
+    });
+    for (const peer of rtcPeerConnectionsRef.current.values()) {
+      const channel = peer.stateChannel;
+      if (
+        channel?.readyState === 'open' &&
+        channel.bufferedAmount < RTC_STATE_CHANNEL_MAX_BUFFERED_BYTES
+      ) {
+        channel.send(message);
+        sent = true;
+      }
+    }
+    return sent;
+  }, [gameMode, gameStarted]);
+
   const refreshVoiceStatus = useCallback(() => {
     const peers = Array.from(rtcPeerConnectionsRef.current.values());
     if (!localRoomPlayerIdRef.current) {
@@ -541,6 +590,7 @@ function App() {
     const peerRecord = {
       connection,
       audioTransceiver,
+      stateChannel: null,
       makingOffer: false,
       ignoreOffer: false,
       settingRemoteAnswerPending: false,
@@ -551,9 +601,25 @@ function App() {
     };
     rtcPeerConnectionsRef.current.set(remotePlayerId, peerRecord);
 
+    if (localId < remotePlayerId) {
+      setupRtcStateChannel(
+        remotePlayerId,
+        peerRecord,
+        connection.createDataChannel(RTC_STATE_CHANNEL_LABEL, {
+          ordered: false,
+          maxRetransmits: 0,
+        }),
+      );
+    }
+
     connection.addEventListener('icecandidate', (event) => {
       if (!event.candidate) return;
       sendVoiceSignal(remotePlayerId, { candidate: event.candidate });
+    });
+
+    connection.addEventListener('datachannel', (event) => {
+      if (event.channel?.label !== RTC_STATE_CHANNEL_LABEL) return;
+      setupRtcStateChannel(remotePlayerId, peerRecord, event.channel);
     });
 
     connection.addEventListener('track', (event) => {
@@ -590,7 +656,7 @@ function App() {
 
     refreshVoiceStatus();
     return peerRecord;
-  }, [attachRemoteAudioTrack, negotiateRtcPeer, refreshVoiceStatus, sendVoiceSignal, stopRemoteVoiceMeter]);
+  }, [attachRemoteAudioTrack, negotiateRtcPeer, refreshVoiceStatus, sendVoiceSignal, setupRtcStateChannel, stopRemoteVoiceMeter]);
 
   const getLocalVoiceStream = useCallback(async () => {
     const existingTrack = localVoiceTrackRef.current;
@@ -867,7 +933,7 @@ function App() {
       }
       if (message.type === 'remote_player_state') {
         if (!message.playerId || message.playerId === localRoomPlayerIdRef.current) return;
-        updateRemotePlayerState(message.playerId, message.state, message.at || 0);
+        updateRemotePlayerState(message.playerId, message.state, message.at || 0, message.seq || 0);
       }
       if (message.type === 'room_projectile') {
         const projectile = message.projectile;
@@ -1322,11 +1388,15 @@ function App() {
     const now = performance.now();
     if (now - lastRoomStateSentRef.current < ROOM_STATE_SEND_INTERVAL_MS) return;
     lastRoomStateSentRef.current = now;
+    roomStateSeqRef.current += 1;
+    const seq = roomStateSeqRef.current;
+    sendRoomStateDataChannel(nextState, seq);
     sendRoomMessage({
       type: 'player_state',
       state: nextState,
+      seq,
     });
-  }, [gameMode, gameStarted, sendRoomMessage]);
+  }, [gameMode, gameStarted, sendRoomMessage, sendRoomStateDataChannel]);
   const updateBotLocator = useCallback((botIndex, botState) => {
     botStateRefs.current[botIndex] = botState;
     const dot = mapBotDotRefs.current[botIndex];
