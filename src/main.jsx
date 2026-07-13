@@ -2064,14 +2064,24 @@ function App() {
             {startScreen === 'join' && (
               <>
                 <div className="start-title">Join Room</div>
-                <input
-                  className="room-code-input"
-                  value={roomCode}
-                  maxLength="8"
-                  placeholder="CODE"
-                  aria-label="Room code"
-                  onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
-                />
+                <div className="room-join-controls">
+                  <input
+                    className="room-code-input room-name-input"
+                    value={roomPlayerName}
+                    maxLength="14"
+                    placeholder="YOUR NAME"
+                    aria-label="Your name"
+                    onChange={(event) => setRoomPlayerName(event.target.value)}
+                  />
+                  <input
+                    className="room-code-input"
+                    value={roomCode}
+                    maxLength="8"
+                    placeholder="CODE"
+                    aria-label="Room code"
+                    onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
+                  />
+                </div>
                 {(roomError || roomConnectionStatus === 'connecting') && (
                   <div className={`room-status-line${roomError ? ' room-status-error' : ''}`}>
                     {roomError || 'Connecting...'}
