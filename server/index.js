@@ -90,6 +90,18 @@ function normalizeTheme(theme) {
   return theme === 'light' ? 'light' : 'dark';
 }
 
+function createRoomWeather(startedAt = Date.now()) {
+  return {
+    seed: crypto.randomBytes(8).toString('hex'),
+    startedAt,
+  };
+}
+
+function ensureRoomWeather(room) {
+  if (!room.weather) room.weather = createRoomWeather(room.createdAt);
+  return room.weather;
+}
+
 function finiteNumber(value, fallback = 0, min = -Infinity, max = Infinity) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
@@ -178,6 +190,8 @@ function serializeRoom(room) {
     maxPlayers: ROOM_MAX_PLAYERS,
     started: room.started,
     createdAt: room.createdAt,
+    serverNow: Date.now(),
+    weather: ensureRoomWeather(room),
     players,
   };
 }
@@ -238,6 +252,7 @@ function createRoom(socket, payload) {
     started: false,
     createdAt: Date.now(),
   };
+  room.weather = createRoomWeather(room.createdAt);
 
   const playerId = crypto.randomUUID();
   room.hostId = playerId;
@@ -349,6 +364,7 @@ function startRoom(socket) {
   }
 
   room.started = true;
+  room.weather = createRoomWeather(Date.now());
   for (const player of room.players.values()) {
     player.kills = 0;
     player.damage = 0;

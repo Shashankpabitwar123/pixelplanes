@@ -64,6 +64,7 @@ const ROOM_MAX_PLAYERS = 6;
 const ROOM_SPAWN_OFFSETS = [-84, -50, -17, 17, 50, 84];
 const MULTIPLAYER_WS_URL = import.meta.env.VITE_WS_URL || '';
 const MULTIPLAYER_API_URL = import.meta.env.VITE_API_URL || '';
+const ROOM_WEATHER_TICK_MS = 1000;
 
 function readStoredHighScore() {
   try {
@@ -353,6 +354,38 @@ function createInitialPlaneState(spawnX = START_X) {
     crashImpact: 1,
     damage: 0,
     fuel: FUEL_SECONDS,
+  };
+}
+
+function seededWeatherUnit(seed, label, index) {
+  const input = `${seed}:${label}:${index}`;
+  let hash = 2166136261;
+  for (let position = 0; position < input.length; position += 1) {
+    hash ^= input.charCodeAt(position);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
+}
+
+function syncedWeatherCycleActive(elapsed, seed, label, initialBase, initialRange, durationBase, durationRange, gapBase, gapRange) {
+  let cursor = initialBase + seededWeatherUnit(seed, label, 0) * initialRange;
+  for (let cycle = 0; cycle < 512; cycle += 1) {
+    const duration = durationBase + seededWeatherUnit(seed, label, cycle * 2 + 1) * durationRange;
+    if (elapsed >= cursor && elapsed < cursor + duration) return true;
+    cursor += duration + gapBase + seededWeatherUnit(seed, label, cycle * 2 + 2) * gapRange;
+    if (cursor > elapsed) return false;
+  }
+  return false;
+}
+
+function getSyncedRoomWeather(weather, now) {
+  const startedAt = Number(weather?.startedAt);
+  const seed = String(weather?.seed || '');
+  if (!Number.isFinite(startedAt) || !seed) return { fog: false, rain: false };
+  const elapsed = Math.max(0, now - startedAt);
+  return {
+    fog: syncedWeatherCycleActive(elapsed, seed, 'fog', 4500, 6500, 13000, 9000, 22000, 28000),
+    rain: syncedWeatherCycleActive(elapsed, seed, 'rain', 15000, 17000, 14000, 11000, 36000, 52000),
   };
 }
 
@@ -1078,6 +1111,7 @@ function App() {
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
   const roomSocketRef = useRef(null);
   const liveKitRoomRef = useRef(null);
+  const roomServerTimeOffsetRef = useRef(0);
   const voiceAudioElementsRef = useRef(new Map());
   const voiceOutputContextRef = useRef(null);
   const localVoiceTrackRef = useRef(null);
@@ -1526,6 +1560,9 @@ function App() {
     setRoomLobby(room);
     setRoomTheme(room.theme || 'dark');
     setTheme(room.theme || 'dark');
+    if (Number.isFinite(room.serverNow)) {
+      roomServerTimeOffsetRef.current = room.serverNow - Date.now();
+    }
     const effectivePlayerId = playerId || localRoomPlayerIdRef.current;
     if (effectivePlayerId) {
       localRoomPlayerIdRef.current = effectivePlayerId;
@@ -2141,6 +2178,23 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (roomLobby?.weather) {
+      const updateSyncedWeather = () => {
+        const serverNow = Date.now() + roomServerTimeOffsetRef.current;
+        const nextWeather = getSyncedRoomWeather(roomLobby.weather, serverNow);
+        setFogActive(nextWeather.fog);
+        setRainActive(nextWeather.rain);
+      };
+      updateSyncedWeather();
+      const interval = window.setInterval(updateSyncedWeather, ROOM_WEATHER_TICK_MS);
+      return () => window.clearInterval(interval);
+    }
+
+    return undefined;
+  }, [roomLobby?.weather?.seed, roomLobby?.weather?.startedAt]);
+
+  useEffect(() => {
+    if (roomLobby?.weather) return undefined;
     let stopped = false;
     let timer = 0;
 
@@ -2161,9 +2215,10 @@ function App() {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, []);
+  }, [roomLobby?.weather]);
 
   useEffect(() => {
+    if (roomLobby?.weather) return undefined;
     let stopped = false;
     let timer = 0;
 
@@ -2184,7 +2239,7 @@ function App() {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, []);
+  }, [roomLobby?.weather]);
 
   useEffect(() => {
     window.clearTimeout(rainSoundStartTimerRef.current);
