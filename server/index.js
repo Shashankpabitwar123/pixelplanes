@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { Pool } from 'pg';
-import { AccessToken } from 'livekit-server-sdk';
 import { WebSocketServer } from 'ws';
 
 const PORT = Number.parseInt(process.env.PORT || '4000', 10);
@@ -579,6 +578,23 @@ function registerPlayerCrash(socket, payload) {
   broadcastRoomState(room);
 }
 
+function relayVoiceSignal(socket, payload) {
+  const current = roomForSocket(socket);
+  if (!current) return;
+  const { room, playerId } = current;
+  const targetId = String(payload.targetId || '');
+  if (!targetId || targetId === playerId || !room.players.has(targetId)) return;
+
+  const targetSocket = room.sockets.get(targetId);
+  if (!targetSocket) return;
+  send(targetSocket, {
+    type: 'voice_signal',
+    fromPlayerId: playerId,
+    signal: payload.signal || {},
+    at: Date.now(),
+  });
+}
+
 function handleSocketMessage(socket, raw) {
   let message;
   try {
@@ -626,37 +642,15 @@ function handleSocketMessage(socket, raw) {
     case 'player_crashed':
       registerPlayerCrash(socket, message);
       break;
+    case 'voice_signal':
+      relayVoiceSignal(socket, message);
+      break;
     case 'ping':
       send(socket, { type: 'pong', at: Date.now() });
       break;
     default:
       send(socket, { type: 'room_error', message: `Unknown message type: ${message.type}` });
   }
-}
-
-function readBody(request) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    request.on('data', (chunk) => {
-      body += chunk;
-      if (body.length > 16_384) {
-        reject(new Error('Request too large.'));
-        request.destroy();
-      }
-    });
-    request.on('end', () => {
-      if (!body) {
-        resolve({});
-        return;
-      }
-      try {
-        resolve(JSON.parse(body));
-      } catch {
-        reject(new Error('Invalid JSON.'));
-      }
-    });
-    request.on('error', reject);
-  });
 }
 
 function writeJson(response, status, payload) {
@@ -670,50 +664,6 @@ function writeJson(response, status, payload) {
   response.end(JSON.stringify(payload));
 }
 
-async function createVoiceToken(payload) {
-  const livekitUrl = process.env.LIVEKIT_URL;
-  const apiKey = process.env.LIVEKIT_API_KEY;
-  const apiSecret = process.env.LIVEKIT_API_SECRET;
-  if (!livekitUrl || !apiKey || !apiSecret) {
-    return {
-      status: 501,
-      payload: {
-        error: 'Voice is not configured yet. Set LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET.',
-      },
-    };
-  }
-
-  const roomCode = String(payload.roomCode || '').trim().toUpperCase();
-  const playerId = String(payload.playerId || '').trim();
-  const room = rooms.get(roomCode);
-  if (!room || !room.players.has(playerId)) {
-    return { status: 404, payload: { error: 'Room player not found.' } };
-  }
-
-  const player = room.players.get(playerId);
-  const token = new AccessToken(apiKey, apiSecret, {
-    identity: playerId,
-    name: player.name,
-    ttl: '2h',
-  });
-  token.addGrant({
-    room: roomCode,
-    roomJoin: true,
-    canPublish: true,
-    canSubscribe: true,
-  });
-
-  return {
-    status: 200,
-    payload: {
-      url: livekitUrl,
-      token: await token.toJwt(),
-      roomCode,
-      playerId,
-    },
-  };
-}
-
 const server = http.createServer(async (request, response) => {
   if (request.method === 'OPTIONS') {
     writeJson(response, 204, {});
@@ -725,19 +675,8 @@ const server = http.createServer(async (request, response) => {
       ok: true,
       rooms: rooms.size,
       db: Boolean(process.env.DATABASE_URL),
-      voice: Boolean(process.env.LIVEKIT_URL && process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET),
+      voice: 'webrtc',
     });
-    return;
-  }
-
-  if (request.method === 'POST' && request.url === '/voice/token') {
-    try {
-      const body = await readBody(request);
-      const result = await createVoiceToken(body);
-      writeJson(response, result.status, result.payload);
-    } catch (error) {
-      writeJson(response, 400, { error: error.message });
-    }
     return;
   }
 

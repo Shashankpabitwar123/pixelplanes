@@ -30,7 +30,7 @@ import {
   ROOM_MAX_PLAYERS,
   ROOM_SPAWN_OFFSETS,
   MULTIPLAYER_WS_URL,
-  MULTIPLAYER_API_URL,
+  RTC_ICE_SERVERS,
   ROOM_WEATHER_TICK_MS,
   readStoredHighScore,
   PLANE_COLOR_ASSETS,
@@ -137,13 +137,14 @@ function App() {
   const playerApiRef = useRef(null);
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
   const roomSocketRef = useRef(null);
-  const liveKitRoomRef = useRef(null);
+  const rtcPeerConnectionsRef = useRef(new Map());
   const roomServerTimeOffsetRef = useRef(0);
   const voiceAudioElementsRef = useRef(new Map());
+  const localVoiceStreamRef = useRef(null);
   const localVoiceTrackRef = useRef(null);
-  const localVoicePublicationRef = useRef(null);
   const voiceLevelsRef = useRef({});
   const localVoiceMeterRef = useRef({ source: '', frame: 0, cleanup: null });
+  const remoteVoiceMetersRef = useRef(new Map());
   const roomVoiceEnabledRef = useRef(roomVoiceEnabled);
   const roomSpeakerEnabledRef = useRef(roomSpeakerEnabled);
   const roomMutedPlayersRef = useRef(roomMutedPlayers);
@@ -217,39 +218,6 @@ function App() {
       }
     }
   }, []);
-  const requestMicrophonePermission = useCallback(async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setRoomError('Microphone is not available in this browser.');
-      return false;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      const [micTrack] = stream.getAudioTracks();
-      if (!micTrack) {
-        stream.getTracks().forEach((track) => track.stop());
-        setRoomError('No microphone track was found.');
-        return false;
-      }
-      stream.getTracks().forEach((track) => track.stop());
-      setRoomError('');
-      return true;
-    } catch {
-      setRoomError('Microphone permission was blocked. Allow microphone in the browser to use voice chat.');
-      return false;
-    }
-  }, []);
-  const getLocalAudioPublication = useCallback((liveKitRoom, preferredPublication = null) => {
-    if (preferredPublication?.track?.kind === 'audio') return preferredPublication;
-    const publications = Array.from(liveKitRoom?.localParticipant?.audioTrackPublications?.values?.() || []);
-    return publications.find((publication) => publication.track?.kind === 'audio') || null;
-  }, []);
   const updateVoiceLevels = useCallback((updater) => {
     setVoiceLevels((current) => {
       const next = typeof updater === 'function' ? updater(current) : updater;
@@ -257,6 +225,19 @@ function App() {
       return next;
     });
   }, []);
+  const stopRemoteVoiceMeter = useCallback((playerId) => {
+    const meter = remoteVoiceMetersRef.current.get(playerId);
+    if (!meter) return;
+    if (meter.frame) window.cancelAnimationFrame(meter.frame);
+    meter.cleanup?.();
+    remoteVoiceMetersRef.current.delete(playerId);
+    updateVoiceLevels((current) => {
+      if (!current[playerId]) return current;
+      const next = { ...current };
+      delete next[playerId];
+      return next;
+    });
+  }, [updateVoiceLevels]);
   const stopLocalVoiceMeter = useCallback(() => {
     const meter = localVoiceMeterRef.current;
     if (meter.frame) window.cancelAnimationFrame(meter.frame);
@@ -270,29 +251,60 @@ function App() {
       }));
     }
   }, [updateVoiceLevels]);
-  const startLocalVoiceMeter = useCallback((publication, createAudioAnalyser) => {
-    const track = publication?.track;
-    if (!track || track.kind !== 'audio' || !createAudioAnalyser) {
+
+  const createTrackMeter = useCallback((track, onLevel) => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!track || track.readyState !== 'live' || !AudioContextClass) return null;
+    const context = new AudioContextClass();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.5;
+    analyser.minDecibels = -72;
+    analyser.maxDecibels = -18;
+    const source = context.createMediaStreamSource(new MediaStream([track]));
+    const samples = new Uint8Array(analyser.fftSize);
+    source.connect(analyser);
+    context.resume?.();
+
+    let frame = 0;
+    const tick = () => {
+      analyser.getByteTimeDomainData(samples);
+      let total = 0;
+      for (let index = 0; index < samples.length; index += 1) {
+        const centered = (samples[index] - 128) / 128;
+        total += centered * centered;
+      }
+      const rms = Math.sqrt(total / samples.length);
+      const level = rms < 0.006 ? 0 : rms > 0.075 ? 3 : rms > 0.028 ? 2 : 1;
+      onLevel(level);
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+
+    return {
+      get frame() {
+        return frame;
+      },
+      cleanup: () => {
+        if (frame) window.cancelAnimationFrame(frame);
+        source.disconnect();
+        context.close?.();
+      },
+    };
+  }, []);
+
+  const startLocalVoiceMeter = useCallback((track) => {
+    if (!track || track.readyState !== 'live') {
       stopLocalVoiceMeter();
       return;
     }
 
     stopLocalVoiceMeter();
-    const analyser = createAudioAnalyser(track, {
-      cloneTrack: true,
-      fftSize: 512,
-      smoothingTimeConstant: 0.55,
-      minDecibels: -72,
-      maxDecibels: -18,
-    });
-
-    const tick = () => {
+    const meter = createTrackMeter(track, (level) => {
       const playerId = localRoomPlayerIdRef.current;
       const enabled = roomVoiceEnabledRef.current;
-      const volume = enabled ? analyser.calculateVolume() : 0;
-      const nextLevel = !enabled || volume < 0.004 ? 0 : volume > 0.045 ? 3 : volume > 0.018 ? 2 : 1;
+      const nextLevel = enabled ? level : 0;
       const nextSpeaking = nextLevel > 0;
-
       if (playerId) {
         updateVoiceLevels((current) => {
           const previous = current[playerId] || { speaking: false, level: 0 };
@@ -303,24 +315,88 @@ function App() {
           };
         });
       }
-
-      localVoiceMeterRef.current.frame = window.requestAnimationFrame(tick);
-    };
+    });
 
     localVoiceMeterRef.current = {
-      source: 'livekit',
-      frame: window.requestAnimationFrame(tick),
-      cleanup: analyser.cleanup,
+      source: 'webrtc',
+      frame: meter?.frame || 0,
+      cleanup: meter?.cleanup || null,
     };
-  }, [stopLocalVoiceMeter, updateVoiceLevels]);
-  const unlockRoomAudio = useCallback(async () => {
-    const liveKitRoom = liveKitRoomRef.current;
-    let blocked = false;
-    try {
-      await liveKitRoom?.startAudio?.();
-    } catch {
-      blocked = true;
+  }, [createTrackMeter, stopLocalVoiceMeter, updateVoiceLevels]);
+
+  const startRemoteVoiceMeter = useCallback((playerId, track) => {
+    stopRemoteVoiceMeter(playerId);
+    const meter = createTrackMeter(track, (level) => {
+      const nextSpeaking = level > 0;
+      updateVoiceLevels((current) => {
+        const previous = current[playerId] || { speaking: false, level: 0 };
+        if (previous.speaking === nextSpeaking && previous.level === level) return current;
+        return {
+          ...current,
+          [playerId]: { speaking: nextSpeaking, level },
+        };
+      });
+    });
+    if (meter) remoteVoiceMetersRef.current.set(playerId, meter);
+  }, [createTrackMeter, stopRemoteVoiceMeter, updateVoiceLevels]);
+
+  const sendVoiceSignal = useCallback((targetId, signal) => {
+    if (!targetId || targetId === localRoomPlayerIdRef.current) return false;
+    return sendRoomMessage({
+      type: 'voice_signal',
+      targetId,
+      signal,
+    });
+  }, [sendRoomMessage]);
+
+  const refreshVoiceStatus = useCallback(() => {
+    const peers = Array.from(rtcPeerConnectionsRef.current.values());
+    if (!localRoomPlayerIdRef.current) {
+      setVoiceStatus('idle');
+      return;
     }
+    if (!peers.length) {
+      setVoiceStatus('connected');
+      return;
+    }
+    if (peers.some((peer) => peer.connection.connectionState === 'connected')) {
+      setVoiceStatus('connected');
+      return;
+    }
+    if (peers.some((peer) => ['new', 'checking', 'connecting'].includes(peer.connection.connectionState))) {
+      setVoiceStatus('connecting');
+      return;
+    }
+    if (peers.every((peer) => ['failed', 'closed', 'disconnected'].includes(peer.connection.connectionState))) {
+      setVoiceStatus('error');
+    }
+  }, []);
+
+  const negotiateRtcPeer = useCallback(async (remotePlayerId, peerRecord) => {
+    const peer = peerRecord || rtcPeerConnectionsRef.current.get(remotePlayerId);
+    if (!peer || peer.connection.signalingState === 'closed') return;
+    if (peer.negotiating || peer.connection.signalingState !== 'stable') {
+      peer.needsNegotiation = true;
+      return;
+    }
+    try {
+      peer.negotiating = true;
+      peer.needsNegotiation = false;
+      await peer.connection.setLocalDescription();
+      sendVoiceSignal(remotePlayerId, { description: peer.connection.localDescription });
+    } catch (error) {
+      setVoiceStatus('error');
+      setRoomError(`Voice negotiation failed: ${error.message}`);
+    } finally {
+      peer.negotiating = false;
+      if (peer.needsNegotiation && peer.connection.signalingState === 'stable') {
+        window.setTimeout(() => negotiateRtcPeer(remotePlayerId, peer), 0);
+      }
+    }
+  }, [sendVoiceSignal]);
+
+  const unlockRoomAudio = useCallback(async () => {
+    let blocked = false;
     for (const record of voiceAudioElementsRef.current.values()) {
       const element = record.element || record;
       if (element.muted || element.volume === 0) continue;
@@ -334,240 +410,287 @@ function App() {
       setVoiceStatus('playback-blocked');
       return false;
     }
-    if (liveKitRoom?.state === 'connected') setVoiceStatus('connected');
+    refreshVoiceStatus();
     return true;
-  }, []);
-  const publishLocalVoiceTrack = useCallback(async (liveKitRoom, Track, createAudioAnalyser) => {
-    if (!roomVoiceEnabledRef.current) return null;
+  }, [refreshVoiceStatus]);
 
-    const existingPublication = getLocalAudioPublication(liveKitRoom, localVoicePublicationRef.current);
-    if (existingPublication?.track) {
-      localVoicePublicationRef.current = existingPublication;
-      localVoiceTrackRef.current = existingPublication.track;
-      startLocalVoiceMeter(existingPublication, createAudioAnalyser);
-      return existingPublication;
+  const attachRemoteAudioTrack = useCallback((playerId, track, stream) => {
+    if (!playerId || !track || track.kind !== 'audio') return;
+    const previous = voiceAudioElementsRef.current.get(playerId);
+    if (previous) {
+      previous.element.remove();
+      stopRemoteVoiceMeter(playerId);
     }
-
-    stopLocalVoiceMeter();
-    const publication = await liveKitRoom.localParticipant.setMicrophoneEnabled(true, {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    }, {
-      name: 'pixelplanes-mic',
-      source: Track.Source.Microphone,
+    const audioElement = document.createElement('audio');
+    audioElement.autoplay = true;
+    audioElement.playsInline = true;
+    audioElement.controls = false;
+    audioElement.srcObject = stream || new MediaStream([track]);
+    const shouldMute = !roomSpeakerEnabledRef.current || Boolean(roomMutedPlayersRef.current[playerId]);
+    audioElement.muted = shouldMute;
+    audioElement.volume = shouldMute ? 0 : 1;
+    audioElement.style.display = 'none';
+    voiceAudioElementsRef.current.set(playerId, {
+      element: audioElement,
+      playerId,
+      track,
     });
-    localVoicePublicationRef.current = publication;
-    localVoiceTrackRef.current = publication?.track || null;
-    startLocalVoiceMeter(publication, createAudioAnalyser);
-    return publication;
-  }, [getLocalAudioPublication, startLocalVoiceMeter, stopLocalVoiceMeter]);
-  const unpublishLocalVoiceTrack = useCallback(() => {
-    const liveKitRoom = liveKitRoomRef.current;
-    if (liveKitRoom) {
-      try {
-        const result = liveKitRoom.localParticipant.setMicrophoneEnabled(false);
-        result?.catch?.(() => {});
-      } catch {
-        // The room may already be disconnected. The local meter cleanup below still releases the track.
+    document.body.appendChild(audioElement);
+    startRemoteVoiceMeter(playerId, track);
+    unlockRoomAudio();
+  }, [startRemoteVoiceMeter, stopRemoteVoiceMeter, unlockRoomAudio]);
+
+  const createRtcPeerConnection = useCallback((remotePlayerId) => {
+    if (!remotePlayerId || remotePlayerId === localRoomPlayerIdRef.current) return null;
+    const existing = rtcPeerConnectionsRef.current.get(remotePlayerId);
+    if (existing && existing.connection.connectionState !== 'closed') return existing;
+
+    const connection = new RTCPeerConnection({
+      iceServers: RTC_ICE_SERVERS,
+      iceCandidatePoolSize: 2,
+    });
+    const localId = localRoomPlayerIdRef.current || '';
+    const audioTransceiver = connection.addTransceiver('audio', {
+      direction: roomVoiceEnabledRef.current ? 'sendrecv' : 'recvonly',
+    });
+    if (roomVoiceEnabledRef.current && localVoiceTrackRef.current?.readyState === 'live') {
+      audioTransceiver.sender.replaceTrack(localVoiceTrackRef.current).catch(() => {});
+    }
+    const peerRecord = {
+      connection,
+      audioTransceiver,
+      makingOffer: false,
+      ignoreOffer: false,
+      settingRemoteAnswerPending: false,
+      queuedCandidates: [],
+      negotiating: false,
+      needsNegotiation: false,
+      polite: localId > remotePlayerId,
+    };
+    rtcPeerConnectionsRef.current.set(remotePlayerId, peerRecord);
+
+    connection.addEventListener('icecandidate', (event) => {
+      if (!event.candidate) return;
+      sendVoiceSignal(remotePlayerId, { candidate: event.candidate });
+    });
+
+    connection.addEventListener('track', (event) => {
+      const [stream] = event.streams;
+      attachRemoteAudioTrack(remotePlayerId, event.track, stream);
+    });
+
+    connection.addEventListener('connectionstatechange', () => {
+      if (['failed', 'closed'].includes(connection.connectionState)) {
+        const record = voiceAudioElementsRef.current.get(remotePlayerId);
+        record?.element?.remove?.();
+        voiceAudioElementsRef.current.delete(remotePlayerId);
+        stopRemoteVoiceMeter(remotePlayerId);
+        if (connection.connectionState === 'failed') {
+          connection.restartIce?.();
+          negotiateRtcPeer(remotePlayerId, peerRecord);
+        }
       }
+      refreshVoiceStatus();
+    });
+
+    connection.addEventListener('signalingstatechange', () => {
+      if (connection.signalingState === 'stable' && peerRecord.needsNegotiation) {
+        negotiateRtcPeer(remotePlayerId, peerRecord);
+      }
+    });
+
+    connection.addEventListener('negotiationneeded', () => {
+      peerRecord.makingOffer = true;
+      negotiateRtcPeer(remotePlayerId, peerRecord).finally(() => {
+        peerRecord.makingOffer = false;
+      });
+    });
+
+    refreshVoiceStatus();
+    return peerRecord;
+  }, [attachRemoteAudioTrack, negotiateRtcPeer, refreshVoiceStatus, sendVoiceSignal, stopRemoteVoiceMeter]);
+
+  const getLocalVoiceStream = useCallback(async () => {
+    const existingTrack = localVoiceTrackRef.current;
+    if (localVoiceStreamRef.current && existingTrack?.readyState === 'live') return localVoiceStreamRef.current;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Microphone is not available in this browser.');
     }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    const [micTrack] = stream.getAudioTracks();
+    if (!micTrack) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new Error('No microphone track was found.');
+    }
+    localVoiceStreamRef.current = stream;
+    localVoiceTrackRef.current = micTrack;
+    startLocalVoiceMeter(micTrack);
+    return stream;
+  }, [startLocalVoiceMeter]);
+
+  const requestMicrophonePermission = useCallback(async () => {
+    try {
+      await getLocalVoiceStream();
+      setRoomError('');
+      return true;
+    } catch (error) {
+      setRoomError(error.message || 'Microphone permission was blocked. Allow microphone in the browser to use voice chat.');
+      return false;
+    }
+  }, [getLocalVoiceStream]);
+
+  const publishLocalVoiceTrack = useCallback(async () => {
+    if (!roomVoiceEnabledRef.current) return null;
+    const stream = await getLocalVoiceStream();
+    const [track] = stream.getAudioTracks();
+    const replacements = [];
+    for (const [remotePlayerId, peer] of rtcPeerConnectionsRef.current.entries()) {
+      peer.audioTransceiver.direction = 'sendrecv';
+      replacements.push(peer.audioTransceiver.sender.replaceTrack(track));
+      negotiateRtcPeer(remotePlayerId, peer);
+    }
+    await Promise.allSettled(replacements);
+    return track;
+  }, [getLocalVoiceStream, negotiateRtcPeer]);
+
+  const unpublishLocalVoiceTrack = useCallback(() => {
+    for (const [remotePlayerId, peer] of rtcPeerConnectionsRef.current.entries()) {
+      peer.audioTransceiver.direction = 'recvonly';
+      peer.audioTransceiver.sender.replaceTrack(null).catch(() => {});
+      negotiateRtcPeer(remotePlayerId, peer);
+    }
+    localVoiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localVoiceStreamRef.current = null;
     localVoiceTrackRef.current = null;
-    localVoicePublicationRef.current = null;
     stopLocalVoiceMeter();
-  }, [stopLocalVoiceMeter]);
-  const disconnectRoomVoice = useCallback(() => {
-    unpublishLocalVoiceTrack();
-    const liveKitRoom = liveKitRoomRef.current;
-    if (liveKitRoom) {
-      liveKitRoom.disconnect();
-      liveKitRoomRef.current = null;
+  }, [negotiateRtcPeer, stopLocalVoiceMeter]);
+
+  const removeRtcPeer = useCallback((remotePlayerId) => {
+    const peer = rtcPeerConnectionsRef.current.get(remotePlayerId);
+    if (peer) {
+      peer.connection.onicecandidate = null;
+      peer.connection.ontrack = null;
+      peer.connection.close();
+      rtcPeerConnectionsRef.current.delete(remotePlayerId);
     }
+    const audioRecord = voiceAudioElementsRef.current.get(remotePlayerId);
+    audioRecord?.element?.remove?.();
+    voiceAudioElementsRef.current.delete(remotePlayerId);
+    stopRemoteVoiceMeter(remotePlayerId);
+    refreshVoiceStatus();
+  }, [refreshVoiceStatus, stopRemoteVoiceMeter]);
+
+  const disconnectRoomVoice = useCallback(() => {
+    localVoiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localVoiceStreamRef.current = null;
+    localVoiceTrackRef.current = null;
+    stopLocalVoiceMeter();
+    for (const peer of rtcPeerConnectionsRef.current.values()) {
+      peer.connection.close();
+    }
+    rtcPeerConnectionsRef.current.clear();
     for (const record of voiceAudioElementsRef.current.values()) {
       const element = record.element || record;
-      record.track?.detach?.(element);
       element.remove();
     }
     voiceAudioElementsRef.current.clear();
+    for (const playerId of remoteVoiceMetersRef.current.keys()) {
+      stopRemoteVoiceMeter(playerId);
+    }
     updateVoiceLevels({});
     setVoiceStatus('idle');
-  }, [unpublishLocalVoiceTrack, updateVoiceLevels]);
+  }, [stopLocalVoiceMeter, stopRemoteVoiceMeter, updateVoiceLevels]);
+
+  const syncRoomVoicePeers = useCallback((players = roomLobby?.players || []) => {
+    if (!localRoomPlayerIdRef.current || !window.RTCPeerConnection) return;
+    const remoteIds = new Set(
+      (players || [])
+        .map((player) => player.id)
+        .filter((playerId) => playerId && playerId !== localRoomPlayerIdRef.current),
+    );
+    for (const playerId of remoteIds) {
+      createRtcPeerConnection(playerId);
+    }
+    for (const playerId of rtcPeerConnectionsRef.current.keys()) {
+      if (!remoteIds.has(playerId)) removeRtcPeer(playerId);
+    }
+    refreshVoiceStatus();
+  }, [createRtcPeerConnection, refreshVoiceStatus, removeRtcPeer, roomLobby?.players]);
+
   const connectRoomVoice = useCallback(async () => {
-    if (!MULTIPLAYER_API_URL || !roomLobby?.code || !localRoomPlayerId) return;
-    const currentRoom = liveKitRoomRef.current;
-    if (currentRoom?.state === 'connected' || currentRoom?.state === 'connecting') return;
-
+    if (!roomLobby?.code || !localRoomPlayerId) return;
+    if (!window.RTCPeerConnection) {
+      setVoiceStatus('error');
+      setRoomError('Voice chat is not supported in this browser.');
+      return;
+    }
+    localRoomPlayerIdRef.current = localRoomPlayerId;
     setVoiceStatus('connecting');
-    try {
-      const response = await fetch(`${MULTIPLAYER_API_URL}/voice/token`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          roomCode: roomLobby.code,
-          playerId: localRoomPlayerId,
-        }),
-      });
-      const voiceConfig = await response.json();
-      if (!response.ok) {
-        throw new Error(voiceConfig.error || 'Voice is not available yet.');
-      }
-
-      const { Room, RoomEvent, Track, createAudioAnalyser } = await import('livekit-client');
-      const liveKitRoom = new Room();
-      liveKitRoomRef.current = liveKitRoom;
-
-      const attachRemoteAudioTrack = (track, publication, participant) => {
-        if (track.kind !== Track.Kind.Audio) return;
-        const playerId = participant?.identity || publication?.participant?.identity || '';
-        const trackId = publication?.trackSid || track.sid || crypto.randomUUID();
-        const audioId = `${playerId}:${trackId}`;
-        if (voiceAudioElementsRef.current.has(audioId)) return;
-        const audioElement = track.attach();
-        audioElement.autoplay = true;
-        audioElement.playsInline = true;
-        audioElement.controls = false;
-        const shouldMute = !roomSpeakerEnabledRef.current || Boolean(roomMutedPlayersRef.current[playerId]);
-        audioElement.muted = shouldMute;
-        audioElement.volume = shouldMute ? 0 : 1;
-        audioElement.style.display = 'none';
-        voiceAudioElementsRef.current.set(audioId, {
-          element: audioElement,
-          playerId,
-          track,
+    syncRoomVoicePeers(roomLobby.players);
+    if (roomVoiceEnabledRef.current) {
+      try {
+        await publishLocalVoiceTrack();
+      } catch (error) {
+        roomVoiceEnabledRef.current = false;
+        setRoomVoiceEnabled(false);
+        sendRoomMessage({
+          type: 'update_audio_settings',
+          micEnabled: false,
+          speakerEnabled: roomSpeakerEnabledRef.current,
         });
-        document.body.appendChild(audioElement);
-        unlockRoomAudio();
-      };
+        setRoomError(`Voice connected, but microphone is off: ${error.message}`);
+      }
+    }
+    setRemoteAudioMuted(!roomSpeakerEnabledRef.current);
+    unlockRoomAudio();
+    refreshVoiceStatus();
+  }, [localRoomPlayerId, publishLocalVoiceTrack, refreshVoiceStatus, roomLobby?.code, roomLobby?.players, sendRoomMessage, setRemoteAudioMuted, syncRoomVoicePeers, unlockRoomAudio]);
 
-      liveKitRoom.on(RoomEvent.Connected, () => {
-        setVoiceStatus('connected');
-      });
-
-      liveKitRoom.on(RoomEvent.Reconnecting, () => {
-        setVoiceStatus('connecting');
-      });
-
-      liveKitRoom.on(RoomEvent.Reconnected, () => {
-        setVoiceStatus('connected');
-        unlockRoomAudio();
-      });
-
-      liveKitRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
-        if (state === 'connected') setVoiceStatus('connected');
-        else if (state === 'connecting' || state === 'reconnecting' || state === 'signalReconnecting') setVoiceStatus('connecting');
-      });
-
-      liveKitRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-        attachRemoteAudioTrack(track, publication, participant);
-      });
-
-      liveKitRoom.on(RoomEvent.TrackSubscriptionFailed, (_trackSid, participant) => {
-        const playerName = participant?.name || participant?.identity || 'player';
-        setVoiceStatus('error');
-        setRoomError(`Could not subscribe to ${playerName}'s voice.`);
-      });
-
-      liveKitRoom.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
-        const playerId = publication?.participant?.identity || '';
-        const audioId = `${playerId}:${publication.trackSid || track.sid}`;
-        const record = audioId && voiceAudioElementsRef.current.get(audioId)
-          ? voiceAudioElementsRef.current.get(audioId)
-          : Array.from(voiceAudioElementsRef.current.values()).find((item) => item.track === track);
-        if (record) {
-          record.track?.detach?.(record.element);
-          record.element?.remove?.();
-          for (const [id, item] of voiceAudioElementsRef.current.entries()) {
-            if (item === record) voiceAudioElementsRef.current.delete(id);
-          }
+  const handleVoiceSignal = useCallback(async (fromPlayerId, signal = {}) => {
+    if (!fromPlayerId || fromPlayerId === localRoomPlayerIdRef.current || !window.RTCPeerConnection) return;
+    const peer = createRtcPeerConnection(fromPlayerId);
+    if (!peer) return;
+    const connection = peer.connection;
+    try {
+      if (signal.description) {
+        const description = signal.description;
+        const readyForOffer = !peer.makingOffer
+          && (connection.signalingState === 'stable' || peer.settingRemoteAnswerPending);
+        const offerCollision = description.type === 'offer' && !readyForOffer;
+        peer.ignoreOffer = !peer.polite && offerCollision;
+        if (peer.ignoreOffer) return;
+        peer.settingRemoteAnswerPending = description.type === 'answer';
+        await connection.setRemoteDescription(description);
+        peer.settingRemoteAnswerPending = false;
+        while (peer.queuedCandidates.length) {
+          const candidate = peer.queuedCandidates.shift();
+          await connection.addIceCandidate(candidate);
         }
-        track.detach().forEach((element) => element.remove());
-      });
-
-      liveKitRoom.on(RoomEvent.LocalTrackPublished, (publication) => {
-        if (publication.track?.kind === Track.Kind.Audio && roomVoiceEnabledRef.current) {
-          startLocalVoiceMeter(publication, createAudioAnalyser);
+        if (description.type === 'offer') {
+          await connection.setLocalDescription();
+          sendVoiceSignal(fromPlayerId, { description: connection.localDescription });
         }
-      });
-
-      liveKitRoom.on(RoomEvent.AudioPlaybackStatusChanged, () => {
-        if (liveKitRoom.canPlaybackAudio) {
-          setVoiceStatus('connected');
+      }
+      if (signal.candidate) {
+        const candidate = new RTCIceCandidate(signal.candidate);
+        if (!connection.remoteDescription) {
+          peer.queuedCandidates.push(candidate);
           return;
         }
-        if (roomSpeakerEnabledRef.current) {
-          setVoiceStatus('playback-blocked');
-          pushRoomNotification('Tap the speaker button or game screen to hear voice');
-        }
-      });
-
-      liveKitRoom.on(RoomEvent.ActiveSpeakersChanged, (participants) => {
-        const localPlayerId = localRoomPlayerIdRef.current;
-        const currentLevels = voiceLevelsRef.current;
-        const nextLevels = localPlayerId && currentLevels[localPlayerId] ? { [localPlayerId]: currentLevels[localPlayerId] } : {};
-        participants.forEach((participant) => {
-          if (participant.identity === localPlayerId) return;
-          nextLevels[participant.identity] = {
-            speaking: participant.isSpeaking,
-            level: Math.max(1, Math.min(3, Math.ceil((participant.audioLevel || 0) * 3))),
-          };
-        });
-        updateVoiceLevels(nextLevels);
-      });
-
-      liveKitRoom.on(RoomEvent.Disconnected, () => {
-        stopLocalVoiceMeter();
-        for (const record of voiceAudioElementsRef.current.values()) {
-          const element = record.element || record;
-          record.track?.detach?.(element);
-          element.remove();
-        }
-        voiceAudioElementsRef.current.clear();
-        updateVoiceLevels({});
-        setVoiceStatus('idle');
-        if (liveKitRoomRef.current === liveKitRoom) {
-          liveKitRoomRef.current = null;
-        }
-      });
-
-      await Promise.race([
-        liveKitRoom.connect(voiceConfig.url, voiceConfig.token, { autoSubscribe: true }),
-        new Promise((_, reject) => {
-          window.setTimeout(() => reject(new Error('Voice connection timed out before joining LiveKit.')), 12000);
-        }),
-      ]);
-      liveKitRoom.remoteParticipants.forEach((participant) => {
-        participant.audioTrackPublications?.forEach?.((publication) => {
-          if (publication.track) attachRemoteAudioTrack(publication.track, publication, participant);
-        });
-      });
-      if (roomVoiceEnabledRef.current) {
-        try {
-          const micPublication = await publishLocalVoiceTrack(liveKitRoom, Track, createAudioAnalyser);
-          if (!micPublication?.track) {
-            throw new Error('Microphone did not publish.');
-          }
-        } catch (microphoneError) {
-          roomVoiceEnabledRef.current = false;
-          setRoomVoiceEnabled(false);
-          sendRoomMessage({
-            type: 'update_audio_settings',
-            micEnabled: false,
-            speakerEnabled: roomSpeakerEnabledRef.current,
-          });
-          setRoomError(`Voice connected, but microphone is off: ${microphoneError.message}`);
-        }
-      } else {
-        unpublishLocalVoiceTrack();
+        await connection.addIceCandidate(candidate);
       }
-      setRemoteAudioMuted(!roomSpeakerEnabledRef.current);
-      unlockRoomAudio();
-      setVoiceStatus('connected');
     } catch (error) {
-      disconnectRoomVoice();
+      if (peer.ignoreOffer) return;
       setVoiceStatus('error');
-      setRoomError(error.message);
+      setRoomError(`Voice connection failed: ${error.message}`);
     }
-  }, [disconnectRoomVoice, localRoomPlayerId, publishLocalVoiceTrack, pushRoomNotification, roomLobby?.code, sendRoomMessage, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, unlockRoomAudio, unpublishLocalVoiceTrack, updateVoiceLevels]);
+  }, [createRtcPeerConnection, sendVoiceSignal]);
   const applyServerRoomState = useCallback((room, playerId = localRoomPlayerId) => {
     if (!room) return;
     setRoomLobby(room);
@@ -673,6 +796,9 @@ function App() {
             impact: weapon === 'rocket' ? 1.72 : 1.08,
           },
         ]);
+      }
+      if (message.type === 'voice_signal') {
+        handleVoiceSignal(message.fromPlayerId, message.signal);
       }
       if (message.type === 'player_hit') {
         const eventId = message.projectileId || `${message.attackerId}-${message.targetId}-${message.at}`;
@@ -787,7 +913,7 @@ function App() {
         reject(new Error('Could not connect to multiplayer server.'));
       }
     });
-  }), [applyServerRoomState, clearRoomNotifications, localRoomPlayerId, pushRoomNotification, replaceRemotePlayerStates, replaceRemoteProjectiles, startGame]);
+  }), [applyServerRoomState, clearRoomNotifications, handleVoiceSignal, localRoomPlayerId, pushRoomNotification, replaceRemotePlayerStates, replaceRemoteProjectiles, startGame]);
   const pauseGame = useCallback(() => {
     if (!gameStarted) return;
     setPaused((current) => !current);
@@ -924,24 +1050,18 @@ function App() {
       return;
     }
 
-    const liveKitRoom = liveKitRoomRef.current;
-    if (!liveKitRoom || liveKitRoom.state !== 'connected') {
-      const micAllowed = await requestMicrophonePermission();
-      if (!micAllowed) return;
-    }
+    const micAllowed = await requestMicrophonePermission();
+    if (!micAllowed) return;
     roomVoiceEnabledRef.current = true;
     setRoomVoiceEnabled(true);
-    if (liveKitRoom?.state === 'connected') {
-      try {
-        const { Track, createAudioAnalyser } = await import('livekit-client');
-        await publishLocalVoiceTrack(liveKitRoom, Track, createAudioAnalyser);
-      } catch (error) {
-        roomVoiceEnabledRef.current = false;
-        setRoomVoiceEnabled(false);
-        setVoiceStatus('error');
-        setRoomError(error.message);
-        return;
-      }
+    try {
+      await publishLocalVoiceTrack();
+    } catch (error) {
+      roomVoiceEnabledRef.current = false;
+      setRoomVoiceEnabled(false);
+      setVoiceStatus('error');
+      setRoomError(error.message);
+      return;
     }
     sendRoomMessage({
       type: 'update_audio_settings',
@@ -1336,7 +1456,7 @@ function App() {
   }, [disconnectRoomSocket, disconnectRoomVoice]);
 
   useEffect(() => {
-    if (!roomLobby?.code || !localRoomPlayerId || !MULTIPLAYER_API_URL) {
+    if (!roomLobby?.code || !localRoomPlayerId) {
       disconnectRoomVoice();
       return;
     }
@@ -1344,32 +1464,23 @@ function App() {
   }, [connectRoomVoice, disconnectRoomVoice, localRoomPlayerId, roomLobby?.code]);
 
   useEffect(() => {
-    const liveKitRoom = liveKitRoomRef.current;
-    if (!liveKitRoom || liveKitRoom.state !== 'connected') return;
     let cancelled = false;
-    import('livekit-client')
-      .then(async ({ Track, createAudioAnalyser }) => {
-        if (cancelled) return;
-        if (roomVoiceEnabled) {
-          const micPublication = await publishLocalVoiceTrack(liveKitRoom, Track, createAudioAnalyser);
-          if (!cancelled && !micPublication?.track) {
-            setVoiceStatus('error');
-            setRoomError('Microphone could not be published to voice chat.');
-          }
-        } else {
-          unpublishLocalVoiceTrack();
-        }
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        unpublishLocalVoiceTrack();
-        setVoiceStatus('error');
-        setRoomError(error.message);
-      });
+    if (!roomLobby?.code || !localRoomPlayerId) return undefined;
+    if (!roomVoiceEnabled) {
+      unpublishLocalVoiceTrack();
+      return undefined;
+    }
+    publishLocalVoiceTrack().catch((error) => {
+      if (cancelled) return;
+      roomVoiceEnabledRef.current = false;
+      setRoomVoiceEnabled(false);
+      setVoiceStatus('error');
+      setRoomError(error.message);
+    });
     return () => {
       cancelled = true;
     };
-  }, [publishLocalVoiceTrack, roomVoiceEnabled, unpublishLocalVoiceTrack]);
+  }, [localRoomPlayerId, publishLocalVoiceTrack, roomLobby?.code, roomVoiceEnabled, unpublishLocalVoiceTrack]);
 
   useEffect(() => {
     setRemoteAudioMuted(!roomSpeakerEnabled);

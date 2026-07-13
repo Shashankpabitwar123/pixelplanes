@@ -103,7 +103,22 @@ export const ROOM_SPAWN_OFFSETS = [-84, -50, -17, 17, 50, 84];
 
 export const MULTIPLAYER_WS_URL = import.meta.env.VITE_WS_URL || '';
 
-export const MULTIPLAYER_API_URL = import.meta.env.VITE_API_URL || '';
+const DEFAULT_RTC_ICE_SERVERS = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+];
+
+function parseRtcIceServers() {
+  const raw = import.meta.env.VITE_RTC_ICE_SERVERS;
+  if (!raw) return DEFAULT_RTC_ICE_SERVERS;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length ? parsed : DEFAULT_RTC_ICE_SERVERS;
+  } catch {
+    return DEFAULT_RTC_ICE_SERVERS;
+  }
+}
+
+export const RTC_ICE_SERVERS = parseRtcIceServers();
 
 export const ROOM_WEATHER_TICK_MS = 1000;
 
