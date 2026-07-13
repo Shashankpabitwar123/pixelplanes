@@ -30,6 +30,7 @@ import {
   ROOM_MAX_PLAYERS,
   ROOM_SPAWN_OFFSETS,
   MULTIPLAYER_WS_URL,
+  MULTIPLAYER_API_URL,
   RTC_ICE_SERVERS,
   ROOM_WEATHER_TICK_MS,
   readStoredHighScore,
@@ -138,6 +139,8 @@ function App() {
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
   const roomSocketRef = useRef(null);
   const rtcPeerConnectionsRef = useRef(new Map());
+  const rtcIceServersRef = useRef(RTC_ICE_SERVERS);
+  const rtcIceServersPromiseRef = useRef(null);
   const roomServerTimeOffsetRef = useRef(0);
   const voiceAudioElementsRef = useRef(new Map());
   const localVoiceStreamRef = useRef(null);
@@ -425,7 +428,7 @@ function App() {
     audioElement.autoplay = true;
     audioElement.playsInline = true;
     audioElement.controls = false;
-    audioElement.srcObject = stream || new MediaStream([track]);
+    audioElement.srcObject = new MediaStream([track]);
     const shouldMute = !roomSpeakerEnabledRef.current || Boolean(roomMutedPlayersRef.current[playerId]);
     audioElement.muted = shouldMute;
     audioElement.volume = shouldMute ? 0 : 1;
@@ -436,9 +439,39 @@ function App() {
       track,
     });
     document.body.appendChild(audioElement);
+    audioElement.addEventListener('canplay', () => unlockRoomAudio(), { once: true });
+    track.addEventListener('unmute', () => unlockRoomAudio(), { once: true });
     startRemoteVoiceMeter(playerId, track);
     unlockRoomAudio();
   }, [startRemoteVoiceMeter, stopRemoteVoiceMeter, unlockRoomAudio]);
+
+  const loadRtcIceServers = useCallback(async () => {
+    if (!MULTIPLAYER_API_URL) return rtcIceServersRef.current;
+    if (rtcIceServersPromiseRef.current) return rtcIceServersPromiseRef.current;
+
+    rtcIceServersPromiseRef.current = fetch(`${MULTIPLAYER_API_URL}/voice/ice-servers`, {
+      cache: 'no-store',
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('ICE server config unavailable.');
+        const payload = await response.json();
+        const iceServers = Array.isArray(payload.iceServers)
+          ? payload.iceServers.filter((server) => server?.urls)
+          : [];
+        if (iceServers.length) {
+          rtcIceServersRef.current = iceServers;
+        }
+        return rtcIceServersRef.current;
+      })
+      .catch(() => RTC_ICE_SERVERS)
+      .finally(() => {
+        window.setTimeout(() => {
+          rtcIceServersPromiseRef.current = null;
+        }, 60_000);
+      });
+
+    return rtcIceServersPromiseRef.current;
+  }, []);
 
   const createRtcPeerConnection = useCallback((remotePlayerId) => {
     if (!remotePlayerId || remotePlayerId === localRoomPlayerIdRef.current) return null;
@@ -446,7 +479,7 @@ function App() {
     if (existing && existing.connection.connectionState !== 'closed') return existing;
 
     const connection = new RTCPeerConnection({
-      iceServers: RTC_ICE_SERVERS,
+      iceServers: rtcIceServersRef.current,
       iceCandidatePoolSize: 2,
     });
     const localId = localRoomPlayerIdRef.current || '';
@@ -632,6 +665,21 @@ function App() {
     }
     localRoomPlayerIdRef.current = localRoomPlayerId;
     setVoiceStatus('connecting');
+    await loadRtcIceServers();
+    if (roomVoiceEnabledRef.current) {
+      try {
+        await getLocalVoiceStream();
+      } catch (error) {
+        roomVoiceEnabledRef.current = false;
+        setRoomVoiceEnabled(false);
+        sendRoomMessage({
+          type: 'update_audio_settings',
+          micEnabled: false,
+          speakerEnabled: roomSpeakerEnabledRef.current,
+        });
+        setRoomError(`Voice connected, but microphone is off: ${error.message}`);
+      }
+    }
     syncRoomVoicePeers(roomLobby.players);
     if (roomVoiceEnabledRef.current) {
       try {
@@ -650,10 +698,11 @@ function App() {
     setRemoteAudioMuted(!roomSpeakerEnabledRef.current);
     unlockRoomAudio();
     refreshVoiceStatus();
-  }, [localRoomPlayerId, publishLocalVoiceTrack, refreshVoiceStatus, roomLobby?.code, roomLobby?.players, sendRoomMessage, setRemoteAudioMuted, syncRoomVoicePeers, unlockRoomAudio]);
+  }, [getLocalVoiceStream, loadRtcIceServers, localRoomPlayerId, publishLocalVoiceTrack, refreshVoiceStatus, roomLobby?.code, roomLobby?.players, sendRoomMessage, setRemoteAudioMuted, syncRoomVoicePeers, unlockRoomAudio]);
 
   const handleVoiceSignal = useCallback(async (fromPlayerId, signal = {}) => {
     if (!fromPlayerId || fromPlayerId === localRoomPlayerIdRef.current || !window.RTCPeerConnection) return;
+    await loadRtcIceServers();
     const peer = createRtcPeerConnection(fromPlayerId);
     if (!peer) return;
     const connection = peer.connection;
@@ -690,7 +739,7 @@ function App() {
       setVoiceStatus('error');
       setRoomError(`Voice connection failed: ${error.message}`);
     }
-  }, [createRtcPeerConnection, sendVoiceSignal]);
+  }, [createRtcPeerConnection, loadRtcIceServers, sendVoiceSignal]);
   const applyServerRoomState = useCallback((room, playerId = localRoomPlayerId) => {
     if (!room) return;
     setRoomLobby(room);

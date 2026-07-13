@@ -49,6 +49,7 @@ Useful local endpoints:
 
 ```text
 GET  http://127.0.0.1:4000/health
+GET  http://127.0.0.1:4000/voice/ice-servers
 WS   ws://127.0.0.1:4000/rooms
 ```
 
@@ -56,6 +57,7 @@ Frontend multiplayer env vars:
 
 ```bash
 VITE_WS_URL=wss://your-render-service.onrender.com/rooms
+VITE_API_URL=https://your-render-service.onrender.com
 VITE_RTC_ICE_SERVERS='[{"urls":["stun:stun.l.google.com:19302","stun:stun1.l.google.com:19302"]}]'
 ```
 
@@ -64,8 +66,18 @@ Backend env vars:
 ```bash
 CLIENT_ORIGIN=https://pixelplanes.app
 DATABASE_URL=your_neon_postgres_url
+STUN_URLS=stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302
+TURN_URLS=turn:your-turn-host:3478,turns:your-turn-host:5349
+TURN_USERNAME=your_static_turn_username
+TURN_CREDENTIAL=your_static_turn_password
+TURN_SHARED_SECRET=optional_turn_rest_shared_secret
+TURN_TTL_SECONDS=86400
 ```
 
 Rooms, gameplay sync, and voice signaling run through the Render WebSocket server.
-Voice audio uses direct browser WebRTC. Add a TURN server inside `VITE_RTC_ICE_SERVERS`
-for production reliability on strict networks.
+Voice audio uses direct browser WebRTC. The frontend fetches ICE servers from
+`/voice/ice-servers`, so TURN credentials stay on the backend. Use either
+`TURN_USERNAME` + `TURN_CREDENTIAL` for static TURN credentials or
+`TURN_SHARED_SECRET` for temporary coturn-style REST credentials. Do not put
+secret TURN credentials in `VITE_RTC_ICE_SERVERS`; that value is only a local
+fallback.

@@ -103,6 +103,23 @@ export const ROOM_SPAWN_OFFSETS = [-84, -50, -17, 17, 50, 84];
 
 export const MULTIPLAYER_WS_URL = import.meta.env.VITE_WS_URL || '';
 
+function multiplayerApiUrlFromWsUrl() {
+  if (!MULTIPLAYER_WS_URL) return '';
+  try {
+    const url = new URL(MULTIPLAYER_WS_URL);
+    url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+    url.pathname = url.pathname.replace(/\/rooms\/?$/, '');
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+export const MULTIPLAYER_API_URL =
+  (import.meta.env.VITE_API_URL || multiplayerApiUrlFromWsUrl()).replace(/\/$/, '');
+
 const DEFAULT_RTC_ICE_SERVERS = [
   { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
 ];

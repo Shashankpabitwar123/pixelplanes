@@ -13,6 +13,7 @@ const HIT_DEDUPE_TTL_MS = 20_000;
 const ROOM_WEATHER_STATE_INTERVAL_MS = 500;
 const WORLD_WIDTH = 700;
 const WORLD_HEIGHT = 400;
+const DEFAULT_STUN_URLS = ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'];
 
 const rooms = new Map();
 const socketSessions = new WeakMap();
@@ -25,6 +26,94 @@ function safeJson(value) {
   } catch {
     return '{}';
   }
+}
+
+function parseUrlList(raw, fallback = []) {
+  const urls = String(raw || '')
+    .split(',')
+    .map((url) => url.trim())
+    .filter(Boolean);
+  return urls.length ? urls : fallback;
+}
+
+function normalizeIceServer(server) {
+  if (!server || typeof server !== 'object') return null;
+  const urls = Array.isArray(server.urls)
+    ? server.urls.map((url) => String(url || '').trim()).filter(Boolean)
+    : String(server.urls || '').trim();
+  if (!urls || (Array.isArray(urls) && !urls.length)) return null;
+
+  const normalized = { urls };
+  if (server.username) normalized.username = String(server.username);
+  if (server.credential) normalized.credential = String(server.credential);
+  return normalized;
+}
+
+function readJsonIceServers() {
+  const raw = process.env.RTC_ICE_SERVERS;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const servers = parsed.map(normalizeIceServer).filter(Boolean);
+    return servers.length ? servers : null;
+  } catch {
+    return null;
+  }
+}
+
+function createTurnServer() {
+  const turnUrls = parseUrlList(process.env.TURN_URLS);
+  if (!turnUrls.length) return null;
+
+  const sharedSecret = process.env.TURN_SHARED_SECRET;
+  if (sharedSecret) {
+    const ttlSeconds = Number.parseInt(process.env.TURN_TTL_SECONDS || '86400', 10);
+    const expiresAt = Math.floor(Date.now() / 1000) + Math.max(300, Math.min(604800, ttlSeconds || 86400));
+    const username = `${expiresAt}:pixelplanes`;
+    const credential = crypto
+      .createHmac('sha1', sharedSecret)
+      .update(username)
+      .digest('base64');
+    return { urls: turnUrls, username, credential };
+  }
+
+  if (process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    return {
+      urls: turnUrls,
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL,
+    };
+  }
+
+  return { urls: turnUrls };
+}
+
+function getRtcIceServers() {
+  const jsonServers = readJsonIceServers();
+  if (jsonServers) return jsonServers;
+
+  const stunUrls = parseUrlList(process.env.STUN_URLS, DEFAULT_STUN_URLS);
+  const servers = [{ urls: stunUrls }];
+  const turnServer = createTurnServer();
+  if (turnServer) servers.push(turnServer);
+  return servers;
+}
+
+function hasTurnServer(iceServers = getRtcIceServers()) {
+  return iceServers.some((server) => {
+    const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+    return urls.some((url) => String(url || '').startsWith('turn:') || String(url || '').startsWith('turns:'));
+  });
+}
+
+function getCorsOrigin(request) {
+  const origin = request.headers.origin;
+  if (!origin) return CLIENT_ORIGIN;
+  const allowedOrigins = new Set([CLIENT_ORIGIN, ...parseUrlList(process.env.CLIENT_ORIGINS)]);
+  if (allowedOrigins.has(origin)) return origin;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\\d+)?$/.test(origin)) return origin;
+  return CLIENT_ORIGIN;
 }
 
 function getDbPool() {
@@ -653,10 +742,10 @@ function handleSocketMessage(socket, raw) {
   }
 }
 
-function writeJson(response, status, payload) {
+function writeJson(request, response, status, payload) {
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
-    'access-control-allow-origin': CLIENT_ORIGIN,
+    'access-control-allow-origin': getCorsOrigin(request),
     'access-control-allow-methods': 'GET,POST,OPTIONS',
     'access-control-allow-headers': 'content-type',
     vary: 'origin',
@@ -666,21 +755,33 @@ function writeJson(response, status, payload) {
 
 const server = http.createServer(async (request, response) => {
   if (request.method === 'OPTIONS') {
-    writeJson(response, 204, {});
+    writeJson(request, response, 204, {});
     return;
   }
 
   if (request.method === 'GET' && request.url === '/health') {
-    writeJson(response, 200, {
+    const iceServers = getRtcIceServers();
+    writeJson(request, response, 200, {
       ok: true,
       rooms: rooms.size,
       db: Boolean(process.env.DATABASE_URL),
       voice: 'webrtc',
+      turn: hasTurnServer(iceServers),
     });
     return;
   }
 
-  writeJson(response, 404, { error: 'Not found.' });
+  if (request.method === 'GET' && request.url === '/voice/ice-servers') {
+    const iceServers = getRtcIceServers();
+    writeJson(request, response, 200, {
+      iceServers,
+      turn: hasTurnServer(iceServers),
+      ttlSeconds: Number.parseInt(process.env.TURN_TTL_SECONDS || '86400', 10),
+    });
+    return;
+  }
+
+  writeJson(request, response, 404, { error: 'Not found.' });
 });
 
 const wss = new WebSocketServer({ noServer: true });
