@@ -1079,6 +1079,7 @@ function App() {
   const roomSocketRef = useRef(null);
   const liveKitRoomRef = useRef(null);
   const voiceAudioElementsRef = useRef(new Map());
+  const voiceOutputContextRef = useRef(null);
   const localVoiceTrackRef = useRef(null);
   const localVoicePublicationRef = useRef(null);
   const voiceLevelsRef = useRef({});
@@ -1126,14 +1127,30 @@ function App() {
     remoteProjectilesRef.current = next;
     setRemoteProjectiles(next);
   }, []);
+  const getVoiceOutputContext = useCallback(() => {
+    if (voiceOutputContextRef.current) return voiceOutputContextRef.current;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    const context = new AudioContextClass();
+    voiceOutputContextRef.current = context;
+    return context;
+  }, []);
   const setRemoteAudioMuted = useCallback((muted) => {
     const globalMuted = Boolean(muted);
     for (const record of voiceAudioElementsRef.current.values()) {
       const element = record.element || record;
       const playerMuted = record.playerId ? Boolean(roomMutedPlayersRef.current[record.playerId]) : false;
       const shouldMute = globalMuted || playerMuted;
-      element.muted = shouldMute;
-      element.volume = shouldMute ? 0 : 1;
+      if (record.gainNode) {
+        const context = record.gainNode.context;
+        record.gainNode.gain.cancelScheduledValues(context.currentTime);
+        record.gainNode.gain.setTargetAtTime(shouldMute ? 0 : 1, context.currentTime, 0.025);
+        element.muted = true;
+        element.volume = 0;
+      } else {
+        element.muted = shouldMute;
+        element.volume = shouldMute ? 0 : 1;
+      }
     }
   }, []);
   const requestMicrophonePermission = useCallback(async () => {
@@ -1308,6 +1325,8 @@ function App() {
   const unlockRoomAudio = useCallback(() => {
     const liveKitRoom = liveKitRoomRef.current;
     liveKitRoom?.startAudio?.().catch(() => {});
+    const outputContext = voiceOutputContextRef.current;
+    outputContext?.resume?.().catch(() => {});
     for (const record of voiceAudioElementsRef.current.values()) {
       const element = record.element || record;
       element.play?.().catch(() => {});
@@ -1358,9 +1377,13 @@ function App() {
     }
     for (const record of voiceAudioElementsRef.current.values()) {
       const element = record.element || record;
+      record.sourceNode?.disconnect?.();
+      record.gainNode?.disconnect?.();
       element.remove();
     }
     voiceAudioElementsRef.current.clear();
+    voiceOutputContextRef.current?.close?.();
+    voiceOutputContextRef.current = null;
     updateVoiceLevels({});
     setVoiceStatus('idle');
   }, [unpublishLocalVoiceTrack, updateVoiceLevels]);
@@ -1391,23 +1414,55 @@ function App() {
       liveKitRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind !== Track.Kind.Audio) return;
         const playerId = participant?.identity || publication?.participant?.identity || '';
-        const audioElement = track.attach();
+        const audioElement = document.createElement('audio');
+        const mediaTrack = track.mediaStreamTrack;
+        const mediaStream = mediaTrack ? new MediaStream([mediaTrack]) : null;
+        if (mediaStream) {
+          audioElement.srcObject = mediaStream;
+        } else {
+          track.attach(audioElement);
+        }
         audioElement.autoplay = true;
         audioElement.playsInline = true;
+        audioElement.controls = false;
         const shouldMute = !roomSpeakerEnabledRef.current || Boolean(roomMutedPlayersRef.current[playerId]);
         audioElement.muted = shouldMute;
         audioElement.volume = shouldMute ? 0 : 1;
         audioElement.style.display = 'none';
         const audioId = publication.trackSid || track.sid || crypto.randomUUID();
-        voiceAudioElementsRef.current.set(audioId, { element: audioElement, playerId });
+        const outputContext = mediaStream ? getVoiceOutputContext() : null;
+        let sourceNode = null;
+        let gainNode = null;
+        if (outputContext && mediaStream) {
+          sourceNode = outputContext.createMediaStreamSource(mediaStream);
+          gainNode = outputContext.createGain();
+          gainNode.gain.value = shouldMute ? 0 : 1;
+          sourceNode.connect(gainNode).connect(outputContext.destination);
+          audioElement.muted = true;
+          audioElement.volume = 0;
+          outputContext.resume?.().catch(() => {});
+        }
+        voiceAudioElementsRef.current.set(audioId, {
+          element: audioElement,
+          playerId,
+          track,
+          sourceNode,
+          gainNode,
+        });
         document.body.appendChild(audioElement);
         audioElement.play?.().catch(() => {});
       });
 
       liveKitRoom.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
         const audioId = publication.trackSid || track.sid;
+        const record = audioId ? voiceAudioElementsRef.current.get(audioId) : null;
+        if (record) {
+          record.sourceNode?.disconnect?.();
+          record.gainNode?.disconnect?.();
+          record.element?.remove?.();
+          voiceAudioElementsRef.current.delete(audioId);
+        }
         track.detach().forEach((element) => element.remove());
-        if (audioId) voiceAudioElementsRef.current.delete(audioId);
       });
 
       liveKitRoom.on(RoomEvent.LocalTrackPublished, (publication) => {
@@ -1434,9 +1489,13 @@ function App() {
         stopLocalVoiceMeter();
         for (const record of voiceAudioElementsRef.current.values()) {
           const element = record.element || record;
+          record.sourceNode?.disconnect?.();
+          record.gainNode?.disconnect?.();
           element.remove();
         }
         voiceAudioElementsRef.current.clear();
+        voiceOutputContextRef.current?.close?.();
+        voiceOutputContextRef.current = null;
         updateVoiceLevels({});
         setVoiceStatus('idle');
         if (liveKitRoomRef.current === liveKitRoom) {
@@ -1461,7 +1520,7 @@ function App() {
       setVoiceStatus('error');
       setRoomError(error.message);
     }
-  }, [disconnectRoomVoice, localRoomPlayerId, publishLocalVoiceTrack, roomLobby?.code, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, unlockRoomAudio, unpublishLocalVoiceTrack, updateVoiceLevels]);
+  }, [disconnectRoomVoice, getVoiceOutputContext, localRoomPlayerId, publishLocalVoiceTrack, roomLobby?.code, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, unlockRoomAudio, unpublishLocalVoiceTrack, updateVoiceLevels]);
   const applyServerRoomState = useCallback((room, playerId = localRoomPlayerId) => {
     if (!room) return;
     setRoomLobby(room);
@@ -1665,6 +1724,7 @@ function App() {
     setRoomError('');
     setKillCount(0);
     setRoomMutedPlayers({});
+    getVoiceOutputContext()?.resume?.().catch(() => {});
     const micAllowed = roomVoiceEnabled ? await requestMicrophonePermission() : false;
     const micEnabled = roomVoiceEnabled && micAllowed;
     if (roomVoiceEnabled && !micAllowed) setRoomVoiceEnabled(false);
@@ -1691,13 +1751,14 @@ function App() {
     setLocalRoomPlayerId('host');
     setRoomLobby(localLobby);
     setStartScreen('room-waiting');
-  }, [connectRoomSocket, requestMicrophonePermission, roomPlayerName, roomSpeakerEnabled, roomTheme, roomVoiceEnabled]);
+  }, [connectRoomSocket, getVoiceOutputContext, requestMicrophonePermission, roomPlayerName, roomSpeakerEnabled, roomTheme, roomVoiceEnabled]);
   const joinRoomLobby = useCallback(async () => {
     setRoomError('');
     if (!roomCode.trim()) {
       setRoomError('Enter a room code.');
       return;
     }
+    getVoiceOutputContext()?.resume?.().catch(() => {});
 
     if (!MULTIPLAYER_WS_URL) {
       setRoomError('Multiplayer server is not connected yet.');
@@ -1719,7 +1780,7 @@ function App() {
     } catch (error) {
       setRoomError(error.message);
     }
-  }, [connectRoomSocket, requestMicrophonePermission, roomCode, roomPlayerName, roomSpeakerEnabled, roomVoiceEnabled]);
+  }, [connectRoomSocket, getVoiceOutputContext, requestMicrophonePermission, roomCode, roomPlayerName, roomSpeakerEnabled, roomVoiceEnabled]);
   const leaveRoomLobby = useCallback(() => {
     if (sendRoomMessage({ type: 'leave_room' })) {
       disconnectRoomSocket();
@@ -1810,10 +1871,13 @@ function App() {
         micEnabled: roomVoiceEnabled,
         speakerEnabled: nextEnabled,
       });
-      if (nextEnabled) window.setTimeout(unlockRoomAudio, 0);
+      if (nextEnabled) {
+        getVoiceOutputContext()?.resume?.().catch(() => {});
+        window.setTimeout(unlockRoomAudio, 0);
+      }
       return nextEnabled;
     });
-  }, [roomVoiceEnabled, sendRoomMessage, unlockRoomAudio]);
+  }, [getVoiceOutputContext, roomVoiceEnabled, sendRoomMessage, unlockRoomAudio]);
   const updateCamera = useCallback((camera) => {
     if (worldRef.current) {
       worldRef.current.style.transform = `translate(${-camera.x}vw, ${camera.y}vh)`;
