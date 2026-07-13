@@ -2069,7 +2069,7 @@ function App() {
                       setFieldGuideOpen(false);
                     }}
                   >
-                    <img src="/assets/settings-gear-icon.png" alt="" draggable="false" aria-hidden="true" />
+                    <span className="start-utility-glyph start-utility-gear" aria-hidden="true">⚙︎</span>
                   </button>
                   <button
                     className={`start-utility-button${fieldGuideOpen ? ' start-utility-active' : ''}`}
@@ -2082,7 +2082,7 @@ function App() {
                       setSettingsOpen(false);
                     }}
                   >
-                    <img src="/assets/field-guide-icon.png" alt="" draggable="false" aria-hidden="true" />
+                    <span className="start-utility-glyph start-utility-info" aria-hidden="true">i</span>
                   </button>
                 </div>
               </>
