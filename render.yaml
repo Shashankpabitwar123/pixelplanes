@@ -1,10 +1,11 @@
 services:
   - type: web
-    name: pixelplanes-realtime
+    name: pixelplanes-realtime-eu
     runtime: node
     plan: free
-    region: ohio
+    region: frankfurt
     autoDeploy: true
+    healthCheckPath: /health
     buildCommand: npm install
     startCommand: npm run server:start
     envVars:
@@ -12,6 +13,8 @@ services:
         value: production
       - key: CLIENT_ORIGIN
         value: https://pixelplanes.app
+      - key: CLIENT_ORIGINS
+        value: https://pixelplanes.app,https://www.pixelplanes.app
       - key: DATABASE_URL
         sync: false
       - key: STUN_URLS

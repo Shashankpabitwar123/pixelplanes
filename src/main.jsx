@@ -84,8 +84,8 @@ import {
 } from './game/core.jsx';
 
 const ROOM_STATE_SEND_INTERVAL_MS = 33;
-const REMOTE_INTERPOLATION_DELAY_MS = 110;
-const REMOTE_MAX_PREDICTION_SECONDS = 0.16;
+const REMOTE_INTERPOLATION_DELAY_MS = 80;
+const REMOTE_MAX_PREDICTION_SECONDS = 0.22;
 
 function App() {
   const [theme, setTheme] = useState('dark');

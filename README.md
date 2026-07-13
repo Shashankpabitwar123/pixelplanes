@@ -56,8 +56,8 @@ WS   ws://127.0.0.1:4000/rooms
 Frontend multiplayer env vars:
 
 ```bash
-VITE_WS_URL=wss://your-render-service.onrender.com/rooms
-VITE_API_URL=https://your-render-service.onrender.com
+VITE_WS_URL=wss://pixelplanes-realtime-eu.onrender.com/rooms
+VITE_API_URL=https://pixelplanes-realtime-eu.onrender.com
 VITE_RTC_ICE_SERVERS='[{"urls":["stun:stun.l.google.com:19302","stun:stun1.l.google.com:19302"]}]'
 ```
 
@@ -75,6 +75,8 @@ TURN_TTL_SECONDS=86400
 ```
 
 Rooms, gameplay sync, and voice signaling run through the Render WebSocket server.
+Production uses the Frankfurt Render service (`pixelplanes-realtime-eu`) to
+balance latency between US and India players.
 Voice audio uses direct browser WebRTC. The frontend fetches ICE servers from
 `/voice/ice-servers`, so TURN credentials stay on the backend. Use either
 `TURN_USERNAME` + `TURN_CREDENTIAL` for static TURN credentials or

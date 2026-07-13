@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { Pool } from 'pg';
-import { WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 
 const PORT = Number.parseInt(process.env.PORT || '4000', 10);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://127.0.0.1:5173';
@@ -11,9 +11,12 @@ const PLANE_COLORS = ['blue', 'red', 'yellow', 'purple', 'green', 'cyan'];
 const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 const HIT_DEDUPE_TTL_MS = 20_000;
 const ROOM_WEATHER_STATE_INTERVAL_MS = 500;
+const SOCKET_HEARTBEAT_INTERVAL_MS = 30_000;
+const MAX_VOLATILE_SOCKET_BUFFER_BYTES = 256 * 1024;
 const WORLD_WIDTH = 700;
 const WORLD_HEIGHT = 400;
 const DEFAULT_STUN_URLS = ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'];
+const VOLATILE_MESSAGE_TYPES = new Set(['remote_player_state', 'weather_state']);
 
 const rooms = new Map();
 const socketSessions = new WeakMap();
@@ -231,10 +234,13 @@ function serializeWeather(room, now = Date.now()) {
   };
 }
 
-function finiteNumber(value, fallback = 0, min = -Infinity, max = Infinity) {
+function finiteNumber(value, fallback = 0, min = -Infinity, max = Infinity, precision = 3) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
-  return Math.max(min, Math.min(max, number));
+  const clamped = Math.max(min, Math.min(max, number));
+  if (!Number.isFinite(precision)) return clamped;
+  const scale = 10 ** precision;
+  return Math.round(clamped * scale) / scale;
 }
 
 function sanitizePlaneState(state = {}) {
@@ -286,9 +292,15 @@ function pickPlaneColor(room) {
 }
 
 function send(socket, message) {
-  if (socket.readyState === socket.OPEN) {
-    socket.send(JSON.stringify(message));
+  if (socket.readyState !== WebSocket.OPEN) return false;
+  if (
+    VOLATILE_MESSAGE_TYPES.has(message?.type) &&
+    socket.bufferedAmount > MAX_VOLATILE_SOCKET_BUFFER_BYTES
+  ) {
+    return false;
   }
+  socket.send(JSON.stringify(message));
+  return true;
 }
 
 function roomForSocket(socket) {
@@ -784,7 +796,7 @@ const server = http.createServer(async (request, response) => {
   writeJson(request, response, 404, { error: 'Not found.' });
 });
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
 
 server.on('upgrade', (request, socket, head) => {
   const { pathname } = new URL(request.url || '/', 'http://localhost');
@@ -800,11 +812,28 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 wss.on('connection', (socket) => {
+  socket.isAlive = true;
+  socket._socket?.setNoDelay?.(true);
+  socket.on('pong', () => {
+    socket.isAlive = true;
+  });
   send(socket, { type: 'connected', at: Date.now() });
   socket.on('message', (raw) => handleSocketMessage(socket, raw));
   socket.on('close', () => leaveRoom(socket, 'socket_close'));
   socket.on('error', () => leaveRoom(socket, 'socket_error'));
 });
+
+setInterval(() => {
+  for (const socket of wss.clients) {
+    if (socket.isAlive === false) {
+      leaveRoom(socket, 'heartbeat_timeout');
+      socket.terminate();
+      continue;
+    }
+    socket.isAlive = false;
+    socket.ping();
+  }
+}, SOCKET_HEARTBEAT_INTERVAL_MS).unref();
 
 setInterval(() => {
   const now = Date.now();
