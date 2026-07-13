@@ -140,7 +140,6 @@ function App() {
   const liveKitRoomRef = useRef(null);
   const roomServerTimeOffsetRef = useRef(0);
   const voiceAudioElementsRef = useRef(new Map());
-  const voiceOutputContextRef = useRef(null);
   const localVoiceTrackRef = useRef(null);
   const localVoicePublicationRef = useRef(null);
   const voiceLevelsRef = useRef({});
@@ -203,30 +202,15 @@ function App() {
     remoteProjectilesRef.current = next;
     setRemoteProjectiles(next);
   }, []);
-  const getVoiceOutputContext = useCallback(() => {
-    if (voiceOutputContextRef.current) return voiceOutputContextRef.current;
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return null;
-    const context = new AudioContextClass();
-    voiceOutputContextRef.current = context;
-    return context;
-  }, []);
   const setRemoteAudioMuted = useCallback((muted) => {
     const globalMuted = Boolean(muted);
     for (const record of voiceAudioElementsRef.current.values()) {
       const element = record.element || record;
       const playerMuted = record.playerId ? Boolean(roomMutedPlayersRef.current[record.playerId]) : false;
       const shouldMute = globalMuted || playerMuted;
-      if (record.gainNode) {
-        const context = record.gainNode.context;
-        record.gainNode.gain.cancelScheduledValues(context.currentTime);
-        record.gainNode.gain.setTargetAtTime(shouldMute ? 0 : 1, context.currentTime, 0.025);
-        element.muted = true;
-        element.volume = 0;
-      } else {
-        element.muted = shouldMute;
-        element.volume = shouldMute ? 0 : 1;
-      }
+      element.muted = shouldMute;
+      element.volume = shouldMute ? 0 : 1;
+      if (!shouldMute) element.play?.().catch(() => {});
     }
   }, []);
   const requestMicrophonePermission = useCallback(async () => {
@@ -401,8 +385,6 @@ function App() {
   const unlockRoomAudio = useCallback(() => {
     const liveKitRoom = liveKitRoomRef.current;
     liveKitRoom?.startAudio?.().catch(() => {});
-    const outputContext = voiceOutputContextRef.current;
-    outputContext?.resume?.().catch(() => {});
     for (const record of voiceAudioElementsRef.current.values()) {
       const element = record.element || record;
       element.play?.().catch(() => {});
@@ -453,13 +435,10 @@ function App() {
     }
     for (const record of voiceAudioElementsRef.current.values()) {
       const element = record.element || record;
-      record.sourceNode?.disconnect?.();
-      record.gainNode?.disconnect?.();
+      record.track?.detach?.(element);
       element.remove();
     }
     voiceAudioElementsRef.current.clear();
-    voiceOutputContextRef.current?.close?.();
-    voiceOutputContextRef.current = null;
     updateVoiceLevels({});
     setVoiceStatus('idle');
   }, [unpublishLocalVoiceTrack, updateVoiceLevels]);
@@ -490,14 +469,7 @@ function App() {
       liveKitRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind !== Track.Kind.Audio) return;
         const playerId = participant?.identity || publication?.participant?.identity || '';
-        const audioElement = document.createElement('audio');
-        const mediaTrack = track.mediaStreamTrack;
-        const mediaStream = mediaTrack ? new MediaStream([mediaTrack]) : null;
-        if (mediaStream) {
-          audioElement.srcObject = mediaStream;
-        } else {
-          track.attach(audioElement);
-        }
+        const audioElement = track.attach();
         audioElement.autoplay = true;
         audioElement.playsInline = true;
         audioElement.controls = false;
@@ -505,38 +477,29 @@ function App() {
         audioElement.muted = shouldMute;
         audioElement.volume = shouldMute ? 0 : 1;
         audioElement.style.display = 'none';
-        const audioId = publication.trackSid || track.sid || crypto.randomUUID();
-        const outputContext = mediaStream ? getVoiceOutputContext() : null;
-        let sourceNode = null;
-        let gainNode = null;
-        if (outputContext && mediaStream) {
-          sourceNode = outputContext.createMediaStreamSource(mediaStream);
-          gainNode = outputContext.createGain();
-          gainNode.gain.value = shouldMute ? 0 : 1;
-          sourceNode.connect(gainNode).connect(outputContext.destination);
-          audioElement.muted = true;
-          audioElement.volume = 0;
-          outputContext.resume?.().catch(() => {});
-        }
+        const audioId = `${playerId}:${publication.trackSid || track.sid || crypto.randomUUID()}`;
         voiceAudioElementsRef.current.set(audioId, {
           element: audioElement,
           playerId,
           track,
-          sourceNode,
-          gainNode,
         });
         document.body.appendChild(audioElement);
+        liveKitRoom.startAudio?.().catch(() => {});
         audioElement.play?.().catch(() => {});
       });
 
       liveKitRoom.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
-        const audioId = publication.trackSid || track.sid;
-        const record = audioId ? voiceAudioElementsRef.current.get(audioId) : null;
+        const playerId = publication?.participant?.identity || '';
+        const audioId = `${playerId}:${publication.trackSid || track.sid}`;
+        const record = audioId && voiceAudioElementsRef.current.get(audioId)
+          ? voiceAudioElementsRef.current.get(audioId)
+          : Array.from(voiceAudioElementsRef.current.values()).find((item) => item.track === track);
         if (record) {
-          record.sourceNode?.disconnect?.();
-          record.gainNode?.disconnect?.();
+          record.track?.detach?.(record.element);
           record.element?.remove?.();
-          voiceAudioElementsRef.current.delete(audioId);
+          for (const [id, item] of voiceAudioElementsRef.current.entries()) {
+            if (item === record) voiceAudioElementsRef.current.delete(id);
+          }
         }
         track.detach().forEach((element) => element.remove());
       });
@@ -565,13 +528,10 @@ function App() {
         stopLocalVoiceMeter();
         for (const record of voiceAudioElementsRef.current.values()) {
           const element = record.element || record;
-          record.sourceNode?.disconnect?.();
-          record.gainNode?.disconnect?.();
+          record.track?.detach?.(element);
           element.remove();
         }
         voiceAudioElementsRef.current.clear();
-        voiceOutputContextRef.current?.close?.();
-        voiceOutputContextRef.current = null;
         updateVoiceLevels({});
         setVoiceStatus('idle');
         if (liveKitRoomRef.current === liveKitRoom) {
@@ -596,7 +556,7 @@ function App() {
       setVoiceStatus('error');
       setRoomError(error.message);
     }
-  }, [disconnectRoomVoice, getVoiceOutputContext, localRoomPlayerId, publishLocalVoiceTrack, roomLobby?.code, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, unlockRoomAudio, unpublishLocalVoiceTrack, updateVoiceLevels]);
+  }, [disconnectRoomVoice, localRoomPlayerId, publishLocalVoiceTrack, roomLobby?.code, setRemoteAudioMuted, startLocalVoiceMeter, stopLocalVoiceMeter, unlockRoomAudio, unpublishLocalVoiceTrack, updateVoiceLevels]);
   const applyServerRoomState = useCallback((room, playerId = localRoomPlayerId) => {
     if (!room) return;
     setRoomLobby(room);
@@ -630,7 +590,9 @@ function App() {
       return next;
     });
     setRoomError('');
-    setStartScreen('room-waiting');
+    if (!room.started) {
+      setStartScreen('room-waiting');
+    }
   }, [replaceRemotePlayerStates]);
   const connectRoomSocket = useCallback(() => new Promise((resolve, reject) => {
     if (!MULTIPLAYER_WS_URL) {
@@ -758,8 +720,25 @@ function App() {
         if (Number.isFinite(message.serverNow)) {
           roomServerTimeOffsetRef.current = message.serverNow - Date.now();
         }
-        setFogActive(Boolean(message.fog));
-        setRainActive(Boolean(message.rain));
+        const nextWeatherState = {
+          fog: Boolean(message.fog),
+          rain: Boolean(message.rain),
+        };
+        setFogActive(nextWeatherState.fog);
+        setRainActive(nextWeatherState.rain);
+        if (message.weather?.seed && Number.isFinite(Number(message.weather.startedAt))) {
+          setRoomLobby((current) => {
+            if (!current?.code) return current;
+            return {
+              ...current,
+              serverNow: message.serverNow,
+              weather: {
+                ...message.weather,
+                state: nextWeatherState,
+              },
+            };
+          });
+        }
       }
       if (message.type === 'room_deleted') {
         setRoomLobby(null);
@@ -820,7 +799,6 @@ function App() {
     setRoomError('');
     setKillCount(0);
     setRoomMutedPlayers({});
-    getVoiceOutputContext()?.resume?.().catch(() => {});
     const micAllowed = roomVoiceEnabled ? await requestMicrophonePermission() : false;
     const micEnabled = roomVoiceEnabled && micAllowed;
     if (roomVoiceEnabled && !micAllowed) setRoomVoiceEnabled(false);
@@ -847,14 +825,13 @@ function App() {
     setLocalRoomPlayerId('host');
     setRoomLobby(localLobby);
     setStartScreen('room-waiting');
-  }, [connectRoomSocket, getVoiceOutputContext, requestMicrophonePermission, roomPlayerName, roomSpeakerEnabled, roomTheme, roomVoiceEnabled]);
+  }, [connectRoomSocket, requestMicrophonePermission, roomPlayerName, roomSpeakerEnabled, roomTheme, roomVoiceEnabled]);
   const joinRoomLobby = useCallback(async () => {
     setRoomError('');
     if (!roomCode.trim()) {
       setRoomError('Enter a room code.');
       return;
     }
-    getVoiceOutputContext()?.resume?.().catch(() => {});
 
     if (!MULTIPLAYER_WS_URL) {
       setRoomError('Multiplayer server is not connected yet.');
@@ -876,7 +853,7 @@ function App() {
     } catch (error) {
       setRoomError(error.message);
     }
-  }, [connectRoomSocket, getVoiceOutputContext, requestMicrophonePermission, roomCode, roomPlayerName, roomSpeakerEnabled, roomVoiceEnabled]);
+  }, [connectRoomSocket, requestMicrophonePermission, roomCode, roomPlayerName, roomSpeakerEnabled, roomVoiceEnabled]);
   const leaveRoomLobby = useCallback(() => {
     if (sendRoomMessage({ type: 'leave_room' })) {
       disconnectRoomSocket();
@@ -972,12 +949,11 @@ function App() {
         speakerEnabled: nextEnabled,
       });
       if (nextEnabled) {
-        getVoiceOutputContext()?.resume?.().catch(() => {});
         window.setTimeout(unlockRoomAudio, 0);
       }
       return nextEnabled;
     });
-  }, [getVoiceOutputContext, roomVoiceEnabled, sendRoomMessage, unlockRoomAudio]);
+  }, [roomVoiceEnabled, sendRoomMessage, unlockRoomAudio]);
   const updateCamera = useCallback((camera) => {
     if (worldRef.current) {
       worldRef.current.style.transform = `translate(${-camera.x}vw, ${camera.y}vh)`;
@@ -1243,7 +1219,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (roomLobby?.weather) {
+    if (roomLobby?.weather && roomConnectionStatus !== 'connected') {
       const updateSyncedWeather = () => {
         const serverNow = Date.now() + roomServerTimeOffsetRef.current;
         const nextWeather = getSyncedRoomWeather(roomLobby.weather, serverNow);
@@ -1256,7 +1232,7 @@ function App() {
     }
 
     return undefined;
-  }, [roomLobby?.weather?.seed, roomLobby?.weather?.startedAt]);
+  }, [roomConnectionStatus, roomLobby?.weather?.seed, roomLobby?.weather?.startedAt]);
 
   useEffect(() => {
     if (roomLobby?.weather) return undefined;
