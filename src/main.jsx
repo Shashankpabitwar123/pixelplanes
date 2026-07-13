@@ -83,6 +83,10 @@ import {
   normalizeAngle,
 } from './game/core.jsx';
 
+const ROOM_STATE_SEND_INTERVAL_MS = 33;
+const REMOTE_INTERPOLATION_DELAY_MS = 110;
+const REMOTE_MAX_PREDICTION_SECONDS = 0.16;
+
 function App() {
   const [theme, setTheme] = useState('dark');
   const [gameStarted, setGameStarted] = useState(false);
@@ -818,14 +822,18 @@ function App() {
       }
       if (message.type === 'remote_player_state') {
         if (!message.playerId || message.playerId === localRoomPlayerIdRef.current) return;
+        const receivedAt = performance.now();
         replaceRemotePlayerStates((current) => ({
           ...current,
           [message.playerId]: {
+            previousState: current[message.playerId]?.state || message.state,
+            previousAt: current[message.playerId]?.at || receivedAt,
             state: {
               ...current[message.playerId]?.state,
               ...message.state,
             },
-            at: performance.now(),
+            at: receivedAt,
+            serverAt: message.at || 0,
           },
         }));
       }
@@ -1280,7 +1288,7 @@ function App() {
     playerStateRef.current = nextState;
     if (gameMode !== 'room' || !gameStarted || !localRoomPlayerIdRef.current) return;
     const now = performance.now();
-    if (now - lastRoomStateSentRef.current < 50) return;
+    if (now - lastRoomStateSentRef.current < ROOM_STATE_SEND_INTERVAL_MS) return;
     lastRoomStateSentRef.current = now;
     sendRoomMessage({
       type: 'player_state',
@@ -3744,18 +3752,76 @@ function PlayablePlane({
   );
 }
 
+function interpolateRemotePlane(entry, now) {
+  const plane = entry.state;
+  const previous = entry.previousState || plane;
+  const previousAt = entry.previousAt || entry.at || now;
+  const currentAt = entry.at || now;
+  const renderAt = now - REMOTE_INTERPOLATION_DELAY_MS;
+  const packetWindow = Math.max(1, currentAt - previousAt);
+
+  if (renderAt <= currentAt && previousAt < currentAt) {
+    const t = clamp((renderAt - previousAt) / packetWindow, 0, 1);
+    const angleDelta = normalizeAngle((plane.angle || 0) - (previous.angle || 0));
+    return {
+      x: (previous.x || 0) + ((plane.x || 0) - (previous.x || 0)) * t,
+      y: (previous.y || 0) + ((plane.y || 0) - (previous.y || 0)) * t,
+      angle: normalizeAngle((previous.angle || 0) + angleDelta * t),
+    };
+  }
+
+  const predictionSeconds = clamp((renderAt - currentAt) / 1000, 0, REMOTE_MAX_PREDICTION_SECONDS);
+  return {
+    x: (plane.x || 0) + (plane.vx || 0) * predictionSeconds,
+    y: (plane.y || 0) + (plane.vy || 0) * predictionSeconds,
+    angle: plane.angle || 0,
+  };
+}
+
 function RemotePlane({ player, entry, fogActive }) {
+  const planeRef = useRef(null);
+  const blastRef = useRef(null);
+  const entryRef = useRef(entry);
   const plane = entry.state;
   const crashed = Boolean(plane.crashed);
   const damaged = (plane.damage ?? 0) > 0 && !crashed;
   const visibleThrust = Math.max(plane.thrust || 0, plane.throttle || 0);
 
+  useEffect(() => {
+    entryRef.current = entry;
+  }, [entry]);
+
+  useEffect(() => {
+    let frame = 0;
+    const update = (now) => {
+      const currentEntry = entryRef.current;
+      if (!currentEntry?.state) {
+        frame = requestAnimationFrame(update);
+        return;
+      }
+      const display = interpolateRemotePlane(currentEntry, now);
+      if (planeRef.current) {
+        planeRef.current.style.transform = `translate(${display.x}vw, ${-display.y}vh) rotate(${display.angle}deg)`;
+      }
+      if (blastRef.current) {
+        blastRef.current.style.left = `${display.x}vw`;
+        blastRef.current.style.bottom = `calc(100% - 2px + ${Math.max(0, display.y)}vh)`;
+      }
+      frame = requestAnimationFrame(update);
+    };
+    frame = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const initialDisplay = interpolateRemotePlane(entry, performance.now());
+
   return (
     <div className="player-plane-layer remote-plane-layer" aria-label={`${player.name} plane`}>
       <div
+        ref={planeRef}
         className={`player-plane remote-plane${crashed ? ' plane-crashed' : ''}${damaged ? ' plane-damaged' : ''}`}
         style={{
-          transform: `translate(${plane.x}vw, ${-plane.y}vh) rotate(${plane.angle}deg)`,
+          transform: `translate(${initialDisplay.x}vw, ${-initialDisplay.y}vh) rotate(${initialDisplay.angle}deg)`,
           '--thrust': visibleThrust,
         }}
       >
@@ -3770,10 +3836,11 @@ function RemotePlane({ player, entry, fogActive }) {
       </div>
       {crashed && (
         <span
+          ref={blastRef}
           className="blast remote-blast"
           style={{
-            left: `${plane.x}vw`,
-            bottom: `calc(100% - 2px + ${Math.max(0, plane.y)}vh)`,
+            left: `${initialDisplay.x}vw`,
+            bottom: `calc(100% - 2px + ${Math.max(0, initialDisplay.y)}vh)`,
           }}
           aria-hidden="true"
         >
