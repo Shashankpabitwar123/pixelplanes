@@ -1519,6 +1519,14 @@ button {
   letter-spacing: 0;
 }
 
+.ping-badge {
+  top: 60px;
+}
+
+.ping-badge strong {
+  font-size: 14px;
+}
+
 .map-pointer {
   position: absolute;
   z-index: 21;
@@ -4206,6 +4214,10 @@ button {
     top: 12px;
     width: 54px;
     height: 32px;
+  }
+
+  .ping-badge {
+    top: 50px;
   }
 
   .map-pointer {

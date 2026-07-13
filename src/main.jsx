@@ -149,6 +149,7 @@ function App() {
   const [roomLobby, setRoomLobby] = useState(null);
   const [localRoomPlayerId, setLocalRoomPlayerId] = useState('');
   const [roomConnectionStatus, setRoomConnectionStatus] = useState('idle');
+  const [roomPingMs, setRoomPingMs] = useState(null);
   const [roomError, setRoomError] = useState('');
   const [roomNotifications, setRoomNotifications] = useState([]);
   const [voiceStatus, setVoiceStatus] = useState('idle');
@@ -190,6 +191,7 @@ function App() {
   const playerApiRef = useRef(null);
   const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
   const roomSocketRef = useRef(null);
+  const pendingRoomPingSentAtRef = useRef(0);
   const rtcPeerConnectionsRef = useRef(new Map());
   const rtcIceServersRef = useRef(RTC_ICE_SERVERS);
   const rtcIceServersPromiseRef = useRef(null);
@@ -225,6 +227,8 @@ function App() {
     }
     setLocalRoomPlayerId('');
     setRoomConnectionStatus('idle');
+    setRoomPingMs(null);
+    pendingRoomPingSentAtRef.current = 0;
     roomStateSeqRef.current = 0;
   }, []);
   const sendRoomMessage = useCallback((message) => {
@@ -235,6 +239,29 @@ function App() {
     socket.send(JSON.stringify(message));
     return true;
   }, []);
+  useEffect(() => {
+    if (roomConnectionStatus !== 'connected') {
+      setRoomPingMs(null);
+      pendingRoomPingSentAtRef.current = 0;
+      return undefined;
+    }
+
+    const sendPing = () => {
+      const now = performance.now();
+      const pendingSince = pendingRoomPingSentAtRef.current;
+      if (pendingSince && now - pendingSince < 5000) return;
+      if (pendingSince) setRoomPingMs(null);
+      pendingRoomPingSentAtRef.current = now;
+      if (!sendRoomMessage({ type: 'ping' })) {
+        pendingRoomPingSentAtRef.current = 0;
+        setRoomPingMs(null);
+      }
+    };
+
+    sendPing();
+    const interval = window.setInterval(sendPing, 2000);
+    return () => window.clearInterval(interval);
+  }, [roomConnectionStatus, sendRoomMessage]);
   const clearRoomNotifications = useCallback(() => {
     roomNotificationTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
     roomNotificationTimersRef.current = [];
@@ -996,6 +1023,14 @@ function App() {
       if (message.type === 'voice_signal') {
         handleVoiceSignal(message.fromPlayerId, message.signal);
       }
+      if (message.type === 'pong') {
+        const sentAt = pendingRoomPingSentAtRef.current;
+        if (sentAt) {
+          const nextPing = Math.max(0, Math.round(performance.now() - sentAt));
+          setRoomPingMs(nextPing);
+          pendingRoomPingSentAtRef.current = 0;
+        }
+      }
       if (message.type === 'player_hit') {
         const eventId = message.projectileId || `${message.attackerId}-${message.targetId}-${message.at}`;
         if (message.targetId === localRoomPlayerIdRef.current) {
@@ -1099,12 +1134,16 @@ function App() {
         roomSocketRef.current = null;
       }
       setRoomConnectionStatus('idle');
+      setRoomPingMs(null);
+      pendingRoomPingSentAtRef.current = 0;
       if (!settled) {
         reject(new Error('Could not connect to multiplayer server.'));
       }
     });
     socket.addEventListener('error', () => {
       setRoomConnectionStatus('idle');
+      setRoomPingMs(null);
+      pendingRoomPingSentAtRef.current = 0;
       if (!settled) {
         reject(new Error('Could not connect to multiplayer server.'));
       }
@@ -2227,6 +2266,13 @@ function App() {
       >
         <strong>{measuredFrameRate || '--'}</strong>
         <span>FPS</span>
+      </div>
+      <div
+        className="frame-rate-badge ping-badge"
+        aria-label={roomPingMs == null ? 'Room ping is not available' : `Room ping is ${roomPingMs} milliseconds`}
+      >
+        <strong>{roomPingMs == null ? '--' : roomPingMs}</strong>
+        <span>MS</span>
       </div>
       <div ref={mapPointerRef} className="map-pointer" aria-label="Map position">
         {fuelTankPlacements.map((x, index) => (
