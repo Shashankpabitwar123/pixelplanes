@@ -1476,6 +1476,49 @@ button {
   font-size: 20px;
 }
 
+.frame-rate-badge {
+  position: absolute;
+  z-index: 21;
+  right: 268px;
+  top: 20px;
+  width: 58px;
+  height: 34px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  gap: 0;
+  padding: 3px 4px 4px;
+  border: 1px solid rgba(80, 91, 98, 0.24);
+  border-radius: 7px;
+  color: #172c3b;
+  background: rgba(216, 222, 226, 0.72);
+  box-shadow: 0 8px 20px rgba(31, 65, 86, 0.12);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.frame-rate-badge strong {
+  display: block;
+  min-width: 28px;
+  color: #fff7b8;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 0.95;
+  text-align: center;
+  text-shadow:
+    0 0 8px rgba(255, 232, 82, 0.74),
+    0 1px 0 rgba(17, 28, 39, 0.36);
+}
+
+.frame-rate-badge span {
+  display: block;
+  color: rgba(23, 44, 59, 0.76);
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
 .map-pointer {
   position: absolute;
   z-index: 21;
@@ -2088,6 +2131,7 @@ button {
   }
 }
 
+.scene-dark .frame-rate-badge,
 .scene-dark .map-pointer,
 .scene-dark .fuel-gauge,
 .scene-dark .bullet-meter,
@@ -2107,6 +2151,10 @@ button {
 .scene-dark .start-card {
   border-color: rgba(255, 255, 255, 0.14);
   background: rgba(180, 190, 198, 0.42);
+}
+
+.scene-dark .frame-rate-badge span {
+  color: rgba(239, 248, 255, 0.75);
 }
 
 .scene-dark .pause-center-icon {
@@ -4151,6 +4199,13 @@ button {
     min-width: 34px;
     height: 32px;
     font-size: 17px;
+  }
+
+  .frame-rate-badge {
+    right: 260px;
+    top: 12px;
+    width: 54px;
+    height: 32px;
   }
 
   .map-pointer {

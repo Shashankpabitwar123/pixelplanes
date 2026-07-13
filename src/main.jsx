@@ -94,6 +94,46 @@ const REMOTE_DISPLAY_MAX_DT_SECONDS = 0.06;
 const RTC_STATE_CHANNEL_LABEL = 'pixelplanes-state';
 const RTC_STATE_CHANNEL_MAX_BUFFERED_BYTES = 64 * 1024;
 
+function useMeasuredFrameRate() {
+  const [frameRate, setFrameRate] = useState(0);
+
+  useEffect(() => {
+    let frame = 0;
+    let lastFrameAt = 0;
+    let lastPublishedAt = 0;
+    const samples = [];
+
+    const measure = (now) => {
+      if (lastFrameAt) {
+        const delta = now - lastFrameAt;
+        if (delta > 0 && delta < 250) {
+          samples.push(delta);
+          if (samples.length > 120) samples.shift();
+        }
+      }
+
+      if (samples.length >= 24 && now - lastPublishedAt > 850) {
+        const sorted = [...samples].sort((a, b) => a - b);
+        const trim = Math.floor(sorted.length * 0.1);
+        const end = Math.max(trim + 1, sorted.length - trim);
+        const stableSamples = sorted.slice(trim, end);
+        const average = stableSamples.reduce((sum, delta) => sum + delta, 0) / stableSamples.length;
+        const nextFrameRate = Math.round(1000 / average);
+        setFrameRate((current) => (Math.abs(current - nextFrameRate) >= 1 ? nextFrameRate : current));
+        lastPublishedAt = now;
+      }
+
+      lastFrameAt = now;
+      frame = window.requestAnimationFrame(measure);
+    };
+
+    frame = window.requestAnimationFrame(measure);
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  return frameRate;
+}
+
 function App() {
   const [theme, setTheme] = useState('dark');
   const [gameStarted, setGameStarted] = useState(false);
@@ -132,6 +172,7 @@ function App() {
   const [sfxMuted, setSfxMuted] = useState(false);
   const [shootingStars, setShootingStars] = useState([]);
   const [remoteProjectiles, setRemoteProjectiles] = useState([]);
+  const measuredFrameRate = useMeasuredFrameRate();
   const worldRef = useRef(null);
   const mapPointerRef = useRef(null);
   const mapDotRef = useRef(null);
@@ -2180,6 +2221,13 @@ function App() {
         </div>
       )}
 
+      <div
+        className="frame-rate-badge"
+        aria-label={`Game is running at ${measuredFrameRate || 'measuring'} frames per second`}
+      >
+        <strong>{measuredFrameRate || '--'}</strong>
+        <span>FPS</span>
+      </div>
       <div ref={mapPointerRef} className="map-pointer" aria-label="Map position">
         {fuelTankPlacements.map((x, index) => (
           <span
