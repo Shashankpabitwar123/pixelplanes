@@ -84,7 +84,8 @@ import {
 } from './game/core.jsx';
 
 const ROOM_STATE_SEND_INTERVAL_MS = 33;
-const REMOTE_INTERPOLATION_DELAY_MS = 80;
+const REMOTE_INTERPOLATION_DELAY_MS = 100;
+const REMOTE_MAX_INTERPOLATION_DELAY_MS = 240;
 const REMOTE_MAX_PREDICTION_SECONDS = 0.22;
 
 function App() {
@@ -124,7 +125,6 @@ function App() {
   const [musicVolume, setMusicVolume] = useState(0.32);
   const [sfxMuted, setSfxMuted] = useState(false);
   const [shootingStars, setShootingStars] = useState([]);
-  const [remotePlayerStates, setRemotePlayerStates] = useState({});
   const [remoteProjectiles, setRemoteProjectiles] = useState([]);
   const worldRef = useRef(null);
   const mapPointerRef = useRef(null);
@@ -203,7 +203,28 @@ function App() {
   const replaceRemotePlayerStates = useCallback((updater) => {
     const next = typeof updater === 'function' ? updater(remotePlayerStatesRef.current) : updater;
     remotePlayerStatesRef.current = next;
-    setRemotePlayerStates(next);
+  }, []);
+  const updateRemotePlayerState = useCallback((playerId, state, serverAt = 0) => {
+    if (!playerId || playerId === localRoomPlayerIdRef.current) return;
+    const receivedAt = performance.now();
+    const current = remotePlayerStatesRef.current;
+    const existing = current[playerId];
+    const packetGap = existing?.at ? receivedAt - existing.at : ROOM_STATE_SEND_INTERVAL_MS;
+    const gapError = Math.abs(packetGap - ROOM_STATE_SEND_INTERVAL_MS);
+    const jitter = existing?.jitter == null
+      ? gapError
+      : existing.jitter + (gapError - existing.jitter) * 0.18;
+    current[playerId] = {
+      previousState: existing?.state || state,
+      previousAt: existing?.at || receivedAt,
+      state: {
+        ...existing?.state,
+        ...state,
+      },
+      at: receivedAt,
+      serverAt,
+      jitter,
+    };
   }, []);
   const replaceRemoteProjectiles = useCallback((updater) => {
     const next = typeof updater === 'function' ? updater(remoteProjectilesRef.current) : updater;
@@ -822,20 +843,7 @@ function App() {
       }
       if (message.type === 'remote_player_state') {
         if (!message.playerId || message.playerId === localRoomPlayerIdRef.current) return;
-        const receivedAt = performance.now();
-        replaceRemotePlayerStates((current) => ({
-          ...current,
-          [message.playerId]: {
-            previousState: current[message.playerId]?.state || message.state,
-            previousAt: current[message.playerId]?.at || receivedAt,
-            state: {
-              ...current[message.playerId]?.state,
-              ...message.state,
-            },
-            at: receivedAt,
-            serverAt: message.at || 0,
-          },
-        }));
+        updateRemotePlayerState(message.playerId, message.state, message.at || 0);
       }
       if (message.type === 'room_projectile') {
         const projectile = message.projectile;
@@ -970,7 +978,7 @@ function App() {
         reject(new Error('Could not connect to multiplayer server.'));
       }
     });
-  }), [applyServerRoomState, clearRoomNotifications, handleVoiceSignal, localRoomPlayerId, pushRoomNotification, replaceRemotePlayerStates, replaceRemoteProjectiles, startGame]);
+  }), [applyServerRoomState, clearRoomNotifications, handleVoiceSignal, localRoomPlayerId, pushRoomNotification, replaceRemotePlayerStates, replaceRemoteProjectiles, startGame, updateRemotePlayerState]);
   const pauseGame = useCallback(() => {
     if (!gameStarted) return;
     setPaused((current) => !current);
@@ -1588,8 +1596,6 @@ function App() {
   const remoteRoomPlanes = isRoomGame
     ? roomPlayers
       .filter((player) => player.id !== localRoomPlayerId)
-      .map((player) => ({ player, entry: remotePlayerStates[player.id] }))
-      .filter(({ entry }) => entry?.state)
     : [];
 
   return (
@@ -2105,20 +2111,9 @@ function App() {
         ))}
         {gameMode === 'room' && roomPlayers
           .filter((player) => player.id !== localRoomPlayerId)
-          .map((player) => {
-            const state = remotePlayerStates[player.id]?.state;
-            if (!state) return null;
-            return (
-              <span
-                key={player.id}
-                className="map-bot-dot map-room-player-dot"
-                style={{
-                  left: `${Math.max(2, Math.min(98, (state.x / WORLD_WIDTH) * 100))}%`,
-                  top: `${Math.max(2, Math.min(98, 100 - ((state.y + 50) / WORLD_HEIGHT) * 100))}%`,
-                }}
-              />
-            );
-          })}
+          .map((player) => (
+            <RoomPlayerMapDot key={player.id} playerId={player.id} statesRef={remotePlayerStatesRef} />
+          ))}
         <span
           ref={mapDotRef}
           className="map-pointer-dot"
@@ -2251,8 +2246,8 @@ function App() {
             sfxMuted={sfxMuted}
             fogActive={fogActive}
           />
-          {remoteRoomPlanes.map(({ player, entry }) => (
-            <RemotePlane key={player.id} player={player} entry={entry} fogActive={fogActive} />
+          {remoteRoomPlanes.map((player) => (
+            <RemotePlane key={player.id} player={player} statesRef={remotePlayerStatesRef} fogActive={fogActive} />
           ))}
           <RoomProjectilesLayer
             active={isRoomGame}
@@ -3757,7 +3752,12 @@ function interpolateRemotePlane(entry, now) {
   const previous = entry.previousState || plane;
   const previousAt = entry.previousAt || entry.at || now;
   const currentAt = entry.at || now;
-  const renderAt = now - REMOTE_INTERPOLATION_DELAY_MS;
+  const interpolationDelay = clamp(
+    REMOTE_INTERPOLATION_DELAY_MS + (entry.jitter || 0) * 2.4,
+    REMOTE_INTERPOLATION_DELAY_MS,
+    REMOTE_MAX_INTERPOLATION_DELAY_MS,
+  );
+  const renderAt = now - interpolationDelay;
   const packetWindow = Math.max(1, currentAt - previousAt);
 
   if (renderAt <= currentAt && previousAt < currentAt) {
@@ -3778,82 +3778,157 @@ function interpolateRemotePlane(entry, now) {
   };
 }
 
-function RemotePlane({ player, entry, fogActive }) {
-  const planeRef = useRef(null);
-  const blastRef = useRef(null);
-  const entryRef = useRef(entry);
-  const plane = entry.state;
-  const crashed = Boolean(plane.crashed);
-  const damaged = (plane.damage ?? 0) > 0 && !crashed;
-  const visibleThrust = Math.max(plane.thrust || 0, plane.throttle || 0);
-
-  useEffect(() => {
-    entryRef.current = entry;
-  }, [entry]);
+function RoomPlayerMapDot({ playerId, statesRef }) {
+  const dotRef = useRef(null);
 
   useEffect(() => {
     let frame = 0;
-    const update = (now) => {
-      const currentEntry = entryRef.current;
-      if (!currentEntry?.state) {
-        frame = requestAnimationFrame(update);
-        return;
-      }
-      const display = interpolateRemotePlane(currentEntry, now);
-      if (planeRef.current) {
-        planeRef.current.style.transform = `translate(${display.x}vw, ${-display.y}vh) rotate(${display.angle}deg)`;
-      }
-      if (blastRef.current) {
-        blastRef.current.style.left = `${display.x}vw`;
-        blastRef.current.style.bottom = `calc(100% - 2px + ${Math.max(0, display.y)}vh)`;
+    const update = () => {
+      const state = statesRef.current[playerId]?.state;
+      if (dotRef.current) {
+        if (state) {
+          dotRef.current.style.display = '';
+          dotRef.current.style.left = `${Math.max(2, Math.min(98, (state.x / WORLD_WIDTH) * 100))}%`;
+          dotRef.current.style.top = `${Math.max(2, Math.min(98, 100 - ((state.y + 50) / WORLD_HEIGHT) * 100))}%`;
+        } else {
+          dotRef.current.style.display = 'none';
+        }
       }
       frame = requestAnimationFrame(update);
     };
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [playerId, statesRef]);
 
-  const initialDisplay = interpolateRemotePlane(entry, performance.now());
+  return <span ref={dotRef} className="map-bot-dot map-room-player-dot" style={{ display: 'none' }} />;
+}
+
+function RemotePlane({ player, statesRef, fogActive }) {
+  const planeRef = useRef(null);
+  const blastRef = useRef(null);
+  const [visual, setVisual] = useState({
+    visible: false,
+    crashed: false,
+    damaged: false,
+    searchLightOn: false,
+    propellerActive: false,
+    thrust: 0,
+  });
+  const visualRef = useRef(visual);
+
+  useEffect(() => {
+    visualRef.current = visual;
+  }, [visual]);
+
+  useEffect(() => {
+    let frame = 0;
+    const update = (now) => {
+      const currentEntry = statesRef.current[player.id];
+      if (!currentEntry?.state) {
+        if (planeRef.current) planeRef.current.style.display = 'none';
+        if (blastRef.current) blastRef.current.style.display = 'none';
+        if (visualRef.current.visible) {
+          const nextVisual = {
+            visible: false,
+            crashed: false,
+            damaged: false,
+            searchLightOn: false,
+            propellerActive: false,
+            thrust: 0,
+          };
+          visualRef.current = nextVisual;
+          setVisual(nextVisual);
+        }
+        frame = requestAnimationFrame(update);
+        return;
+      }
+      const plane = currentEntry.state;
+      const display = interpolateRemotePlane(currentEntry, now);
+      const crashed = Boolean(plane.crashed);
+      const damaged = (plane.damage ?? 0) > 0 && !crashed;
+      const visibleThrust = Math.max(plane.thrust || 0, plane.throttle || 0);
+      if (planeRef.current) {
+        planeRef.current.style.display = '';
+        planeRef.current.style.transform = `translate(${display.x}vw, ${-display.y}vh) rotate(${display.angle}deg)`;
+        planeRef.current.classList.toggle('plane-crashed', crashed);
+        planeRef.current.classList.toggle('plane-damaged', damaged);
+        planeRef.current.style.setProperty('--thrust', visibleThrust);
+      }
+      if (blastRef.current) {
+        blastRef.current.style.display = crashed ? '' : 'none';
+        blastRef.current.style.left = `${display.x}vw`;
+        blastRef.current.style.bottom = `calc(100% - 2px + ${Math.max(0, display.y)}vh)`;
+      }
+      const nextVisual = {
+        visible: true,
+        crashed,
+        damaged,
+        searchLightOn: Boolean(plane.searchLightOn) && !crashed,
+        propellerActive: visibleThrust > 0.05,
+        thrust: visibleThrust,
+      };
+      const currentVisual = visualRef.current;
+      if (
+        currentVisual.visible !== nextVisual.visible ||
+        currentVisual.crashed !== nextVisual.crashed ||
+        currentVisual.damaged !== nextVisual.damaged ||
+        currentVisual.searchLightOn !== nextVisual.searchLightOn ||
+        currentVisual.propellerActive !== nextVisual.propellerActive ||
+        Math.abs(currentVisual.thrust - nextVisual.thrust) > 0.18
+      ) {
+        visualRef.current = nextVisual;
+        setVisual(nextVisual);
+      }
+      frame = requestAnimationFrame(update);
+    };
+    frame = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frame);
+  }, [player.id, statesRef]);
+
+  const initialEntry = statesRef.current[player.id];
+  const initialDisplay = initialEntry
+    ? interpolateRemotePlane(initialEntry, performance.now())
+    : { x: START_X, y: 0, angle: 16 };
 
   return (
     <div className="player-plane-layer remote-plane-layer" aria-label={`${player.name} plane`}>
       <div
         ref={planeRef}
-        className={`player-plane remote-plane${crashed ? ' plane-crashed' : ''}${damaged ? ' plane-damaged' : ''}`}
+        className={`player-plane remote-plane${visual.crashed ? ' plane-crashed' : ''}${visual.damaged ? ' plane-damaged' : ''}`}
         style={{
+          display: visual.visible ? undefined : 'none',
           transform: `translate(${initialDisplay.x}vw, ${-initialDisplay.y}vh) rotate(${initialDisplay.angle}deg)`,
-          '--thrust': visibleThrust,
+          '--thrust': visual.thrust,
         }}
       >
         <BitPlane
           rocketsRemaining={0}
           planeColor={player.color || 'blue'}
           planeLightCombo="classic"
-          searchLightActive={Boolean(plane.searchLightOn) && !crashed}
+          searchLightActive={visual.searchLightOn}
           searchLightFog={fogActive}
-          propellerActive={visibleThrust > 0.05}
+          propellerActive={visual.propellerActive}
         />
       </div>
-      {crashed && (
-        <span
-          ref={blastRef}
-          className="blast remote-blast"
-          style={{
-            left: `${initialDisplay.x}vw`,
-            bottom: `calc(100% - 2px + ${Math.max(0, initialDisplay.y)}vh)`,
-          }}
-          aria-hidden="true"
-        >
-          <i className="blast-flash" />
-          <i className="blast-core" />
-          <i className="blast-sparks" />
-          <i className="smoke smoke-one" />
-          <i className="smoke smoke-two" />
-          <i className="smoke smoke-three" />
-          <i className="smoke smoke-four" />
-          <i className="smoke smoke-five" />
-        </span>
-      )}
+      <span
+        ref={blastRef}
+        className="blast remote-blast"
+        style={{
+          display: visual.crashed ? undefined : 'none',
+          left: `${initialDisplay.x}vw`,
+          bottom: `calc(100% - 2px + ${Math.max(0, initialDisplay.y)}vh)`,
+        }}
+        aria-hidden="true"
+      >
+        <i className="blast-flash" />
+        <i className="blast-core" />
+        <i className="blast-sparks" />
+        <i className="smoke smoke-one" />
+        <i className="smoke smoke-two" />
+        <i className="smoke smoke-three" />
+        <i className="smoke smoke-four" />
+        <i className="smoke smoke-five" />
+      </span>
     </div>
   );
 }
