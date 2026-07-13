@@ -83,7 +83,7 @@ import {
   normalizeAngle,
 } from './game/core.jsx';
 
-const ROOM_STATE_SEND_INTERVAL_MS = 33;
+const ROOM_STATE_SEND_INTERVAL_MS = 50;
 const REMOTE_INTERPOLATION_DELAY_MS = 100;
 const REMOTE_MAX_INTERPOLATION_DELAY_MS = 240;
 const REMOTE_MAX_PREDICTION_SECONDS = 0.22;
