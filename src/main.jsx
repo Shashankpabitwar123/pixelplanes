@@ -93,6 +93,7 @@ const REMOTE_DISPLAY_SNAP_DISTANCE = 42;
 const REMOTE_DISPLAY_MAX_DT_SECONDS = 0.06;
 const RTC_STATE_CHANNEL_LABEL = 'pixelplanes-state';
 const RTC_STATE_CHANNEL_MAX_BUFFERED_BYTES = 64 * 1024;
+const FIELD_GUIDE_PAGE_COUNT = 6;
 
 function useMeasuredFrameRate() {
   const [frameRate, setFrameRate] = useState(0);
@@ -167,6 +168,9 @@ function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fieldGuideOpen, setFieldGuideOpen] = useState(false);
+  const [fieldGuidePage, setFieldGuidePage] = useState(0);
+  const [fieldGuideTurnDirection, setFieldGuideTurnDirection] = useState('next');
+  const [fieldGuideTurnKey, setFieldGuideTurnKey] = useState(0);
   const [planeMenuOpen, setPlaneMenuOpen] = useState(false);
   const [planeColor, setPlaneColor] = useState('blue');
   const [planeLightCombo, setPlaneLightCombo] = useState('classic');
@@ -228,6 +232,7 @@ function App() {
     setHelpOpen(false);
     setSettingsOpen(false);
     setFieldGuideOpen(false);
+    setFieldGuidePage(0);
     setPlaneMenuOpen(false);
     setKillCount(0);
   }, []);
@@ -1536,6 +1541,22 @@ function App() {
     setPlaneLightIntensity(Number(event.target.value) / 100);
   }, []);
 
+  const openFieldGuide = useCallback(() => {
+    setFieldGuidePage(0);
+    setFieldGuideTurnDirection('next');
+    setFieldGuideTurnKey((key) => key + 1);
+    setFieldGuideOpen(true);
+    setSettingsOpen(false);
+  }, []);
+
+  const turnFieldGuidePage = useCallback((direction) => {
+    const nextPage = fieldGuidePage + direction;
+    if (nextPage < 0 || nextPage >= FIELD_GUIDE_PAGE_COUNT) return;
+    setFieldGuideTurnDirection(direction > 0 ? 'next' : 'previous');
+    setFieldGuidePage(nextPage);
+    setFieldGuideTurnKey((key) => key + 1);
+  }, [fieldGuidePage]);
+
   useEffect(() => () => {
     fuelPulseTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
     roomNotificationTimersRef.current.forEach((timeout) => window.clearTimeout(timeout));
@@ -2078,8 +2099,11 @@ function App() {
                     aria-expanded={fieldGuideOpen}
                     title="Field guide"
                     onClick={() => {
-                      setFieldGuideOpen((open) => !open);
-                      setSettingsOpen(false);
+                      if (fieldGuideOpen) {
+                        setFieldGuideOpen(false);
+                      } else {
+                        openFieldGuide();
+                      }
                     }}
                   >
                     <span className="start-utility-glyph start-utility-info" aria-hidden="true">i</span>
@@ -2362,68 +2386,13 @@ function App() {
           )}
           {fieldGuideOpen && startScreen === 'home' && (
             <section className="start-utility-overlay field-guide-overlay" aria-label="Bit Planes field guide">
-              <article className="field-guide-panel" role="dialog" aria-modal="true" aria-labelledby="field-guide-title">
-                <header className="field-guide-masthead">
-                  <div className="field-guide-stamp">VOL. 01<br />SKY EDITION</div>
-                  <div>
-                    <span className="field-guide-kicker">The Bit Planes Gazette</span>
-                    <h2 id="field-guide-title">Pilot's Field Guide</h2>
-                    <p>Everything needed to fly, fight, refuel, and keep the sky yours.</p>
-                  </div>
-                  <button className="panel-close-button field-guide-close" type="button" aria-label="Close field guide" onClick={() => setFieldGuideOpen(false)}>×</button>
-                </header>
-                <div className="field-guide-grid">
-                  <section className="field-guide-story field-guide-story-flight">
-                    <div className="field-guide-art guide-plane-art"><img src="/assets/exact-plane.png" alt="Blue Bit Plane" draggable="false" /></div>
-                    <div className="field-guide-copy">
-                      <span className="field-guide-number">01</span>
-                      <h3>Take to the sky</h3>
-                      <p>Hold <kbd>W</kbd> or <kbd>↑</kbd> to build speed. Use <kbd>A</kbd>/<kbd>D</kbd> or the arrow keys to turn. Release thrust and gravity takes over.</p>
-                    </div>
-                  </section>
-                  <section className="field-guide-story field-guide-story-fuel">
-                    <div className="field-guide-art guide-fuel-art"><FuelTank active={false} /></div>
-                    <div className="field-guide-copy">
-                      <span className="field-guide-number">02</span>
-                      <h3>Find fuel stations</h3>
-                      <p>The purple dots on your locator mark fuel stations. Touch one to refill 20 seconds of fuel and repair first-hit propeller damage.</p>
-                    </div>
-                  </section>
-                  <section className="field-guide-story field-guide-story-weapons">
-                    <div className="field-guide-art guide-weapons-art" aria-hidden="true"><span className="guide-bullet-art" /><span className="guide-rocket-art" /></div>
-                    <div className="field-guide-copy">
-                      <span className="field-guide-number">03</span>
-                      <h3>Fight with intent</h3>
-                      <p><kbd>Space</kbd> fires seven bullets that refill automatically. <kbd>R</kbd> fires a rocket that guides toward a target for four seconds, then flies straight.</p>
-                    </div>
-                  </section>
-                  <section className="field-guide-story field-guide-story-damage">
-                    <div className="field-guide-art guide-damage-art"><img src="/assets/exact-plane-purple.png" alt="Enemy purple Bit Plane" draggable="false" /></div>
-                    <div className="field-guide-copy">
-                      <span className="field-guide-number">04</span>
-                      <h3>Watch the smoke</h3>
-                      <p>One hit damages the propeller and starts smoke. A second hit blasts the plane. Land gently on the green runway; hay, hard landings, and map edges are dangerous.</p>
-                    </div>
-                  </section>
-                  <section className="field-guide-story field-guide-story-weather">
-                    <div className="field-guide-art guide-weather-art"><img src="/assets/theme-lightbulb-icon.svg" alt="Plane light" draggable="false" /><span>FOG</span><i>RAIN</i></div>
-                    <div className="field-guide-copy">
-                      <span className="field-guide-number">05</span>
-                      <h3>Fly through weather</h3>
-                      <p>Fog sits low over the field. Press <kbd>L</kbd> to shine the nose light through it. Rain and fog are shared with every pilot in the same room.</p>
-                    </div>
-                  </section>
-                  <section className="field-guide-story field-guide-story-room">
-                    <div className="field-guide-art guide-room-art"><img src="/assets/music-note-icon-transparent.png" alt="Music note" draggable="false" /><span className="guide-room-dot guide-room-dot-you" /><span className="guide-room-dot guide-room-dot-fuel" /><span className="guide-room-dot guide-room-dot-enemy" /></div>
-                    <div className="field-guide-copy">
-                      <span className="field-guide-number">06</span>
-                      <h3>Choose your sky</h3>
-                      <p>Start fights bots. Training removes them. In Room mode, share the code, choose your mic and speaker, and fly with up to six pilots.</p>
-                    </div>
-                  </section>
-                </div>
-                <footer className="field-guide-footer">A quiet landing keeps you flying. A fuel stop keeps you alive. A clear line of fire wins the dogfight.</footer>
-              </article>
+              <FieldGuide
+                page={fieldGuidePage}
+                turnDirection={fieldGuideTurnDirection}
+                turnKey={fieldGuideTurnKey}
+                onClose={() => setFieldGuideOpen(false)}
+                onTurn={turnFieldGuidePage}
+              />
             </section>
           )}
         </div>
@@ -2724,6 +2693,305 @@ function BulletMeter({ count, reloading, rocketCount }) {
           ))}
         </div>
       </div>
+    </>
+  );
+}
+
+function FieldGuide({ page, turnDirection, turnKey, onClose, onTurn }) {
+  const isFirstPage = page === 0;
+  const isLastPage = page === FIELD_GUIDE_PAGE_COUNT - 1;
+
+  return (
+    <article className="field-guide-panel field-guide-newspaper" role="dialog" aria-modal="true" aria-labelledby="field-guide-title">
+      <header className="field-guide-masthead">
+        <div className="field-guide-stamp">VOL. 01<br />SKY EDITION</div>
+        <div>
+          <span className="field-guide-kicker">The Bit Planes Gazette</span>
+          <h2 id="field-guide-title">Pilot's Field Guide</h2>
+          <p>Page {String(page + 1).padStart(2, '0')} - the complete picture guide to your plane, the sky, and every HUD control.</p>
+        </div>
+        <button className="panel-close-button field-guide-close" type="button" aria-label="Close field guide" onClick={onClose}>x</button>
+      </header>
+      <div className="field-guide-page-stage">
+        <section key={turnKey} className={`field-guide-page field-guide-page-${turnDirection}`} aria-live="polite">
+          {page === 0 && <GuideWelcomePage />}
+          {page === 1 && <GuideFlightPage />}
+          {page === 2 && <GuideNavigationPage />}
+          {page === 3 && <GuideCombatPage />}
+          {page === 4 && <GuideWeatherPage />}
+          {page === 5 && <GuideRoomPage />}
+        </section>
+      </div>
+      <footer className="field-guide-footer field-guide-navigation">
+        <button className="field-guide-turn" type="button" disabled={isFirstPage} onClick={() => onTurn(-1)}>Previous</button>
+        <span>PAGE {page + 1} / {FIELD_GUIDE_PAGE_COUNT}</span>
+        <button className="field-guide-turn field-guide-turn-next" type="button" disabled={isLastPage} onClick={() => onTurn(1)}>Next</button>
+      </footer>
+    </article>
+  );
+}
+
+function GazetteHeader({ issue, headline, deck }) {
+  return (
+    <header className="gazette-page-heading">
+      <span>{issue}</span>
+      <h3>{headline}</h3>
+      <p>{deck}</p>
+    </header>
+  );
+}
+
+function PixelKey({ children, wide = false }) {
+  return <kbd className={`gazette-key${wide ? ' gazette-key-wide' : ''}`}>{children}</kbd>;
+}
+
+function GuideWelcomePage() {
+  return (
+    <>
+      <GazetteHeader
+        issue="FRONT PAGE"
+        headline="Welcome to Bit Planes"
+        deck="A complete visual report before your first takeoff. Choose a sky, tune your tools, then fly."
+      />
+      <div className="gazette-layout gazette-layout-welcome">
+        <article className="gazette-story-copy gazette-lead-story">
+          <p className="gazette-dropcap">B</p>
+          <p><strong>Bit Planes is a flying dogfight over one long living map.</strong> Your plane has real momentum, gravity, fuel, landing gear, weapons, weather, music, and a full room mode. The farm stays behind the action: cows walk, grass grows, huts sit behind the runway, and fuel beacons mark safe stops.</p>
+          <p>The upper-left controls are always available on the start screen. Use the green gear for sound and beacon settings. Use the green information button to reopen this newspaper. The song note opens background music; the speaker controls game sound; the light bulb switches day and night; the plane button selects your body color and beacon pair.</p>
+        </article>
+        <aside className="gazette-hero-art" aria-label="Blue Bit Plane illustration">
+          <img src="/assets/exact-plane.png" alt="Blue Bit Plane" draggable="false" />
+          <span className="gazette-runway" />
+          <span className="gazette-hay-bale" />
+          <span className="gazette-cloud-mark gazette-cloud-one" />
+          <span className="gazette-cloud-mark gazette-cloud-two" />
+        </aside>
+      </div>
+      <div className="gazette-mode-strip">
+        <section>
+          <span className="gazette-mode-number">1</span>
+          <h4>Start</h4>
+          <p>Fight four roaming bots. Kills build your score until you crash.</p>
+        </section>
+        <section>
+          <span className="gazette-mode-number">2</span>
+          <h4>Training</h4>
+          <p>Fly alone. Practice landing, refueling, rockets, music, and weather.</p>
+        </section>
+        <section>
+          <span className="gazette-mode-number">3</span>
+          <h4>Room</h4>
+          <p>Create or join a six-pilot room with a name and code.</p>
+        </section>
+      </div>
+      <div className="gazette-utility-row" aria-label="Utility button illustrations">
+        <div><i className="gazette-utility-icon gazette-utility-settings" aria-hidden="true">*</i><span>Settings</span></div>
+        <div><i className="gazette-utility-icon gazette-utility-info" aria-hidden="true">i</i><span>Field guide</span></div>
+        <div><i className="gazette-utility-icon gazette-utility-note" aria-hidden="true">♪</i><span>Music</span></div>
+        <div><i className="gazette-utility-icon gazette-utility-speaker" aria-hidden="true">))</i><span>Game sound</span></div>
+        <div><i className="gazette-utility-icon gazette-utility-help" aria-hidden="true">?</i><span>Quick controls</span></div>
+        <div><i className="gazette-utility-icon gazette-utility-plane" aria-hidden="true">&gt;</i><span>Plane colors</span></div>
+        <div><i className="gazette-utility-icon gazette-utility-bulb" aria-hidden="true">!</i><span>Day / night</span></div>
+      </div>
+      <p className="gazette-caption">Start opens after a short launch prompt: hold the thrust key to wake the engine and enter the sky.</p>
+    </>
+  );
+}
+
+function GuideFlightPage() {
+  return (
+    <>
+      <GazetteHeader
+        issue="FLIGHT DESK"
+        headline="Every key has a job"
+        deck="The keyboard diagrams below match the plane controls. Hold thrust to build speed; turning is free and continuous."
+      />
+      <div className="gazette-flight-layout">
+        <section className="gazette-keyboard-story">
+          <div className="gazette-keyboard" aria-label="Flight controls keyboard illustration">
+            <div className="gazette-keyboard-row"><PixelKey>W</PixelKey><PixelKey wide>UP</PixelKey></div>
+            <div className="gazette-keyboard-row"><PixelKey>A</PixelKey><PixelKey>S</PixelKey><PixelKey>D</PixelKey><PixelKey>LEFT</PixelKey><PixelKey>DOWN</PixelKey><PixelKey>RIGHT</PixelKey></div>
+            <div className="gazette-keyboard-row"><PixelKey wide>SPACE</PixelKey><PixelKey>R</PixelKey><PixelKey>L</PixelKey></div>
+          </div>
+          <div className="gazette-control-list">
+            <p><PixelKey>W</PixelKey><PixelKey>UP</PixelKey><span><strong>Thrust.</strong> Hold to turn the propeller, build speed, and gain lift. Release it and thrust falls to zero.</span></p>
+            <p><PixelKey>A</PixelKey><PixelKey>LEFT</PixelKey><span><strong>Turn left.</strong> Rotates the whole plane without a fixed wheel pivot.</span></p>
+            <p><PixelKey>D</PixelKey><PixelKey>RIGHT</PixelKey><span><strong>Turn right.</strong> Combine it with thrust for full loops.</span></p>
+            <p><PixelKey>S</PixelKey><PixelKey>DOWN</PixelKey><span><strong>Slow / land.</strong> Reduces speed in the air; on the runway it reverses the plane.</span></p>
+            <p><PixelKey wide>SPACE</PixelKey><span><strong>Bullets.</strong> Fires from the propeller shaft along the dotted aiming line.</span></p>
+            <p><PixelKey>R</PixelKey><span><strong>Rockets.</strong> Launches one of the two homing rockets.</span></p>
+            <p><PixelKey>L</PixelKey><span><strong>Fog light.</strong> Shows a cone ahead of your propeller.</span></p>
+          </div>
+        </section>
+        <aside className="gazette-flight-sketch">
+          <img src="/assets/exact-plane.png" alt="Bit Plane with its flight path" draggable="false" />
+          <span className="gazette-flight-vector gazette-flight-vector-thrust">THRUST</span>
+          <span className="gazette-flight-vector gazette-flight-vector-gravity">GRAVITY</span>
+          <span className="gazette-dotted-aim"><i /><i /><i /><i /></span>
+          <span className="gazette-runway" />
+          <p><strong>Takeoff:</strong> build runway speed before lift. A soft wheel-first landing is safe; a steep or fast collision is not.</p>
+        </aside>
+      </div>
+      <div className="gazette-safety-strip">
+        <div className="gazette-pause-demo"><i /><i /></div>
+        <p><strong>Pause:</strong> click the orange pause button. The center pause disc appears. Press <PixelKey wide>SPACE</PixelKey> or click the button again to resume.</p>
+        <div className="gazette-restart-demo" aria-hidden="true">↻</div>
+        <p><strong>Restart:</strong> the blue restart button resets your local flight, fuel, bullets, and rockets without deleting the room.</p>
+      </div>
+    </>
+  );
+}
+
+function GuideNavigationPage() {
+  return (
+    <>
+      <GazetteHeader
+        issue="NAVIGATION REPORT"
+        headline="Read the whole map at a glance"
+        deck="The pale gray locator in the upper right is the map. Its dots and alert edges tell you where to fly next."
+      />
+      <div className="gazette-navigation-layout">
+        <section className="gazette-map-report">
+          <div className="gazette-map-demo" aria-label="Map locator dot legend illustration">
+            <span className="gazette-map-grid-line gazette-map-grid-a" /><span className="gazette-map-grid-line gazette-map-grid-b" />
+            <span className="gazette-map-edge gazette-map-edge-left" /><span className="gazette-map-edge gazette-map-edge-right" />
+            <span className="gazette-map-dot gazette-map-dot-player" /><span className="gazette-map-label gazette-map-player-label">YOU</span>
+            <span className="gazette-map-dot gazette-map-dot-fuel gazette-map-fuel-one" /><span className="gazette-map-dot gazette-map-dot-fuel gazette-map-fuel-two" />
+            <span className="gazette-map-dot gazette-map-dot-enemy gazette-map-enemy-one" /><span className="gazette-map-dot gazette-map-dot-enemy gazette-map-enemy-two" />
+          </div>
+          <div className="gazette-map-legend">
+            <p><i className="gazette-map-dot gazette-map-dot-player" /><span><strong>Green dot:</strong> your Bit Plane.</span></p>
+            <p><i className="gazette-map-dot gazette-map-dot-fuel" /><span><strong>Purple dots:</strong> fuel stations.</span></p>
+            <p><i className="gazette-map-dot gazette-map-dot-enemy" /><span><strong>Red dots:</strong> bots or other room pilots.</span></p>
+            <p><i className="gazette-map-edge-sample" /><span><strong>Red edge:</strong> you are close to the map border. When the full border pulses, turn back or crash.</span></p>
+          </div>
+        </section>
+        <aside className="gazette-hud-report">
+          <div className="gazette-performance-demo">
+            <div><strong>60</strong><span>FPS</span></div>
+            <div><strong>48</strong><span>MS</span></div>
+          </div>
+          <p><strong>FPS box:</strong> the measured frames currently drawn by your screen. The game uses the browser's animation frame, so it follows the display as closely as the device allows.</p>
+          <p><strong>MS box:</strong> multiplayer ping to the room server. Lower milliseconds mean faster room updates.</p>
+          <div className="gazette-edge-scene" aria-hidden="true"><span className="gazette-tree-row" /><span className="gazette-edge-glow" /><img src="/assets/exact-plane.png" alt="" draggable="false" /></div>
+          <p><strong>World limits:</strong> the forest fades and a red edge glow appears at both map ends. The plane cannot pass either side.</p>
+        </aside>
+      </div>
+      <div className="gazette-aim-note"><span className="gazette-dotted-aim"><i /><i /><i /><i /></span><p><strong>White dotted path:</strong> always shows the straight bullet trajectory from the nose shaft before you fire.</p></div>
+    </>
+  );
+}
+
+function GuideCombatPage() {
+  return (
+    <>
+      <GazetteHeader
+        issue="COMBAT AND FUEL"
+        headline="Keep the needle green. Keep the sky clear."
+        deck="Fuel, ammo, rockets, damage, landing, and scoring all sit in the top HUD."
+      />
+      <div className="gazette-combat-grid">
+        <section className="gazette-fuel-report">
+          <div className="gazette-fuel-gauge-demo" aria-hidden="true"><i /><i /><i /><i /><b /><em /></div>
+          <h4>20-second fuel tank</h4>
+          <p>The needle starts horizontal in the green zone, then crosses yellow, orange, and red. A red pulse around the gauge means the engine will soon stop.</p>
+          <div className="gazette-fuel-tank-wrap"><FuelTank active={false} /></div>
+          <p><strong>Fuel station:</strong> touch the pump itself to refill all fuel. Its beacon and your fuel box pulse green for two seconds. It also repairs the first-hit propeller damage.</p>
+        </section>
+        <section className="gazette-weapons-report">
+          <div className="gazette-ammo-demo" aria-label="Seven bullet meter illustration">
+            {Array.from({ length: MAX_BULLETS }, (_, index) => <i key={index} className="guide-bullet-art" />)}
+          </div>
+          <h4>Seven bullets</h4>
+          <p>Press <PixelKey wide>SPACE</PixelKey> to fire. Each bullet is straight, leaves the propeller shaft, stops when it hits ground, and refills every seven seconds even when the magazine is partly used.</p>
+          <div className="gazette-rockets-demo" aria-label="Two rocket meter illustration"><span className="guide-rocket-art" /><span className="guide-rocket-art" /></div>
+          <h4>Two rockets</h4>
+          <p>Press <PixelKey>R</PixelKey>. A rocket homes toward the nearest target for four seconds. No target? It travels straight ahead. Rockets explode on planes or ground.</p>
+        </section>
+      </div>
+      <div className="gazette-damage-report">
+        <div className="gazette-damage-planes"><img src="/assets/exact-plane.png" alt="Player plane" draggable="false" /><span className="gazette-hit-one">HIT 1</span><span className="gazette-smoke-puffs"><i /><i /><i /></span><img src="/assets/exact-plane-purple.png" alt="Enemy plane" draggable="false" /><span className="gazette-hit-two">HIT 2</span><span className="gazette-blast-mark">*</span></div>
+        <div>
+          <h4>Damage, crashes, and score</h4>
+          <p><strong>First bullet hit:</strong> propeller smoke begins. <strong>Second bullet hit:</strong> the plane blasts. You also crash on hay, hard ground impacts, the map edge, or another plane. A gentle wheel-first runway landing is safe.</p>
+          <p>Bot mode shows <strong>Kills</strong> and <strong>High Score</strong>. A kill counts when your final hit destroys the plane. If you crash yourself, one kill is deducted. Death restores your fuel, bullets, and rockets, then respawns you.</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function GuideWeatherPage() {
+  return (
+    <>
+      <GazetteHeader
+        issue="ATMOSPHERE AND AUDIO"
+        headline="Tune the night. Cut through the fog."
+        deck="Weather makes the field feel alive; the left-side tools keep every sound, light, and song under your control."
+      />
+      <div className="gazette-weather-layout">
+        <section className="gazette-weather-scene">
+          <span className="gazette-moon-demo" /><span className="gazette-rain-demo"><i /><i /><i /><i /><i /></span>
+          <span className="gazette-fog-demo" /><span className="gazette-fog-demo gazette-fog-demo-two" />
+          <img src="/assets/exact-plane.png" alt="Bit Plane using its fog light" draggable="false" />
+          <span className="gazette-light-cone" />
+          <span className="gazette-beacon-demo gazette-beacon-front" /><span className="gazette-beacon-demo gazette-beacon-back" />
+        </section>
+        <section className="gazette-weather-copy">
+          <h4>Day, night, rain, and fog</h4>
+          <p>The bulb button switches the whole world between light and dark mode. In dark mode, the moon, stars, fuel beacons, and plane navigation lights become visible.</p>
+          <p>Fog stays low over the farm. Press <PixelKey>L</PixelKey> to project the cone light in front of the plane and reveal what is ahead. Rain starts and fades with its own softer sound.</p>
+          <p>Clouds, trees, huts, grass, hay, moving cows, the sun, moon, stars, and occasional shooting stars make up the living background. Hay is scenery until a plane physically collides with it.</p>
+          <p>Your plane has two pulsing beacons. The plane selector changes body color, and offers red/green, amber/cyan, or violet/lime beacon pairs. The settings panel controls their intensity.</p>
+        </section>
+      </div>
+      <div className="gazette-audio-report">
+        <section className="gazette-music-panel-demo"><img src="/assets/music-note-icon-transparent.png" alt="Music note" draggable="false" /><div>{Array.from({ length: 10 }, (_, index) => <span key={index}>{index + 1}</span>)}</div><b>VOLUME</b><i /></section>
+        <section>
+          <h4>Music and game sound</h4>
+          <p>The note button opens ten songs and the music volume slider. The speaker button mutes or restores engine, bullets, rockets, rain, crashes, and hit sounds without stopping the game.</p>
+          <p>The green gear opens individual sliders for propeller, ammo, rocket, rain, and plane beacon brightness. Music keeps its own slider in the song panel.</p>
+        </section>
+      </div>
+    </>
+  );
+}
+
+function GuideRoomPage() {
+  return (
+    <>
+      <GazetteHeader
+        issue="ROOM DISPATCH"
+        headline="Share one sky with six pilots"
+        deck="Room mode turns the map into a live match: shared weather, shared cows, names, voice, scores, and respawns."
+      />
+      <div className="gazette-room-layout">
+        <section className="gazette-room-flow">
+          <div className="gazette-room-step"><span>1</span><div><h4>Create</h4><p>Type your name, choose dark or light, and receive a six-character room code. The host can start with one to six players.</p></div></div>
+          <div className="gazette-room-step"><span>2</span><div><h4>Join</h4><p>Enter your name on the left and the code on the right. Every joining pilot is assigned one of six body colors.</p></div></div>
+          <div className="gazette-room-step"><span>3</span><div><h4>Fly together</h4><p>Weather, fog, rain, cows, fuel stations, projectiles, plane lights, deaths, and respawns are shared inside the same room.</p></div></div>
+        </section>
+        <aside className="gazette-lobby-demo" aria-label="Room lobby illustration">
+          <div className="gazette-room-code-demo"><span>CODE</span><strong>SKY742</strong></div>
+          <div className="gazette-room-theme-demo"><b>Dark</b><span>Light</span></div>
+          {PLANE_COLOR_OPTIONS.slice(0, 6).map((option, index) => (
+            <div key={option.id} className="gazette-room-player-demo"><img src={option.staticSrc} alt="" draggable="false" /><span>{index === 0 ? 'Host pilot' : `Pilot ${index + 1}`}</span></div>
+          ))}
+        </aside>
+      </div>
+      <div className="gazette-leaderboard-report">
+        <section className="gazette-leaderboard-demo">
+          <h4>LEADERBOARD</h4>
+          <p><b>1</b><span>Player One</span><strong>4</strong><i className="gazette-mic-demo">M</i><i className="gazette-speaker-demo">S</i><em><u /><u /><u /></em></p>
+          <p><b>2</b><span>Player Two</span><strong>2</strong><i className="gazette-speaker-demo">S</i><em><u /><u /><u /></em></p>
+        </section>
+        <section>
+          <h4>Voice, score, and room rules</h4>
+          <p>In the lobby, use <strong>Mic</strong> and <strong>Speaker</strong> controls before starting. In the live leaderboard, your own row has mic and speaker controls. Other pilots show speaker only, so you can mute an individual player without changing their microphone.</p>
+          <p>Green voice bars react to microphone volume. Higher kills rise in the leaderboard. When a pilot leaves, everyone receives a message. A plane death respawns that pilot; it does not reload or reset the room.</p>
+        </section>
+      </div>
+      <p className="gazette-caption">Room host: change the room theme, start the match, leave, or delete the room. If the host leaves normally, another player becomes host.</p>
     </>
   );
 }
