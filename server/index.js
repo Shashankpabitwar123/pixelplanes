@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { Pool } from 'pg';
-import { AccessToken } from 'livekit-server-sdk';
+import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { WebSocketServer } from 'ws';
 
 const PORT = Number.parseInt(process.env.PORT || '4000', 10);
@@ -19,6 +19,8 @@ const rooms = new Map();
 const socketSessions = new WeakMap();
 let dbPool = null;
 let dbReady = false;
+let liveKitRoomService = null;
+let liveKitRoomServiceKey = '';
 
 function safeJson(value) {
   try {
@@ -96,6 +98,31 @@ function createRoomWeather(startedAt = Date.now()) {
     seed: crypto.randomBytes(8).toString('hex'),
     startedAt,
   };
+}
+
+function getLiveKitHttpUrl(livekitUrl) {
+  return String(livekitUrl || '')
+    .replace(/^wss:\/\//i, 'https://')
+    .replace(/^ws:\/\//i, 'http://');
+}
+
+function getLiveKitRoomService(livekitUrl, apiKey, apiSecret) {
+  const serviceKey = `${livekitUrl}:${apiKey}`;
+  if (liveKitRoomService && liveKitRoomServiceKey === serviceKey) return liveKitRoomService;
+  liveKitRoomService = new RoomServiceClient(getLiveKitHttpUrl(livekitUrl), apiKey, apiSecret);
+  liveKitRoomServiceKey = serviceKey;
+  return liveKitRoomService;
+}
+
+async function ensureLiveKitRoom(roomCode, livekitUrl, apiKey, apiSecret) {
+  const service = getLiveKitRoomService(livekitUrl, apiKey, apiSecret);
+  const existingRooms = await service.listRooms([roomCode]);
+  if (existingRooms.some((room) => room.name === roomCode)) return;
+  await service.createRoom({
+    name: roomCode,
+    emptyTimeout: 5 * 60,
+    maxParticipants: ROOM_MAX_PLAYERS,
+  });
 }
 
 function ensureRoomWeather(room) {
@@ -691,6 +718,18 @@ async function createVoiceToken(payload) {
   }
 
   const player = room.players.get(playerId);
+  try {
+    await ensureLiveKitRoom(roomCode, livekitUrl, apiKey, apiSecret);
+  } catch (error) {
+    console.warn('[voice] livekit room check failed:', error.message);
+    return {
+      status: 502,
+      payload: {
+        error: 'Voice service rejected the LiveKit credentials or room setup.',
+      },
+    };
+  }
+
   const token = new AccessToken(apiKey, apiSecret, {
     identity: playerId,
     name: player.name,
