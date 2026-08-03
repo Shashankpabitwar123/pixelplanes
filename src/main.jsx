@@ -2009,7 +2009,7 @@ function App() {
           <div className="help-rule"><kbd>A</kbd><span>Turn left</span></div>
           <div className="help-rule"><kbd>D</kbd><span>Turn right</span></div>
           <div className="help-rule"><kbd>S</kbd><span>Slow / land</span></div>
-          <div className="help-rule"><kbd>Space</kbd><span>Bullets</span></div>
+          <div className="help-rule"><kbd>Space</kbd><span>Hold for burst fire</span></div>
           <div className="help-rule"><kbd>R</kbd><span>Rockets</span></div>
           <div className="help-rule"><kbd>L</kbd><span>Front light for fog.</span></div>
           <div className="help-rule help-note"><kbd>Start</kbd><span>Bots fight you and each other.</span></div>
@@ -2818,7 +2818,7 @@ function GuideFlightPage() {
             <p><PixelKey>A</PixelKey><PixelKey>LEFT</PixelKey><span><strong>Turn left.</strong> Rotates the whole plane without a fixed wheel pivot.</span></p>
             <p><PixelKey>D</PixelKey><PixelKey>RIGHT</PixelKey><span><strong>Turn right.</strong> Combine it with thrust for full loops.</span></p>
             <p><PixelKey>S</PixelKey><PixelKey>DOWN</PixelKey><span><strong>Slow / land.</strong> Reduces speed in the air; on the runway it reverses the plane.</span></p>
-            <p><PixelKey wide>SPACE</PixelKey><span><strong>Bullets.</strong> Fires from the propeller shaft along the dotted aiming line.</span></p>
+            <p><PixelKey wide>SPACE</PixelKey><span><strong>Hold for burst fire.</strong> Bullets fire from the propeller shaft along the dotted aiming line.</span></p>
             <p><PixelKey>R</PixelKey><span><strong>Rockets.</strong> Launches one of the two homing rockets.</span></p>
             <p><PixelKey>L</PixelKey><span><strong>Fog light.</strong> Shows a cone ahead of your propeller.</span></p>
           </div>
@@ -2903,7 +2903,7 @@ function GuideCombatPage() {
             {Array.from({ length: MAX_BULLETS }, (_, index) => <i key={index} className="guide-bullet-art" />)}
           </div>
           <h4>Seven bullets</h4>
-          <p>Press <PixelKey wide>SPACE</PixelKey> to fire. Each bullet is straight, leaves the propeller shaft, stops when it hits ground, and refills every seven seconds even when the magazine is partly used.</p>
+          <p>Hold <PixelKey wide>SPACE</PixelKey> to burst-fire. Each bullet is straight, leaves the propeller shaft, stops when it hits ground, and refills every seven seconds even when the magazine is partly used.</p>
           <div className="gazette-rockets-demo" aria-label="Two rocket meter illustration"><span className="guide-rocket-art" /><span className="guide-rocket-art" /></div>
           <h4>Two rockets</h4>
           <p>Press <PixelKey>R</PixelKey>. A rocket homes toward the nearest target for four seconds. No target? It travels straight ahead. Rockets explode on planes or ground.</p>
@@ -3754,7 +3754,12 @@ function PlayablePlane({
       }
       event.preventDefault();
       if (action === 'fire') {
-        if (pressed && !event.repeat && !pausedRef.current) queueBulletFire();
+        if (pressed) {
+          keysRef.current.add('fire');
+          if (!event.repeat && !pausedRef.current) queueBulletFire();
+        } else {
+          keysRef.current.delete('fire');
+        }
         return;
       }
       if (action === 'rocket') {
@@ -4132,6 +4137,7 @@ function PlayablePlane({
       if (pausedRef.current) {
         accumulator = 0;
         fireQueuedRef.current = false;
+        keys.delete('fire');
         renderPlane(next);
         frame = requestAnimationFrame(update);
         return;
@@ -4197,7 +4203,7 @@ function PlayablePlane({
 
       stateRef.current = next;
       next.searchLightOn = searchLightOnRef.current && !next.crashed;
-      if (fireQueuedRef.current) {
+      if (fireQueuedRef.current || keys.has('fire')) {
         fireQueuedRef.current = false;
         fireBulletRef.current?.(next, now);
       }
