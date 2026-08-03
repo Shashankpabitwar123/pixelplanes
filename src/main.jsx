@@ -2017,7 +2017,7 @@ function App() {
           <div className="help-rule"><kbd>Land</kbd><span>Touch grass softly on wheels.</span></div>
           <div className="help-rule help-note"><i className="help-fuel-dot" /><span>Purple dots are fuel stations</span></div>
           <div className="help-rule"><i className="help-enemy-dot" /><span>Red dots are enemy bots</span></div>
-          <div className="help-rule help-note"><kbd>Fuel</kbd><span>20 seconds. Station refills and repairs.</span></div>
+          <div className="help-rule help-note"><kbd>Fuel</kbd><span>{FUEL_SECONDS} seconds. Station refills and repairs.</span></div>
           <div className="help-rule"><kbd>Ammo</kbd><span>Bullets refill every 7 seconds.</span></div>
           <div className="help-rule"><kbd>Rocket</kbd><span>Tracks nearest target for 4 seconds.</span></div>
           <div className="help-rule"><kbd>Hit</kbd><span>First hit smokes, second hit blasts.</span></div>
@@ -2893,7 +2893,7 @@ function GuideCombatPage() {
       <div className="gazette-combat-grid">
         <section className="gazette-fuel-report">
           <div className="gazette-fuel-gauge-demo" aria-hidden="true"><i /><i /><i /><i /><b /><em /></div>
-          <h4>20-second fuel tank</h4>
+          <h4>{FUEL_SECONDS}-second fuel tank</h4>
           <p>The needle starts horizontal in the green zone, then crosses yellow, orange, and red. A red pulse around the gauge means the engine will soon stop.</p>
           <div className="gazette-fuel-tank-wrap"><FuelTank active={false} /></div>
           <p><strong>Fuel station:</strong> touch the pump itself to refill all fuel. Its beacon and your fuel box pulse green for two seconds. It also repairs the first-hit propeller damage.</p>

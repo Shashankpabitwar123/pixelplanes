@@ -4,7 +4,7 @@ export const WORLD_HEIGHT = 400;
 
 export const START_X = 350;
 
-export const FUEL_SECONDS = 20;
+export const FUEL_SECONDS = 30;
 
 export const FUEL_GAUGE_EMPTY_ANGLE = -180;
 
