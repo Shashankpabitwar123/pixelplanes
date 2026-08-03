@@ -157,8 +157,9 @@ export function playPlaneBulletHitSound(existingContext = null, muted = false) {
   }, 430);
 }
 
-export function playPlaneBlastSound(existingContext = null, impact = 1, muted = false) {
-  if (muted) return;
+export function playPlaneBlastSound(existingContext = null, impact = 1, muted = false, volume = 1) {
+  const level = clamp(volume, 0, 1);
+  if (muted || level <= 0) return;
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   const context = existingContext && existingContext.state !== 'closed' ? existingContext : AudioContextClass ? new AudioContextClass() : null;
   if (!context) return;
@@ -186,7 +187,7 @@ export function playPlaneBlastSound(existingContext = null, impact = 1, muted = 
 
   const master = context.createGain();
   master.gain.setValueAtTime(0.0001, t);
-  master.gain.exponentialRampToValueAtTime(1.32 * amount, t + 0.012);
+  master.gain.exponentialRampToValueAtTime(1.32 * amount * level, t + 0.012);
   master.gain.exponentialRampToValueAtTime(0.0001, t + 1.06);
   master.connect(distortion);
 

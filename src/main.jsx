@@ -205,12 +205,13 @@ function App() {
   const [musicVolume, setMusicVolume] = useState(0.32);
   const [sfxMuted, setSfxMuted] = useState(false);
   const [soundLevels, setSoundLevels] = useState({
-    engine: 0.8,
-    ammo: 0.85,
-    rocket: 0.8,
-    rain: 0.8,
+    engine: 0.05,
+    ammo: 0.1,
+    rocket: 0.1,
+    explosion: 0.1,
+    rain: 0.05,
   });
-  const [planeLightIntensity, setPlaneLightIntensity] = useState(0.9);
+  const [planeLightIntensity, setPlaneLightIntensity] = useState(1);
   const [shootingStars, setShootingStars] = useState([]);
   const [remoteProjectiles, setRemoteProjectiles] = useState([]);
 
@@ -2412,6 +2413,7 @@ function App() {
                     ['engine', 'Propeller'],
                     ['ammo', 'Ammo'],
                     ['rocket', 'Rockets'],
+                    ['explosion', 'Explosion'],
                     ['rain', 'Rain'],
                   ].map(([kind, label]) => (
                     <label className="flight-deck-control" key={kind}>
@@ -2663,6 +2665,8 @@ function App() {
               key={player.id}
               player={player}
               statesRef={remotePlayerStatesRef}
+              sfxMuted={sfxMuted}
+              audioSettings={soundLevels}
               fogActive={fogActive}
               registerGameFrameCallback={registerGameFrameCallback}
             />
@@ -2691,6 +2695,7 @@ function App() {
               botApiRefs={botApiRefs}
               onBotMove={updateBotLocator}
               sfxMuted={sfxMuted}
+              audioSettings={soundLevels}
               fogActive={fogActive}
               registerGameFrameCallback={registerGameFrameCallback}
             />
@@ -3599,6 +3604,8 @@ function PlayablePlane({
 
     crashSoundRef.current = (impact = 1) => {
       if (sfxMutedRef.current) return;
+      const explosionLevel = clamp(audioSettingsRef.current?.explosion ?? 1, 0, 1);
+      if (explosionLevel <= 0) return;
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       const existing = engineAudioRef.current?.context;
       const context = existing && existing.state !== 'closed' ? existing : AudioContextClass ? new AudioContextClass() : null;
@@ -3606,7 +3613,7 @@ function PlayablePlane({
       context.resume?.();
 
       const t = context.currentTime;
-      const crashVolume = 2.05;
+      const crashVolume = 2.05 * explosionLevel;
       const amount = clamp(impact, 0.7, 1.8);
       const limiter = context.createDynamicsCompressor();
       limiter.threshold.setValueAtTime(-8, t);
@@ -4571,10 +4578,13 @@ function RoomPlayerMapDot({ playerId, statesRef, registerGameFrameCallback }) {
   return <span ref={dotRef} className="map-bot-dot map-room-player-dot" style={{ display: 'none' }} />;
 }
 
-function RemotePlane({ player, statesRef, fogActive, registerGameFrameCallback }) {
+function RemotePlane({ player, statesRef, sfxMuted, audioSettings, fogActive, registerGameFrameCallback }) {
   const planeRef = useRef(null);
   const blastRef = useRef(null);
   const displayRef = useRef(null);
+  const crashSoundKeyRef = useRef(null);
+  const sfxMutedRef = useRef(sfxMuted);
+  const audioSettingsRef = useRef(audioSettings);
   const [visual, setVisual] = useState({
     visible: false,
     crashed: false,
@@ -4588,6 +4598,14 @@ function RemotePlane({ player, statesRef, fogActive, registerGameFrameCallback }
   useEffect(() => {
     visualRef.current = visual;
   }, [visual]);
+
+  useEffect(() => {
+    sfxMutedRef.current = sfxMuted;
+  }, [sfxMuted]);
+
+  useEffect(() => {
+    audioSettingsRef.current = audioSettings;
+  }, [audioSettings]);
 
   useEffect(() => {
     const update = (now) => {
@@ -4612,6 +4630,15 @@ function RemotePlane({ player, statesRef, fogActive, registerGameFrameCallback }
       }
       const plane = currentEntry.state;
       const crashed = Boolean(plane.crashed);
+      if (crashed) {
+        const crashKey = plane.crashTime ?? 'crashed';
+        if (crashSoundKeyRef.current !== crashKey) {
+          crashSoundKeyRef.current = crashKey;
+          playPlaneBlastSound(null, plane.crashImpact ?? 1.2, sfxMutedRef.current, audioSettingsRef.current?.explosion ?? 1);
+        }
+      } else {
+        crashSoundKeyRef.current = null;
+      }
       const targetDisplay = interpolateRemotePlane(currentEntry, now);
       if (displayRef.current?.crashed !== crashed) {
         displayRef.current = null;
@@ -4867,7 +4894,7 @@ function RoomProjectilesLayer({
   );
 }
 
-function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, fogActive, registerGameFrameCallback }) {
+function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, audioSettings, fogActive, registerGameFrameCallback }) {
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
@@ -4880,10 +4907,15 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   const botDamageRef = useRef(0);
   const botSmokeParticlesRef = useRef([]);
   const botSmokeLastEmitRef = useRef(0);
+  const audioSettingsRef = useRef(audioSettings);
   const [botBullets, setBotBullets] = useState([]);
   const [botDamage, setBotDamage] = useState(0);
   const [botSmokeParticles, setBotSmokeParticles] = useState([]);
   const [botCrashed, setBotCrashed] = useState(false);
+
+  useEffect(() => {
+    audioSettingsRef.current = audioSettings;
+  }, [audioSettings]);
 
   const crashBot = useCallback((impact = 1.2, options = {}) => {
     const current = stateRef.current;
@@ -4907,7 +4939,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     setBotDamage(next.damage);
     setBotSmokeParticles([]);
     setBotCrashed(true);
-    playPlaneBlastSound(null, next.crashImpact, sfxMuted);
+    playPlaneBlastSound(null, next.crashImpact, sfxMuted, audioSettingsRef.current?.explosion ?? 1);
     onBotMove(botIndex, next);
     return { killed: options.source === 'player' };
   }, [botIndex, onBotMove, sfxMuted]);
@@ -5323,7 +5355,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         setBotDamage(next.damage ?? 2);
         setBotSmokeParticles([]);
         setBotCrashed(true);
-        playPlaneBlastSound(null, next.crashImpact, sfxMuted);
+        playPlaneBlastSound(null, next.crashImpact, sfxMuted, audioSettingsRef.current?.explosion ?? 1);
         renderBot(stateRef.current);
         return;
       }
