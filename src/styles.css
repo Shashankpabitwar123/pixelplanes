@@ -1118,13 +1118,13 @@ button {
 }
 
 .flight-deck-panel {
-  width: min(252px, calc(100vw - 24px));
-  padding: 8px;
+  width: min(504px, calc(100vw - 24px));
+  padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.48);
-  border-radius: 8px;
+  border-radius: 12px;
   color: #172c3b;
   background: rgba(255, 255, 255, 0.36);
-  box-shadow: 0 8px 20px rgba(31, 65, 86, 0.12);
+  box-shadow: 0 16px 40px rgba(31, 65, 86, 0.12);
   backdrop-filter: blur(10px);
 }
 
@@ -1132,8 +1132,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 0 1px 7px;
+  gap: 16px;
+  padding: 0 2px 14px;
 }
 
 .field-guide-kicker {
@@ -1147,10 +1147,10 @@ button {
 
 .flight-deck-heading h2 {
   margin: 0;
-  font-size: 11px;
+  font-size: 22px;
   line-height: 1;
   font-weight: 900;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -1170,42 +1170,42 @@ button {
 }
 
 .flight-deck-close {
-  width: 22px;
-  height: 22px;
+  width: 44px;
+  height: 44px;
   display: inline-grid;
   place-items: center;
-  flex: 0 0 22px;
+  flex: 0 0 44px;
   padding: 0;
   border: 1px solid rgba(30, 47, 62, 0.24);
-  border-radius: 5px;
+  border-radius: 8px;
   color: #172c3b;
   background: rgba(228, 235, 239, 0.72);
   box-shadow: inset 0 -2px 0 rgba(40, 55, 67, 0.12);
-  font: 800 17px/1 Arial, sans-serif;
+  font: 800 30px/1 Arial, sans-serif;
   cursor: pointer;
 }
 
 .flight-deck-controls {
   display: grid;
-  gap: 6px;
+  gap: 12px;
 }
 
 .flight-deck-control {
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr) 34px;
+  grid-template-columns: 136px minmax(0, 1fr) 68px;
   align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 4px 5px;
+  gap: 12px;
+  min-height: 60px;
+  padding: 8px 10px;
   border: 1px solid rgba(30, 47, 62, 0.24);
-  border-radius: 5px;
+  border-radius: 8px;
   background: rgba(228, 235, 239, 0.72);
   box-shadow: inset 0 -2px 0 rgba(40, 55, 67, 0.12);
 }
 
 .flight-deck-control > span {
   min-width: 0;
-  font-size: 10px;
+  font-size: 20px;
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
@@ -1213,7 +1213,7 @@ button {
 
 .flight-deck-control input[type='range'] {
   width: 100%;
-  height: 14px;
+  height: 28px;
   margin: 0;
   accent-color: #4eaa43;
   cursor: pointer;
@@ -1221,7 +1221,7 @@ button {
 
 .flight-deck-control output {
   color: #284636;
-  font-size: 10px;
+  font-size: 20px;
   font-weight: 900;
   text-align: right;
 }
@@ -5361,14 +5361,14 @@ button {
 @keyframes planeLightPulse {
   0%,
   100% {
-    opacity: 0.58;
-    filter: brightness(1.05) saturate(1.2);
+    opacity: calc(0.58 * var(--plane-light-intensity));
+    filter: brightness(calc(0.35 + var(--plane-light-intensity) * 0.78)) saturate(1.2);
     transform: translate(-50%, -50%) scale(0.82);
   }
 
   48% {
-    opacity: 1;
-    filter: brightness(2.45) saturate(1.65);
+    opacity: var(--plane-light-intensity);
+    filter: brightness(calc(0.42 + var(--plane-light-intensity) * 1.03)) saturate(1.65);
     transform: translate(-50%, -50%) scale(1.28);
   }
 }
@@ -5717,7 +5717,44 @@ button {
   }
 
   .flight-deck-panel {
-    width: min(252px, calc(100vw - 24px));
+    width: min(430px, calc(100vw - 24px));
+    padding: 12px;
+  }
+
+  .flight-deck-heading {
+    gap: 12px;
+    padding-bottom: 10px;
+  }
+
+  .flight-deck-heading h2 {
+    font-size: 18px;
+  }
+
+  .flight-deck-close {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    font-size: 25px;
+  }
+
+  .flight-deck-controls {
+    gap: 8px;
+  }
+
+  .flight-deck-control {
+    grid-template-columns: 112px minmax(0, 1fr) 56px;
+    gap: 8px;
+    min-height: 50px;
+    padding: 6px 8px;
+  }
+
+  .flight-deck-control > span,
+  .flight-deck-control output {
+    font-size: 16px;
+  }
+
+  .flight-deck-control input[type='range'] {
+    height: 22px;
   }
 
   .field-guide-overlay {
