@@ -16,8 +16,10 @@ import {
   AIM_GUIDE_DOT_COUNT,
   MAX_ROCKETS,
   ROCKET_COOLDOWN_MS,
+  ROCKET_DETECTION_RANGE,
   ROCKET_HOMING_MS,
   ROCKET_IMPACT_MS,
+  ROCKET_LIFETIME_MS,
   BOT_COUNT,
   BOT_WAKE_DISTANCE,
   BOT_FORGET_DISTANCE,
@@ -2019,7 +2021,7 @@ function App() {
           <div className="help-rule"><i className="help-enemy-dot" /><span>Red dots are enemy bots</span></div>
           <div className="help-rule help-note"><kbd>Fuel</kbd><span>{FUEL_SECONDS} seconds. Station refills and repairs.</span></div>
           <div className="help-rule"><kbd>Ammo</kbd><span>Bullets refill every 7 seconds.</span></div>
-          <div className="help-rule"><kbd>Rocket</kbd><span>Tracks nearest target for 4 seconds.</span></div>
+          <div className="help-rule"><kbd>Rocket</kbd><span>Tracks targets within {ROCKET_DETECTION_RANGE} units for {ROCKET_HOMING_MS / 1000} seconds; expires after {ROCKET_LIFETIME_MS / 1000} seconds.</span></div>
           <div className="help-rule"><kbd>Hit</kbd><span>First hit smokes, second hit blasts.</span></div>
           <div className="help-rule"><kbd>Score</kbd><span>Kills reset on death. High score stays.</span></div>
         </div>
@@ -2906,7 +2908,7 @@ function GuideCombatPage() {
           <p>Hold <PixelKey wide>SPACE</PixelKey> to burst-fire. Each bullet is straight, leaves the propeller shaft, stops when it hits ground, and refills every seven seconds even when the magazine is partly used.</p>
           <div className="gazette-rockets-demo" aria-label="Two rocket meter illustration"><span className="guide-rocket-art" /><span className="guide-rocket-art" /></div>
           <h4>Two rockets</h4>
-          <p>Press <PixelKey>R</PixelKey>. A rocket homes toward the nearest target for four seconds. No target? It travels straight ahead. Rockets explode on planes or ground.</p>
+          <p>Press <PixelKey>R</PixelKey>. A rocket homes toward the nearest target within {ROCKET_DETECTION_RANGE} units for {ROCKET_HOMING_MS / 1000} seconds. No target? It travels straight ahead, and expires after {ROCKET_LIFETIME_MS / 1000} seconds. Rockets explode on planes or ground.</p>
         </section>
       </div>
       <div className="gazette-damage-report">

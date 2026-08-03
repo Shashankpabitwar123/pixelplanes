@@ -42,13 +42,13 @@ export const MAX_ROCKETS = 2;
 
 export const ROCKET_COOLDOWN_MS = 520;
 
-export const ROCKET_LIFETIME_MS = 12000;
+export const ROCKET_LIFETIME_MS = 5000;
 
 export const ROCKET_RANGE = 640;
 
-export const ROCKET_HOMING_MS = 4000;
+export const ROCKET_HOMING_MS = 2000;
 
-export const ROCKET_DETECTION_RANGE = 150;
+export const ROCKET_DETECTION_RANGE = 90;
 
 export const ROCKET_IMPACT_MS = 650;
 
