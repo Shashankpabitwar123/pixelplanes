@@ -2460,28 +2460,28 @@ function App() {
         />
       </div>
       <div className="combat-hud">
-        <div className="combat-hud-fuel-column">
-          <div
-            ref={fuelGaugeRef}
-            className="fuel-gauge fuel-zone-3"
-            style={{
-              '--fuel-level': 1,
-              '--fuel-angle': '0deg',
-            }}
-            aria-label="Fuel meter"
-          >
-            <span className="fuel-gauge-arc">
-              <span className="fuel-segment fuel-segment-red" />
-              <span className="fuel-segment fuel-segment-orange" />
-              <span className="fuel-segment fuel-segment-yellow" />
-              <span className="fuel-segment fuel-segment-green" />
-            </span>
-            <span className="fuel-gauge-needle" />
-            <span className="fuel-gauge-hub" />
-          </div>
+        <div
+          ref={fuelGaugeRef}
+          className="fuel-gauge fuel-zone-3"
+          style={{
+            '--fuel-level': 1,
+            '--fuel-angle': '0deg',
+          }}
+          aria-label="Fuel meter"
+        >
+          <span className="fuel-gauge-arc">
+            <span className="fuel-segment fuel-segment-red" />
+            <span className="fuel-segment fuel-segment-orange" />
+            <span className="fuel-segment fuel-segment-yellow" />
+            <span className="fuel-segment fuel-segment-green" />
+          </span>
+          <span className="fuel-gauge-needle" />
+          <span className="fuel-gauge-hub" />
+        </div>
+        <div className="combat-hud-weapons-column">
+          <BulletMeter count={ammoStatus.count} reloading={ammoStatus.reloading} />
           <RocketMeter rocketCount={rocketCount} />
         </div>
-        <BulletMeter count={ammoStatus.count} reloading={ammoStatus.reloading} />
       </div>
 
       <div ref={worldRef} className="world" style={{ transform: `translate(${-getCameraX(START_X)}vw, 0vh)` }}>
