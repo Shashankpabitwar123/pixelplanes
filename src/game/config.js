@@ -44,15 +44,16 @@ export const ROCKET_COOLDOWN_MS = 520;
 
 export const ROCKET_LIFETIME_MS = 5000;
 
-export const ROCKET_RANGE = 640;
+// Preserve the original 640-unit / 12-second flight speed after shortening rocket life.
+export const ROCKET_SPEED = 640 / 12;
+
+export const ROCKET_RANGE = ROCKET_SPEED * (ROCKET_LIFETIME_MS / 1000);
 
 export const ROCKET_HOMING_MS = 2000;
 
 export const ROCKET_DETECTION_RANGE = 90;
 
 export const ROCKET_IMPACT_MS = 650;
-
-export const ROCKET_SPEED = ROCKET_RANGE / (ROCKET_LIFETIME_MS / 1000);
 
 export const ROCKET_TURN_RATE = 340;
 
