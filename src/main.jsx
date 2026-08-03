@@ -2459,25 +2459,30 @@ function App() {
           }}
         />
       </div>
-      <div
-        ref={fuelGaugeRef}
-        className="fuel-gauge fuel-zone-3"
-        style={{
-          '--fuel-level': 1,
-          '--fuel-angle': '0deg',
-        }}
-        aria-label="Fuel meter"
-      >
-        <span className="fuel-gauge-arc">
-          <span className="fuel-segment fuel-segment-red" />
-          <span className="fuel-segment fuel-segment-orange" />
-          <span className="fuel-segment fuel-segment-yellow" />
-          <span className="fuel-segment fuel-segment-green" />
-        </span>
-        <span className="fuel-gauge-needle" />
-        <span className="fuel-gauge-hub" />
+      <div className="combat-hud">
+        <div className="combat-hud-fuel-column">
+          <div
+            ref={fuelGaugeRef}
+            className="fuel-gauge fuel-zone-3"
+            style={{
+              '--fuel-level': 1,
+              '--fuel-angle': '0deg',
+            }}
+            aria-label="Fuel meter"
+          >
+            <span className="fuel-gauge-arc">
+              <span className="fuel-segment fuel-segment-red" />
+              <span className="fuel-segment fuel-segment-orange" />
+              <span className="fuel-segment fuel-segment-yellow" />
+              <span className="fuel-segment fuel-segment-green" />
+            </span>
+            <span className="fuel-gauge-needle" />
+            <span className="fuel-gauge-hub" />
+          </div>
+          <RocketMeter rocketCount={rocketCount} />
+        </div>
+        <BulletMeter count={ammoStatus.count} reloading={ammoStatus.reloading} />
       </div>
-      <BulletMeter count={ammoStatus.count} reloading={ammoStatus.reloading} rocketCount={rocketCount} />
 
       <div ref={worldRef} className="world" style={{ transform: `translate(${-getCameraX(START_X)}vw, 0vh)` }}>
         <div className="stars world-stars" aria-hidden="true">
@@ -2664,38 +2669,41 @@ function App() {
   );
 }
 
-function BulletMeter({ count, reloading, rocketCount }) {
+function BulletMeter({ count, reloading }) {
   return (
-    <>
-      <div className={`bullet-meter${reloading ? ' bullet-meter-reloading' : ''}`} aria-label={`${count} bullets`}>
-        <div className="ammo-row">
-          {Array.from({ length: MAX_BULLETS }, (_, index) => (
-            <span key={index} className={`ammo-bullet${index < count ? ' ammo-bullet-loaded' : ' ammo-bullet-empty'}`}>
-              <i className="ammo-tip" />
-              <i className="ammo-shell" />
-              <i className="ammo-slot ammo-slot-small" />
-              <i className="ammo-slot ammo-slot-long" />
-              <i className="ammo-ring ammo-ring-top" />
-              <i className="ammo-ring ammo-ring-bottom" />
-            </span>
-          ))}
-        </div>
+    <div className={`bullet-meter${reloading ? ' bullet-meter-reloading' : ''}`} aria-label={`${count} bullets`}>
+      <div className="ammo-row">
+        {Array.from({ length: MAX_BULLETS }, (_, index) => (
+          <span key={index} className={`ammo-bullet${index < count ? ' ammo-bullet-loaded' : ' ammo-bullet-empty'}`}>
+            <i className="ammo-tip" />
+            <i className="ammo-shell" />
+            <i className="ammo-slot ammo-slot-small" />
+            <i className="ammo-slot ammo-slot-long" />
+            <i className="ammo-ring ammo-ring-top" />
+            <i className="ammo-ring ammo-ring-bottom" />
+          </span>
+        ))}
       </div>
-      <div className="rocket-meter" aria-label={`${rocketCount} rockets`}>
-        <div className="rocket-meter-row" aria-hidden="true">
-          {Array.from({ length: MAX_ROCKETS }, (_, index) => (
-            <span key={index} className={`meter-rocket${index < rocketCount ? ' meter-rocket-loaded' : ' meter-rocket-empty'}`}>
-              <i className="meter-rocket-flame" />
-              <i className="meter-rocket-body" />
-              <i className="meter-rocket-nose" />
-              <i className="meter-rocket-band" />
-              <i className="meter-rocket-fin meter-rocket-fin-top" />
-              <i className="meter-rocket-fin meter-rocket-fin-bottom" />
-            </span>
-          ))}
-        </div>
+    </div>
+  );
+}
+
+function RocketMeter({ rocketCount }) {
+  return (
+    <div className="rocket-meter" aria-label={`${rocketCount} rockets`}>
+      <div className="rocket-meter-row" aria-hidden="true">
+        {Array.from({ length: MAX_ROCKETS }, (_, index) => (
+          <span key={index} className={`meter-rocket${index < rocketCount ? ' meter-rocket-loaded' : ' meter-rocket-empty'}`}>
+            <i className="meter-rocket-flame" />
+            <i className="meter-rocket-body" />
+            <i className="meter-rocket-nose" />
+            <i className="meter-rocket-band" />
+            <i className="meter-rocket-fin meter-rocket-fin-top" />
+            <i className="meter-rocket-fin meter-rocket-fin-bottom" />
+          </span>
+        ))}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -2901,10 +2909,10 @@ function GuideCombatPage() {
           <p><strong>Fuel station:</strong> touch the pump itself to refill all fuel. Its beacon and your fuel box pulse green for two seconds. It also repairs the first-hit propeller damage.</p>
         </section>
         <section className="gazette-weapons-report">
-          <div className="gazette-ammo-demo" aria-label="Seven bullet meter illustration">
+          <div className="gazette-ammo-demo" aria-label={`${MAX_BULLETS} bullet meter illustration`}>
             {Array.from({ length: MAX_BULLETS }, (_, index) => <i key={index} className="guide-bullet-art" />)}
           </div>
-          <h4>Seven bullets</h4>
+          <h4>{MAX_BULLETS} bullets</h4>
           <p>Hold <PixelKey wide>SPACE</PixelKey> to burst-fire. Each bullet is straight, leaves the propeller shaft, stops when it hits ground, and refills every seven seconds even when the magazine is partly used.</p>
           <div className="gazette-rockets-demo" aria-label="Two rocket meter illustration"><span className="guide-rocket-art" /><span className="guide-rocket-art" /></div>
           <h4>Two rockets</h4>

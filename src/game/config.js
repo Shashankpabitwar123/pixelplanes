@@ -12,7 +12,7 @@ export const FUEL_GAUGE_SWEEP = 180;
 
 export const FUEL_GAUGE_ZONE_SIZE = FUEL_GAUGE_SWEEP / 4;
 
-export const MAX_BULLETS = 7;
+export const MAX_BULLETS = 14;
 
 export const BULLET_RELOAD_MS = 7000;
 

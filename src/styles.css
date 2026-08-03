@@ -2356,14 +2356,18 @@ button {
 .gazette-fuel-tank-wrap .fuel-beacon { animation: none; }
 
 .gazette-ammo-demo {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(7, 11px);
+  grid-template-rows: repeat(2, 34px);
   justify-content: center;
-  gap: 6px;
-  min-height: 62px;
-  padding-top: 9px;
+  align-content: center;
+  column-gap: 6px;
+  row-gap: 3px;
+  min-height: 82px;
+  padding-top: 7px;
 }
 
-.gazette-ammo-demo .guide-bullet-art { width: 13px; height: 42px; border-width: 2px; border-radius: 8px 8px 2px 2px; box-shadow: inset 0 -14px 0 #ffe35a; }
+.gazette-ammo-demo .guide-bullet-art { width: 11px; height: 34px; border-width: 2px; border-radius: 7px 7px 2px 2px; box-shadow: inset 0 -11px 0 #ffe35a; }
 
 .gazette-rockets-demo {
   display: flex;
@@ -3141,13 +3145,27 @@ button {
   animation: none;
 }
 
+.combat-hud {
+  position: absolute;
+  z-index: 21;
+  right: 20px;
+  top: 148px;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.combat-hud-fuel-column {
+  width: 112px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .fuel-gauge {
   --fuel-level: 1;
   --fuel-angle: 0deg;
-  position: absolute;
-  z-index: 21;
-  right: 144px;
-  top: 148px;
+  position: relative;
   width: 112px;
   height: 52px;
   border: 1px solid rgba(255, 255, 255, 0.48);
@@ -3259,12 +3277,9 @@ button {
 }
 
 .bullet-meter {
-  position: absolute;
-  z-index: 21;
-  right: 20px;
-  top: 148px;
+  position: relative;
   width: 112px;
-  height: 44px;
+  height: 84px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3277,18 +3292,20 @@ button {
 }
 
 .ammo-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 35px;
+  display: grid;
+  grid-template-columns: repeat(7, 8px);
+  grid-template-rows: repeat(2, 25px);
+  column-gap: 5px;
+  row-gap: 3px;
+  place-items: center;
+  height: 53px;
 }
 
 .ammo-bullet {
   position: relative;
   display: block;
-  width: 10px;
-  height: 31px;
+  width: 8px;
+  height: 25px;
   filter:
     drop-shadow(0 0 2px rgba(255, 214, 50, 0.58))
     drop-shadow(0 0 6px rgba(255, 174, 42, 0.28));
@@ -3303,51 +3320,51 @@ button {
 .ammo-tip {
   left: 1px;
   top: 0;
-  width: 8px;
-  height: 11px;
+  width: 6px;
+  height: 9px;
   border-radius: 50% 50% 0 0;
   background: linear-gradient(90deg, #ff9e23 0 38%, #ffb338 39% 100%);
 }
 
 .ammo-shell {
   left: 0;
-  top: 11px;
-  width: 10px;
-  height: 16px;
+  top: 9px;
+  width: 8px;
+  height: 13px;
   background: linear-gradient(90deg, #ffcc2f 0 46%, #ffdc3a 47% 100%);
   clip-path: polygon(13% 0, 87% 0, 100% 15%, 100% 100%, 0 100%, 0 15%);
 }
 
 .ammo-slot {
-  right: 2px;
+  right: 1px;
   width: 2px;
   border-radius: 999px;
   background: rgba(9, 9, 9, 0.9);
 }
 
 .ammo-slot-small {
-  top: 15px;
-  height: 4px;
+  top: 12px;
+  height: 3px;
 }
 
 .ammo-slot-long {
-  top: 22px;
-  height: 8px;
+  top: 18px;
+  height: 6px;
 }
 
 .ammo-ring {
   left: 1px;
-  width: 8px;
-  height: 3px;
+  width: 6px;
+  height: 2px;
   background: #ffd738;
 }
 
 .ammo-ring-top {
-  bottom: 2px;
+  bottom: 1px;
 }
 
 .ammo-ring-bottom {
-  bottom: -3px;
+  bottom: -2px;
 }
 
 .ammo-bullet-empty {
@@ -3365,10 +3382,7 @@ button {
 }
 
 .rocket-meter {
-  position: absolute;
-  z-index: 21;
-  right: 20px;
-  top: 198px;
+  position: relative;
   width: 112px;
   height: 26px;
   display: flex;
@@ -5816,22 +5830,9 @@ button {
     top: 12px;
   }
 
-  .fuel-gauge {
-    right: 136px;
-    top: 140px;
-    width: 112px;
-  }
-
-  .bullet-meter {
+  .combat-hud {
     right: 12px;
     top: 140px;
-    width: 112px;
-  }
-
-  .rocket-meter {
-    right: 12px;
-    top: 190px;
-    width: 112px;
   }
 
   .forest {
