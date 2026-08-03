@@ -4065,15 +4065,17 @@ function PlayablePlane({
 
     const scanRoomHits = (now, planeState) => {
       const roomTargets = getRoomTargets();
-      if (!roomTargets.length || planeState.crashed) return;
+      if (!roomTargets.length) return;
 
-      const collisionTarget = roomTargets.find((target) => planesCollide(planeState, target.state));
-      if (collisionTarget) {
-        const projectileId = `collision-${collisionTarget.id}-${Math.round(now)}`;
-        onRoomHit?.({ targetId: collisionTarget.id, projectileId, weapon: 'collision' });
-        onRoomCrash?.({ selfCrash: false });
-        crashCurrentPlaneRef.current?.(1.8, { selfCrash: false });
-        return;
+      if (!planeState.crashed) {
+        const collisionTarget = roomTargets.find((target) => planesCollide(planeState, target.state));
+        if (collisionTarget) {
+          const projectileId = `collision-${collisionTarget.id}-${Math.round(now)}`;
+          onRoomHit?.({ targetId: collisionTarget.id, projectileId, weapon: 'collision' });
+          onRoomCrash?.({ selfCrash: false });
+          crashCurrentPlaneRef.current?.(1.8, { selfCrash: false });
+          return;
+        }
       }
 
       for (const projectile of projectilesRef.current) {
@@ -4146,6 +4148,10 @@ function PlayablePlane({
       }
 
       if (next.crashed) {
+        updatePlayerBulletRenders(now);
+        updatePlayerRockets(now);
+        scanBotHits(now);
+        scanRoomHits(now, next);
         if (now - next.crashTime > 1450) {
           next = createInitialPlaneState(spawnX);
           searchLightOnRef.current = false;
@@ -4159,21 +4165,12 @@ function PlayablePlane({
             window.clearTimeout(reloadTimerRef.current);
             reloadTimerRef.current = null;
           }
-          projectileTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
-          projectileTimeoutsRef.current = [];
-          rocketTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
-          rocketTimeoutsRef.current = [];
-          projectilesRef.current = [];
-          rocketProjectilesRef.current = [];
-          projectileElementRefs.current.clear();
           ammoRef.current = MAX_BULLETS;
           reloadingRef.current = false;
           lastShotRef.current = 0;
           fireQueuedRef.current = false;
           rocketsRef.current = MAX_ROCKETS;
           lastRocketRef.current = 0;
-          setProjectiles([]);
-          setRocketProjectiles([]);
           setRocketsRemaining(MAX_ROCKETS);
           onAmmoChange({ count: MAX_BULLETS, reloading: false });
           onRocketChange(MAX_ROCKETS);
@@ -5019,13 +5016,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       syncProjectileRenderPositions(bulletsRef.current, now, bulletElementRefs.current);
     };
 
-    const scanHits = (now, bot) => {
-      const collisionTarget = getTargetCandidates(bot).find((target) => planesCollide(bot, target.state));
-      if (collisionTarget) {
-        crashBot(1.8);
-        crashTarget(collisionTarget, 1.8);
-        return;
-      }
+    const scanProjectileHits = (now, bot) => {
       for (const projectile of bulletsRef.current) {
         const segment = getProjectileSegment(projectile, now);
         const target = getTargetCandidates(bot).find((candidate) => segmentHitsPlane(segment, candidate.state, projectile.radius ?? 1.05));
@@ -5035,6 +5026,16 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
           return;
         }
       }
+    };
+
+    const scanHits = (now, bot) => {
+      const collisionTarget = getTargetCandidates(bot).find((target) => planesCollide(bot, target.state));
+      if (collisionTarget) {
+        crashBot(1.8);
+        crashTarget(collisionTarget, 1.8);
+        return;
+      }
+      scanProjectileHits(now, bot);
     };
 
     const angleToPoint = (source, target) => {
@@ -5226,6 +5227,8 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
 
       let next = stateRef.current;
       if (next.crashed) {
+        updateBotBulletRenders(now);
+        scanProjectileHits(now, next);
         if (now - next.crashTime > 1650) {
           const otherBotSpawnXs = botStateRefs.current
             .filter((_, index) => index !== botIndex)
