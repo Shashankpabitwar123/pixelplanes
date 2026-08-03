@@ -96,6 +96,15 @@ const REMOTE_DISPLAY_MAX_DT_SECONDS = 0.06;
 const RTC_STATE_CHANNEL_LABEL = 'pixelplanes-state';
 const RTC_STATE_CHANNEL_MAX_BUFFERED_BYTES = 64 * 1024;
 const FIELD_GUIDE_PAGE_COUNT = 6;
+const COW_INSTANCES = cowOffsets.flatMap((offset) =>
+  cows.slice(0, 2).map((cow, index) => ({
+    id: `${offset}-${index}`,
+    delay: cow.delay - offset * 0.7 - index * 8,
+    duration: 240 + ((offset + index * 17) % 70),
+    graze: cow.graze,
+    grazeAt: 28 + ((offset * 3 + index * 47) % (WORLD_WIDTH - 70)),
+  })),
+);
 
 function useMeasuredFrameRate() {
   const [frameRate, setFrameRate] = useState(0);
@@ -2623,24 +2632,12 @@ function App() {
               <GrassPlant key={index} {...plant} />
             ))}
           </div>
-          <div className="cows">
-            {cowOffsets.flatMap((offset) =>
-              cows.slice(0, 2).map((cow, index) => (
-                <Cow
-                  key={`${offset}-${index}`}
-                  cowId={`${offset}-${index}`}
-                  {...cow}
-                  duration={240 + ((offset + index * 17) % 70)}
-                  delay={cow.delay - offset * 0.7 - index * 8}
-                  grazeAt={28 + ((offset * 3 + index * 47) % (WORLD_WIDTH - 70))}
-                  syncSeed={roomEnvironment?.seed}
-                  syncStartedAt={roomEnvironment?.startedAt}
-                  serverTimeOffsetRef={roomServerTimeOffsetRef}
-                  onPotty={addDropping}
-                />
-              )),
-            )}
-          </div>
+          <CowHerd
+            syncSeed={roomEnvironment?.seed}
+            syncStartedAt={roomEnvironment?.startedAt}
+            serverTimeOffsetRef={roomServerTimeOffsetRef}
+            onPotty={addDropping}
+          />
           <div className="droppings">
             {droppings.map((dropping) => (
               <span key={dropping.id} className="potty-dropping" style={{ left: `${dropping.x}%` }} />
@@ -5599,54 +5596,80 @@ function FuelTank({ style, active }) {
   );
 }
 
-function Cow({ cowId, delay, duration, graze, grazeAt, syncSeed, syncStartedAt, serverTimeOffsetRef, onPotty }) {
-  const [motion, setMotion] = useState({ x: -14, eating: false });
-  const pottyActiveRef = useRef(false);
-  const pottyPlanRef = useRef({ cycle: null, active: false, x: 0, start: 0, end: 0 });
+function CowHerd({ syncSeed, syncStartedAt, serverTimeOffsetRef, onPotty }) {
+  const cowElementRefs = useRef(new Map());
+
+  const setCowElement = useCallback((cowId, element) => {
+    if (element) cowElementRefs.current.set(cowId, element);
+    else cowElementRefs.current.delete(cowId);
+  }, []);
 
   useEffect(() => {
     let frame = 0;
     const syncedStartedAt = Number(syncStartedAt);
     const synced = Boolean(syncSeed) && Number.isFinite(syncedStartedAt);
-    const start = performance.now() / 1000;
-    pottyActiveRef.current = false;
-    pottyPlanRef.current = { cycle: null, active: false, x: 0, start: 0, end: 0 };
+    const localStartedAt = performance.now() / 1000;
+    const pottyPlans = new Map();
+    const pottyActive = new Map();
 
-    const update = () => {
-      const elapsed = synced
-        ? ((Date.now() + (serverTimeOffsetRef?.current || 0) - syncedStartedAt) / 1000) - delay
-        : performance.now() / 1000 - start - delay;
-      const cycle = Math.floor(elapsed / duration);
-      const progress = ((elapsed % duration) + duration) % duration / duration;
-      if (pottyPlanRef.current.cycle !== cycle) {
-        if (synced) {
-          pottyPlanRef.current = getSyncedCowPottyPlan(syncSeed, cowId, cycle);
-        } else {
-          const pottyStart = 0.2 + Math.random() * 0.56;
-          pottyPlanRef.current = {
-            cycle,
-            active: Math.random() < 0.22,
-            x: 24 + Math.random() * (WORLD_WIDTH - 70),
-            start: pottyStart,
-            end: pottyStart + 0.045,
-          };
+    const update = (now) => {
+      const sharedElapsed = synced
+        ? (Date.now() + (serverTimeOffsetRef?.current || 0) - syncedStartedAt) / 1000
+        : now / 1000 - localStartedAt;
+
+      for (const cow of COW_INSTANCES) {
+        const elapsed = sharedElapsed - cow.delay;
+        const cycle = Math.floor(elapsed / cow.duration);
+        const progress = ((elapsed % cow.duration) + cow.duration) % cow.duration / cow.duration;
+        let pottyPlan = pottyPlans.get(cow.id);
+
+        if (!pottyPlan || pottyPlan.cycle !== cycle) {
+          pottyPlan = synced
+            ? getSyncedCowPottyPlan(syncSeed, cow.id, cycle)
+            : (() => {
+                const pottyStart = 0.2 + Math.random() * 0.56;
+                return {
+                  cycle,
+                  active: Math.random() < 0.22,
+                  x: 24 + Math.random() * (WORLD_WIDTH - 70),
+                  start: pottyStart,
+                  end: pottyStart + 0.045,
+                };
+              })();
+          pottyPlans.set(cow.id, pottyPlan);
         }
+
+        const motion = getCowMotion(progress, cow.graze, pottyPlan, cow.grazeAt);
+        const isPottying = Boolean(motion.potty);
+        if (isPottying && !pottyActive.get(cow.id)) onPotty(motion.x);
+        pottyActive.set(cow.id, isPottying);
+
+        const cowElement = cowElementRefs.current.get(cow.id);
+        if (!cowElement) continue;
+        cowElement.style.transform = `translateX(${motion.x}vw)`;
+        const className = `cow${motion.eating ? ' cow-eating' : isPottying ? ' cow-pottying' : ' cow-walking'}`;
+        if (cowElement.className !== className) cowElement.className = className;
       }
-      const nextMotion = getCowMotion(progress, graze, pottyPlanRef.current, grazeAt);
-      if (nextMotion.potty && !pottyActiveRef.current) {
-        onPotty(nextMotion.x);
-      }
-      pottyActiveRef.current = Boolean(nextMotion.potty);
-      setMotion(nextMotion);
+
       frame = requestAnimationFrame(update);
     };
 
-    update();
+    frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [cowId, delay, duration, graze, grazeAt, onPotty, serverTimeOffsetRef, syncSeed, syncStartedAt]);
+  }, [onPotty, serverTimeOffsetRef, syncSeed, syncStartedAt]);
 
   return (
-    <div className={`cow${motion.eating ? ' cow-eating' : motion.potty ? ' cow-pottying' : ' cow-walking'}`} style={{ transform: `translateX(${motion.x}vw)` }}>
+    <div className="cows">
+      {COW_INSTANCES.map((cow) => (
+        <Cow key={cow.id} cowId={cow.id} setCowElement={setCowElement} />
+      ))}
+    </div>
+  );
+}
+
+function Cow({ cowId, setCowElement }) {
+  return (
+    <div ref={(element) => setCowElement(cowId, element)} className="cow cow-walking" style={{ transform: 'translateX(-14vw)' }}>
       <svg viewBox="0 0 90 52">
         <g className="cow-core">
           <ellipse className="cow-body" cx="43" cy="27" rx="29" ry="16" />
