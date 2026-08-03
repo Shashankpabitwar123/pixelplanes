@@ -2401,24 +2401,21 @@ function App() {
             )}
           </div>
           {settingsOpen && startScreen === 'home' && (
-            <section className="start-utility-overlay" aria-label="Flight deck sound settings">
-              <div className="sound-settings-panel" role="dialog" aria-modal="true" aria-labelledby="sound-settings-title">
-                <div className="sound-settings-heading">
-                  <div>
-                    <span className="sound-settings-kicker">Hangar controls</span>
-                    <h2 id="sound-settings-title">Flight Deck Settings</h2>
-                  </div>
-                  <button className="panel-close-button" type="button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button>
+            <section className="start-utility-overlay flight-deck-overlay" aria-label="Flight deck sound settings">
+              <div className="flight-deck-panel" role="dialog" aria-modal="true" aria-labelledby="flight-deck-title">
+                <div className="flight-deck-heading">
+                  <h2 id="flight-deck-title">Flight deck</h2>
+                  <button className="flight-deck-close" type="button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button>
                 </div>
-                <div className="sound-settings-grid">
+                <div className="flight-deck-controls">
                   {[
-                    ['engine', 'Propeller', 'Engine and rotor'],
-                    ['ammo', 'Ammo', 'Bullets and impacts'],
-                    ['rocket', 'Rockets', 'Launch and trail'],
-                    ['rain', 'Rain', 'Weather ambience'],
-                  ].map(([kind, label, description]) => (
-                    <label className="sound-setting" key={kind}>
-                      <span className="sound-setting-copy"><strong>{label}</strong><small>{description}</small></span>
+                    ['engine', 'Propeller'],
+                    ['ammo', 'Ammo'],
+                    ['rocket', 'Rockets'],
+                    ['rain', 'Rain'],
+                  ].map(([kind, label]) => (
+                    <label className="flight-deck-control" key={kind}>
+                      <span>{label}</span>
                       <input
                         type="range"
                         min="0"
@@ -2430,8 +2427,8 @@ function App() {
                       <output>{Math.round(soundLevels[kind] * 100)}%</output>
                     </label>
                   ))}
-                  <label className="sound-setting sound-setting-lights">
-                    <span className="sound-setting-copy"><strong>Plane lights</strong><small>Night beacon intensity</small></span>
+                  <label className="flight-deck-control flight-deck-lights">
+                    <span>Plane lights</span>
                     <input
                       type="range"
                       min="0"
@@ -2443,7 +2440,6 @@ function App() {
                     <output>{Math.round(planeLightIntensity * 100)}%</output>
                   </label>
                 </div>
-                <p className="sound-settings-note">Music stays in the music button, so you can tune it separately.</p>
               </div>
             </section>
           )}
