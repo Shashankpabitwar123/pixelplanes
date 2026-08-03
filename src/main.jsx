@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import {
@@ -155,6 +155,7 @@ function App() {
   const [gameMode, setGameMode] = useState('bots');
   const [restartSignal, setRestartSignal] = useState(0);
   const [fogActive, setFogActive] = useState(false);
+  const [fogAnimationsPaused, setFogAnimationsPaused] = useState(true);
   const [rainActive, setRainActive] = useState(false);
   const [roomCode, setRoomCode] = useState('');
   const [roomTheme, setRoomTheme] = useState('dark');
@@ -198,6 +199,11 @@ function App() {
   const [planeLightIntensity, setPlaneLightIntensity] = useState(0.9);
   const [shootingStars, setShootingStars] = useState([]);
   const [remoteProjectiles, setRemoteProjectiles] = useState([]);
+
+  useLayoutEffect(() => {
+    if (fogActive) setFogAnimationsPaused(false);
+  }, [fogActive]);
+
   const measuredFrameRate = useMeasuredFrameRate();
   const worldRef = useRef(null);
   const mapPointerRef = useRef(null);
@@ -2555,7 +2561,13 @@ function App() {
             <Cloud key={index} {...cloud} />
           ))}
         </div>
-        <div className={`fog-layer${fogActive ? ' fog-layer-active' : ''}`} aria-hidden="true">
+        <div
+          className={`fog-layer${fogActive ? ' fog-layer-active' : ''}${fogAnimationsPaused ? ' fog-layer-idle' : ''}`}
+          aria-hidden="true"
+          onTransitionEnd={(event) => {
+            if (event.propertyName === 'opacity' && !fogActive) setFogAnimationsPaused(true);
+          }}
+        >
           {fogBanks.map((fog, index) => (
             <span
               key={index}

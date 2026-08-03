@@ -3944,6 +3944,12 @@ button {
   animation: fogBankDrift var(--fog-speed) ease-in-out infinite alternate;
 }
 
+/* Pause only after the existing fade has finished. */
+.fog-layer-idle::before,
+.fog-layer-idle .fog-bank {
+  animation-play-state: paused;
+}
+
 .scene-dark .fog-layer::before {
   background:
     linear-gradient(90deg, transparent 0%, rgba(165, 188, 198, 0.22) 11%, transparent 24%, rgba(128, 155, 170, 0.16) 38%, transparent 54%, rgba(158, 183, 192, 0.18) 76%, transparent 100%),
