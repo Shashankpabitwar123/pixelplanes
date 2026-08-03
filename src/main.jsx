@@ -207,6 +207,7 @@ function App() {
   const remotePlayerStatesRef = useRef({});
   const remoteProjectilesRef = useRef([]);
   const remoteProjectileElementRefs = useRef(new Map());
+  const gameFrameCallbacksRef = useRef(new Map());
   const roomDamageEventIdsRef = useRef(new Set());
   const localRoomPlayerIdRef = useRef('');
   const lastRoomStateSentRef = useRef(0);
@@ -235,6 +236,27 @@ function App() {
   const fuelPulseTimersRef = useRef([]);
   const roomNotificationTimersRef = useRef([]);
   const shootingStarTimersRef = useRef([]);
+  const registerGameFrameCallback = useCallback((priority, callback) => {
+    gameFrameCallbacksRef.current.set(priority, callback);
+    return () => {
+      if (gameFrameCallbacksRef.current.get(priority) === callback) {
+        gameFrameCallbacksRef.current.delete(priority);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let frame = 0;
+    const update = (now) => {
+      for (let priority = 0; priority <= BOT_COUNT; priority += 1) {
+        gameFrameCallbacksRef.current.get(priority)?.(now);
+      }
+      frame = window.requestAnimationFrame(update);
+    };
+
+    frame = window.requestAnimationFrame(update);
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const startGame = useCallback(() => {
     setGameStarted(true);
     setPaused(false);
@@ -2597,6 +2619,7 @@ function App() {
             audioSettings={soundLevels}
             lightIntensity={planeLightIntensity}
             fogActive={fogActive}
+            registerGameFrameCallback={registerGameFrameCallback}
           />
           {remoteRoomPlanes.map((player) => (
             <RemotePlane key={player.id} player={player} statesRef={remotePlayerStatesRef} fogActive={fogActive} />
@@ -2625,6 +2648,7 @@ function App() {
               onBotMove={updateBotLocator}
               sfxMuted={sfxMuted}
               fogActive={fogActive}
+              registerGameFrameCallback={registerGameFrameCallback}
             />
           ))}
           <div className="grass-plants">
@@ -3032,6 +3056,7 @@ function PlayablePlane({
   audioSettings,
   lightIntensity,
   fogActive,
+  registerGameFrameCallback,
 }) {
   const keysRef = useRef(new Set());
   const planeRef = useRef(null);
@@ -3828,7 +3853,6 @@ function PlayablePlane({
   }, [onAmmoChange, onRocketChange, onRoomProjectile]);
 
   useEffect(() => {
-    let frame = 0;
     let last = performance.now();
     let accumulator = 0;
     const step = 1 / 120;
@@ -4148,7 +4172,6 @@ function PlayablePlane({
         fireQueuedRef.current = false;
         keys.delete('fire');
         renderPlane(next);
-        frame = requestAnimationFrame(update);
         return;
       }
 
@@ -4190,7 +4213,6 @@ function PlayablePlane({
         }
         stateRef.current = next;
         renderPlane(next);
-        frame = requestAnimationFrame(update);
         return;
       }
 
@@ -4231,7 +4253,6 @@ function PlayablePlane({
         setCrashed(next.crashed);
       }
       renderPlane(next);
-      frame = requestAnimationFrame(update);
     };
 
     const renderPlane = (planeState) => {
@@ -4292,9 +4313,8 @@ function PlayablePlane({
       }
     };
 
-    frame = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(frame);
-  }, [spawnX, onMove, onFuelChange, onFuelRefill, onKill, onPlayerDeath, onAmmoChange, onRocketChange, onPlaneState, onRoomHit, onRoomCrash, roomTargetStatesRef, botStateRefs, botApiRefs, botTargetsActive]);
+    return registerGameFrameCallback(0, update);
+  }, [spawnX, onMove, onFuelChange, onFuelRefill, onKill, onPlayerDeath, onAmmoChange, onRocketChange, onPlaneState, onRoomHit, onRoomCrash, roomTargetStatesRef, botStateRefs, botApiRefs, botTargetsActive, registerGameFrameCallback]);
 
   return (
     <div className="player-plane-layer" aria-label="Playable plane">
@@ -4815,7 +4835,7 @@ function RoomProjectilesLayer({
   );
 }
 
-function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, fogActive }) {
+function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, fogActive, registerGameFrameCallback }) {
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
@@ -4927,7 +4947,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
 
   useEffect(() => {
     if (!active) return undefined;
-    let frame = 0;
     let last = performance.now();
     let accumulator = 0;
     const step = 1 / 90;
@@ -5226,7 +5245,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       last = now;
       if (paused) {
         renderBot(stateRef.current);
-        frame = requestAnimationFrame(update);
         return;
       }
 
@@ -5253,7 +5271,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
           onBotMove(botIndex, next);
         }
         renderBot(stateRef.current);
-        frame = requestAnimationFrame(update);
         return;
       }
 
@@ -5276,17 +5293,14 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         setBotCrashed(true);
         playPlaneBlastSound(null, next.crashImpact, sfxMuted);
         renderBot(stateRef.current);
-        frame = requestAnimationFrame(update);
         return;
       }
       scanHits(now, next);
       renderBot(stateRef.current);
-      frame = requestAnimationFrame(update);
     };
 
-    frame = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(frame);
-  }, [active, paused, botIndex, botStateRefs, botApiRefs, playerApiRef, playerStateRef, onBotMove, crashBot, sfxMuted]);
+    return registerGameFrameCallback(botIndex + 1, update);
+  }, [active, paused, botIndex, botStateRefs, botApiRefs, playerApiRef, playerStateRef, onBotMove, crashBot, sfxMuted, registerGameFrameCallback]);
 
   if (!active) return null;
 
