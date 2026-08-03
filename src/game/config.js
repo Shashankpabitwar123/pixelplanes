@@ -16,7 +16,7 @@ export const MAX_BULLETS = 7;
 
 export const BULLET_RELOAD_MS = 7000;
 
-export const BULLET_COOLDOWN_MS = 120;
+export const BULLET_COOLDOWN_MS = 60;
 
 export const BULLET_LIFETIME_MS = 1200;
 
