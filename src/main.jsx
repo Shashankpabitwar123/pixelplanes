@@ -97,6 +97,20 @@ const REMOTE_DISPLAY_MAX_DT_SECONDS = 0.06;
 const RTC_STATE_CHANNEL_LABEL = 'pixelplanes-state';
 const RTC_STATE_CHANNEL_MAX_BUFFERED_BYTES = 64 * 1024;
 const FIELD_GUIDE_PAGE_COUNT = 6;
+const GAME_FRAME_PRIORITY = {
+  PLAYER: 0,
+  ROOM_MAP_DOTS: 0.1,
+  ROOM_REMOTE_PLANES: 0.2,
+  ROOM_PROJECTILES: 0.3,
+  BOT_START: 1,
+};
+const GAME_FRAME_PRIORITIES = [
+  GAME_FRAME_PRIORITY.PLAYER,
+  GAME_FRAME_PRIORITY.ROOM_MAP_DOTS,
+  GAME_FRAME_PRIORITY.ROOM_REMOTE_PLANES,
+  GAME_FRAME_PRIORITY.ROOM_PROJECTILES,
+  ...Array.from({ length: BOT_COUNT }, (_, index) => GAME_FRAME_PRIORITY.BOT_START + index),
+];
 const COW_INSTANCES = cowOffsets.flatMap((offset) =>
   cows.slice(0, 2).map((cow, index) => ({
     id: `${offset}-${index}`,
@@ -244,9 +258,18 @@ function App() {
   const roomNotificationTimersRef = useRef([]);
   const shootingStarTimersRef = useRef([]);
   const registerGameFrameCallback = useCallback((priority, callback) => {
-    gameFrameCallbacksRef.current.set(priority, callback);
+    let callbacks = gameFrameCallbacksRef.current.get(priority);
+    if (!callbacks) {
+      callbacks = new Set();
+      gameFrameCallbacksRef.current.set(priority, callbacks);
+    }
+    callbacks.add(callback);
+
     return () => {
-      if (gameFrameCallbacksRef.current.get(priority) === callback) {
+      const currentCallbacks = gameFrameCallbacksRef.current.get(priority);
+      if (!currentCallbacks) return;
+      currentCallbacks.delete(callback);
+      if (currentCallbacks.size === 0) {
         gameFrameCallbacksRef.current.delete(priority);
       }
     };
@@ -255,8 +278,8 @@ function App() {
   useEffect(() => {
     let frame = 0;
     const update = (now) => {
-      for (let priority = 0; priority <= BOT_COUNT; priority += 1) {
-        gameFrameCallbacksRef.current.get(priority)?.(now);
+      for (const priority of GAME_FRAME_PRIORITIES) {
+        gameFrameCallbacksRef.current.get(priority)?.forEach((callback) => callback(now));
       }
       frame = window.requestAnimationFrame(update);
     };
@@ -2486,7 +2509,12 @@ function App() {
         {gameMode === 'room' && roomPlayers
           .filter((player) => player.id !== localRoomPlayerId)
           .map((player) => (
-            <RoomPlayerMapDot key={player.id} playerId={player.id} statesRef={remotePlayerStatesRef} />
+            <RoomPlayerMapDot
+              key={player.id}
+              playerId={player.id}
+              statesRef={remotePlayerStatesRef}
+              registerGameFrameCallback={registerGameFrameCallback}
+            />
           ))}
         <span
           ref={mapDotRef}
@@ -2635,7 +2663,13 @@ function App() {
             registerGameFrameCallback={registerGameFrameCallback}
           />
           {remoteRoomPlanes.map((player) => (
-            <RemotePlane key={player.id} player={player} statesRef={remotePlayerStatesRef} fogActive={fogActive} />
+            <RemotePlane
+              key={player.id}
+              player={player}
+              statesRef={remotePlayerStatesRef}
+              fogActive={fogActive}
+              registerGameFrameCallback={registerGameFrameCallback}
+            />
           ))}
           <RoomProjectilesLayer
             active={isRoomGame}
@@ -2646,6 +2680,7 @@ function App() {
             playerStateRef={playerStateRef}
             localPlayerId={localRoomPlayerId}
             sendRoomMessage={sendRoomMessage}
+            registerGameFrameCallback={registerGameFrameCallback}
           />
           {gameMode === 'bots' && botStateRefs.current.map((_, index) => (
             <BotPlane
@@ -4324,7 +4359,7 @@ function PlayablePlane({
       }
     };
 
-    return registerGameFrameCallback(0, update);
+    return registerGameFrameCallback(GAME_FRAME_PRIORITY.PLAYER, update);
   }, [spawnX, onMove, onFuelChange, onFuelRefill, onKill, onPlayerDeath, onAmmoChange, onRocketChange, onPlaneState, onRoomHit, onRoomCrash, roomTargetStatesRef, botStateRefs, botApiRefs, botTargetsActive, registerGameFrameCallback]);
 
   return (
@@ -4518,11 +4553,10 @@ function smoothRemoteDisplay(previous, target, now) {
   };
 }
 
-function RoomPlayerMapDot({ playerId, statesRef }) {
+function RoomPlayerMapDot({ playerId, statesRef, registerGameFrameCallback }) {
   const dotRef = useRef(null);
 
   useEffect(() => {
-    let frame = 0;
     const update = () => {
       const state = statesRef.current[playerId]?.state;
       if (dotRef.current) {
@@ -4534,16 +4568,14 @@ function RoomPlayerMapDot({ playerId, statesRef }) {
           dotRef.current.style.display = 'none';
         }
       }
-      frame = requestAnimationFrame(update);
     };
-    frame = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(frame);
-  }, [playerId, statesRef]);
+    return registerGameFrameCallback(GAME_FRAME_PRIORITY.ROOM_MAP_DOTS, update);
+  }, [playerId, statesRef, registerGameFrameCallback]);
 
   return <span ref={dotRef} className="map-bot-dot map-room-player-dot" style={{ display: 'none' }} />;
 }
 
-function RemotePlane({ player, statesRef, fogActive }) {
+function RemotePlane({ player, statesRef, fogActive, registerGameFrameCallback }) {
   const planeRef = useRef(null);
   const blastRef = useRef(null);
   const displayRef = useRef(null);
@@ -4562,7 +4594,6 @@ function RemotePlane({ player, statesRef, fogActive }) {
   }, [visual]);
 
   useEffect(() => {
-    let frame = 0;
     const update = (now) => {
       const currentEntry = statesRef.current[player.id];
       if (!currentEntry?.state) {
@@ -4581,7 +4612,6 @@ function RemotePlane({ player, statesRef, fogActive }) {
           visualRef.current = nextVisual;
           setVisual(nextVisual);
         }
-        frame = requestAnimationFrame(update);
         return;
       }
       const plane = currentEntry.state;
@@ -4627,11 +4657,9 @@ function RemotePlane({ player, statesRef, fogActive }) {
         visualRef.current = nextVisual;
         setVisual(nextVisual);
       }
-      frame = requestAnimationFrame(update);
     };
-    frame = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(frame);
-  }, [player.id, statesRef]);
+    return registerGameFrameCallback(GAME_FRAME_PRIORITY.ROOM_REMOTE_PLANES, update);
+  }, [player.id, statesRef, registerGameFrameCallback]);
 
   const initialEntry = statesRef.current[player.id];
   const initialDisplay = initialEntry
@@ -4690,6 +4718,7 @@ function RoomProjectilesLayer({
   playerStateRef,
   localPlayerId,
   sendRoomMessage,
+  registerGameFrameCallback,
 }) {
   useEffect(() => {
     if (!active) {
@@ -4698,7 +4727,6 @@ function RoomProjectilesLayer({
       return undefined;
     }
 
-    let frame = 0;
     let last = performance.now();
     const localHitIds = new Set();
 
@@ -4776,15 +4804,14 @@ function RoomProjectilesLayer({
       if (changed || nextProjectiles.length !== projectilesRef.current.length) {
         replaceProjectiles(nextProjectiles);
       }
-      frame = requestAnimationFrame(update);
     };
 
-    frame = requestAnimationFrame(update);
+    const unregister = registerGameFrameCallback(GAME_FRAME_PRIORITY.ROOM_PROJECTILES, update);
     return () => {
-      cancelAnimationFrame(frame);
+      unregister();
       projectileElementRefs.current.clear();
     };
-  }, [active, localPlayerId, playerStateRef, projectileElementRefs, projectilesRef, replaceProjectiles, sendRoomMessage]);
+  }, [active, localPlayerId, playerStateRef, projectileElementRefs, projectilesRef, replaceProjectiles, sendRoomMessage, registerGameFrameCallback]);
 
   const bullets = projectiles.filter((projectile) => projectile.weapon !== 'rocket');
   const rockets = projectiles.filter((projectile) => projectile.weapon === 'rocket');
@@ -5308,7 +5335,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       renderBot(stateRef.current);
     };
 
-    return registerGameFrameCallback(botIndex + 1, update);
+    return registerGameFrameCallback(GAME_FRAME_PRIORITY.BOT_START + botIndex, update);
   }, [active, paused, botIndex, botStateRefs, botApiRefs, playerApiRef, playerStateRef, onBotMove, crashBot, sfxMuted, registerGameFrameCallback]);
 
   if (!active) return null;
