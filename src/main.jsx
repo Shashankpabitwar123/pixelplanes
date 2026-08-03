@@ -66,6 +66,7 @@ import {
   getProjectilePoint,
   getProjectileSegment,
   syncProjectileRenderPositions,
+  setWorldTransformPosition,
   getBulletTrajectory,
   createBulletProjectile,
   getBulletGuidePoints,
@@ -3513,8 +3514,7 @@ function PlayablePlane({
       setProjectiles(projectilesRef.current);
       const bulletElement = projectileElementRefs.current.get(projectile.id);
       if (bulletElement) {
-        bulletElement.style.left = `${projectile.renderX}vw`;
-        bulletElement.style.bottom = `calc(100% - 2px + ${projectile.renderY}vh)`;
+        setWorldTransformPosition(bulletElement, projectile.renderX, projectile.renderY);
       }
 
       const timeoutId = window.setTimeout(() => {
@@ -4301,8 +4301,7 @@ function PlayablePlane({
           getBulletGuidePoints(bulletTrajectory).forEach((point, index) => {
             const dot = aimGuideDotRefs.current[index];
             if (!dot) return;
-            dot.style.left = `${point.x}vw`;
-            dot.style.bottom = `calc(100% - 2px + ${point.y}vh)`;
+            setWorldTransformPosition(dot, point.x, point.y);
             dot.style.opacity = 1;
           });
         }
@@ -4373,8 +4372,8 @@ function PlayablePlane({
             }}
             className={`bullet-shot${projectile.groundHit ? ' bullet-ground-hit' : ''}`}
             style={{
-              left: `${projectile.renderX ?? projectile.x}vw`,
-              bottom: `calc(100% - 2px + ${projectile.renderY ?? projectile.y}vh)`,
+              '--world-x': `${projectile.renderX ?? projectile.x}vw`,
+              '--world-y': `${-(projectile.renderY ?? projectile.y)}vh`,
               '--bullet-angle': `${projectile.angle}deg`,
               '--bullet-life': `${projectile.life ?? BULLET_LIFETIME_MS}ms`,
             }}
@@ -4390,8 +4389,8 @@ function PlayablePlane({
             key={rocket.id}
             className={`rocket-shot${rocket.groundHit ? ' rocket-ground-hit' : ''}`}
             style={{
-              left: `${rocket.x}vw`,
-              bottom: `calc(100% - 2px + ${rocket.y}vh)`,
+              '--world-x': `${rocket.x}vw`,
+              '--world-y': `${-rocket.y}vh`,
               '--rocket-angle': `${rocket.angle}deg`,
             }}
           >
@@ -4732,8 +4731,7 @@ function RoomProjectilesLayer({
           nextProjectiles.push(updated);
           const element = projectileElementRefs.current.get(updated.id);
           if (element) {
-            element.style.left = `${updated.x}vw`;
-            element.style.bottom = `calc(100% - 2px + ${updated.y}vh)`;
+            setWorldTransformPosition(element, updated.x, updated.y);
             element.style.setProperty('--rocket-angle', `${updated.angle}deg`);
           }
           if (updated !== projectile) changed = true;
@@ -4758,8 +4756,7 @@ function RoomProjectilesLayer({
         projectile.renderY = point.y;
         const element = projectileElementRefs.current.get(projectile.id);
         if (element) {
-          element.style.left = `${point.x}vw`;
-          element.style.bottom = `calc(100% - 2px + ${point.y}vh)`;
+          setWorldTransformPosition(element, point.x, point.y);
         }
         nextProjectiles.push(projectile);
       }
@@ -4794,8 +4791,8 @@ function RoomProjectilesLayer({
             }}
             className={`bullet-shot room-bullet-shot${projectile.groundHit ? ' bullet-ground-hit' : ''}`}
             style={{
-              left: `${projectile.renderX ?? projectile.x}vw`,
-              bottom: `calc(100% - 2px + ${projectile.renderY ?? projectile.y}vh)`,
+              '--world-x': `${projectile.renderX ?? projectile.x}vw`,
+              '--world-y': `${-(projectile.renderY ?? projectile.y)}vh`,
               '--bullet-angle': `${projectile.angle}deg`,
               '--bullet-life': `${projectile.life ?? BULLET_LIFETIME_MS}ms`,
             }}
@@ -4815,8 +4812,8 @@ function RoomProjectilesLayer({
             }}
             className={`rocket-shot room-rocket-shot${rocket.groundHit ? ' rocket-ground-hit' : ''}`}
             style={{
-              left: `${rocket.x}vw`,
-              bottom: `calc(100% - 2px + ${rocket.y}vh)`,
+              '--world-x': `${rocket.x}vw`,
+              '--world-y': `${-rocket.y}vh`,
               '--rocket-angle': `${rocket.angle}deg`,
             }}
           >
@@ -5349,8 +5346,8 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
             }}
             className={`bullet-shot bot-bullet-shot${projectile.groundHit ? ' bullet-ground-hit' : ''}`}
             style={{
-              left: `${projectile.renderX ?? projectile.x}vw`,
-              bottom: `calc(100% - 2px + ${projectile.renderY ?? projectile.y}vh)`,
+              '--world-x': `${projectile.renderX ?? projectile.x}vw`,
+              '--world-y': `${-(projectile.renderY ?? projectile.y)}vh`,
               '--bullet-angle': `${projectile.angle}deg`,
               '--bullet-life': `${projectile.life ?? BULLET_LIFETIME_MS}ms`,
             }}

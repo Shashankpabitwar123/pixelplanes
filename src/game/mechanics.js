@@ -232,6 +232,12 @@ export function getTrajectoryPoint(trajectory, progress) {
   };
 }
 
+export function setWorldTransformPosition(element, x, y) {
+  if (!element) return;
+  element.style.setProperty('--world-x', `${x}vw`);
+  element.style.setProperty('--world-y', `${-y}vh`);
+}
+
 export function syncProjectileRenderPositions(projectiles, now, elementRefs = null) {
   if (projectiles.length === 0) return;
   projectiles.forEach((projectile) => {
@@ -240,8 +246,7 @@ export function syncProjectileRenderPositions(projectiles, now, elementRefs = nu
     projectile.renderY = point.y;
     const element = elementRefs?.get(projectile.id);
     if (element) {
-      element.style.left = `${point.x}vw`;
-      element.style.bottom = `calc(100% - 2px + ${point.y}vh)`;
+      setWorldTransformPosition(element, point.x, point.y);
     }
   });
 }

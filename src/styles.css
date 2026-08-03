@@ -4401,18 +4401,20 @@ button {
 
 .bullet-aim-dot {
   position: absolute;
+  left: 0;
+  bottom: calc(100% - 2px);
   display: block;
   width: clamp(3px, 0.24vw, 5px);
   aspect-ratio: 1;
   opacity: 0;
   border-radius: 50%;
   background: rgba(202, 209, 213, 0.78);
-  transform: translate(-50%, 50%);
+  transform: translate3d(var(--world-x, 0vw), var(--world-y, 0vh), 0) translate(-50%, 50%);
   box-shadow: 0 0 4px rgba(18, 24, 28, 0.38);
   filter:
     drop-shadow(0 0 2px rgba(0, 0, 0, 0.52))
     drop-shadow(0 0 4px rgba(224, 230, 234, 0.18));
-  will-change: left, bottom, opacity;
+  will-change: transform, opacity;
 }
 
 .scene-dark .bullet-aim-dot {
@@ -4480,11 +4482,13 @@ button {
 
 .bullet-shot {
   position: absolute;
+  left: 0;
+  bottom: calc(100% - 2px);
   width: clamp(11px, 0.82vw, 18px);
   height: clamp(3px, 0.22vw, 5px);
-  transform: translate(-50%, 50%);
+  transform: translate3d(var(--world-x, 0vw), var(--world-y, 0vh), 0) translate(-50%, 50%);
   opacity: 1;
-  will-change: left, bottom, transform, opacity;
+  will-change: transform, opacity;
 }
 
 .bullet-core {
@@ -4562,11 +4566,13 @@ button {
 
 .rocket-shot {
   position: absolute;
+  left: 0;
+  bottom: calc(100% - 2px);
   width: clamp(24px, 2vw, 42px);
   height: clamp(8px, 0.72vw, 14px);
-  transform: translate(-50%, 50%) rotate(var(--rocket-angle));
+  transform: translate3d(var(--world-x, 0vw), var(--world-y, 0vh), 0) translate(-50%, 50%) rotate(var(--rocket-angle));
   filter: drop-shadow(0 0 7px rgba(255, 128, 26, 0.38));
-  will-change: left, bottom, transform, opacity;
+  will-change: transform, opacity;
 }
 
 .rocket-shot i,
