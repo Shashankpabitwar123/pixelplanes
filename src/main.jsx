@@ -112,11 +112,27 @@ const GUIDE_WEATHER_REPLAY_TREES = [
 const TRAINING_TAKEOFF_ALTITUDE = 9;
 const TRAINING_BANK_ANGLE = 26;
 const TRAINING_LEVEL_ANGLE = 12;
+const TRAINING_WEAPONS_LESSON_INDEX = 4;
+const TRAINING_WEATHER_LESSON_INDEX = 5;
+const TRAINING_FOG_CHECKPOINT_RADIUS = 5.4;
 const TRAINING_FUEL_STATION_INDEX = fuelTankPlacements.reduce(
   (closestIndex, x, index) => (x < START_X && (closestIndex < 0 || x > fuelTankPlacements[closestIndex]) ? index : closestIndex),
   -1,
 );
 const TRAINING_FUEL_STATION_X = fuelTankPlacements[TRAINING_FUEL_STATION_INDEX];
+const TRAINING_WEAPON_TARGETS = [
+  { id: 'training-bullet-target', weapon: 'bullet', label: 'BULLETS', x: START_X - 28, y: 14, angle: 16 },
+  { id: 'training-rocket-target', weapon: 'rocket', label: 'ROCKET', x: START_X - 44, y: 14, angle: 16 },
+];
+const createTrainingWeaponTargets = () => TRAINING_WEAPON_TARGETS.map((target) => ({
+  ...target,
+  state: {
+    x: target.x,
+    y: target.y,
+    angle: target.angle,
+    crashed: false,
+  },
+}));
 const TRAINING_LESSONS = [
   {
     id: 'takeoff',
@@ -141,6 +157,18 @@ const TRAINING_LESSONS = [
     title: 'Refuel',
     objective: 'Take off again and touch the glowing fuel station ahead.',
     keys: ['W', '↑'],
+  },
+  {
+    id: 'weapons',
+    title: 'Range practice',
+    objective: 'Hit the two practice targets: bullets first, then one guided rocket.',
+    keys: ['SPACE', 'R'],
+  },
+  {
+    id: 'weather',
+    title: 'Fog run',
+    objective: 'Rain and fog are in. Turn on the fog light and fly through the glowing gate.',
+    keys: ['L'],
   },
 ];
 const GAME_FRAME_PRIORITY = {
@@ -215,6 +243,9 @@ function App() {
   const [gameMode, setGameMode] = useState('bots');
   const [trainingLessonIndex, setTrainingLessonIndex] = useState(0);
   const [trainingBanks, setTrainingBanks] = useState({ left: false, right: false });
+  const [trainingWeaponHits, setTrainingWeaponHits] = useState({ bullet: false, rocket: false });
+  const [trainingWeatherProgress, setTrainingWeatherProgress] = useState({ light: false, checkpoint: false });
+  const [trainingWeatherCheckpoint, setTrainingWeatherCheckpoint] = useState(null);
   const [trainingComplete, setTrainingComplete] = useState(false);
   const [restartSignal, setRestartSignal] = useState(0);
   const [fogActive, setFogActive] = useState(false);
@@ -263,6 +294,11 @@ function App() {
   const [planeLightIntensity, setPlaneLightIntensity] = useState(1);
   const [shootingStars, setShootingStars] = useState([]);
   const [remoteProjectiles, setRemoteProjectiles] = useState([]);
+  const trainingWeatherLessonActive =
+    gameMode === 'training' &&
+    gameStarted &&
+    trainingLessonIndex === TRAINING_WEATHER_LESSON_INDEX &&
+    !trainingComplete;
 
   useLayoutEffect(() => {
     if (fogActive) setFogAnimationsPaused(false);
@@ -275,7 +311,18 @@ function App() {
   const mapBotDotRefs = useRef([]);
   const fuelGaugeRef = useRef(null);
   const playerStateRef = useRef(createInitialPlaneState());
-  const trainingProgressRef = useRef({ lessonIndex: 0, leftBanked: false, rightBanked: false, complete: false });
+  const trainingProgressRef = useRef({
+    lessonIndex: 0,
+    leftBanked: false,
+    rightBanked: false,
+    bulletTargetHit: false,
+    rocketTargetHit: false,
+    fogLightOn: false,
+    fogCheckpointCleared: false,
+    complete: false,
+  });
+  const trainingTargetStatesRef = useRef(createTrainingWeaponTargets());
+  const trainingWeatherCheckpointRef = useRef(null);
   const remotePlayerStatesRef = useRef({});
   const remoteProjectilesRef = useRef([]);
   const remoteProjectileElementRefs = useRef(new Map());
@@ -351,9 +398,23 @@ function App() {
     setKillCount(0);
   }, []);
   const resetTrainingProgress = useCallback(() => {
-    trainingProgressRef.current = { lessonIndex: 0, leftBanked: false, rightBanked: false, complete: false };
+    trainingProgressRef.current = {
+      lessonIndex: 0,
+      leftBanked: false,
+      rightBanked: false,
+      bulletTargetHit: false,
+      rocketTargetHit: false,
+      fogLightOn: false,
+      fogCheckpointCleared: false,
+      complete: false,
+    };
+    trainingTargetStatesRef.current = createTrainingWeaponTargets();
+    trainingWeatherCheckpointRef.current = null;
     setTrainingLessonIndex(0);
     setTrainingBanks({ left: false, right: false });
+    setTrainingWeaponHits({ bullet: false, rocket: false });
+    setTrainingWeatherProgress({ light: false, checkpoint: false });
+    setTrainingWeatherCheckpoint(null);
     setTrainingComplete(false);
   }, []);
   const completeTrainingLesson = useCallback((expectedLessonIndex) => {
@@ -366,10 +427,26 @@ function App() {
       lessonIndex: nextLessonIndex,
       leftBanked: false,
       rightBanked: false,
+      bulletTargetHit: false,
+      rocketTargetHit: false,
+      fogLightOn: false,
+      fogCheckpointCleared: false,
       complete,
     };
+    if (expectedLessonIndex === TRAINING_WEAPONS_LESSON_INDEX) {
+      const plane = playerStateRef.current;
+      const heading = (plane.angle * Math.PI) / 180;
+      const checkpoint = {
+        x: clamp(plane.x - Math.cos(heading) * 24, 22, WORLD_WIDTH - 22),
+        y: clamp(Math.max(plane.y, 7) + Math.max(Math.sin(heading) * 24, 6), 7, 34),
+      };
+      trainingWeatherCheckpointRef.current = checkpoint;
+      setTrainingWeatherCheckpoint(checkpoint);
+    }
     setTrainingLessonIndex(nextLessonIndex);
     setTrainingBanks({ left: false, right: false });
+    setTrainingWeaponHits({ bullet: false, rocket: false });
+    setTrainingWeatherProgress({ light: false, checkpoint: false });
     setTrainingComplete(complete);
   }, []);
   const skipTrainingLesson = useCallback(() => {
@@ -1552,6 +1629,24 @@ function App() {
         completeTrainingLesson(1);
       }
     }
+
+    if (progress.lessonIndex === TRAINING_WEATHER_LESSON_INDEX) {
+      const checkpoint = trainingWeatherCheckpointRef.current;
+      const fogLightOn = Boolean(planeState.searchLightOn);
+      const fogCheckpointCleared = Boolean(
+        progress.fogCheckpointCleared ||
+        (fogLightOn && checkpoint && Math.hypot(planeState.x - checkpoint.x, planeState.y - checkpoint.y) <= TRAINING_FOG_CHECKPOINT_RADIUS),
+      );
+
+      if (fogLightOn !== progress.fogLightOn || fogCheckpointCleared !== progress.fogCheckpointCleared) {
+        trainingProgressRef.current = { ...progress, fogLightOn, fogCheckpointCleared };
+        setTrainingWeatherProgress({ light: fogLightOn, checkpoint: fogCheckpointCleared });
+      }
+
+      if (fogLightOn && fogCheckpointCleared) {
+        completeTrainingLesson(TRAINING_WEATHER_LESSON_INDEX);
+      }
+    }
   }, [completeTrainingLesson, gameMode, gameStarted]);
   const handleTrainingSafeLanding = useCallback(() => {
     if (gameMode !== 'training' || !gameStarted) return;
@@ -1562,6 +1657,23 @@ function App() {
     if (gameMode !== 'training' || !gameStarted || stationIndex !== TRAINING_FUEL_STATION_INDEX) return;
     completeTrainingLesson(3);
   }, [completeTrainingLesson, gameMode, gameStarted, triggerFuelRefillFeedback]);
+  const handleTrainingTargetHit = useCallback((targetId, weapon) => {
+    if (gameMode !== 'training' || !gameStarted) return;
+    const progress = trainingProgressRef.current;
+    if (progress.complete || progress.lessonIndex !== TRAINING_WEAPONS_LESSON_INDEX) return;
+    const target = trainingTargetStatesRef.current.find((candidate) => candidate.id === targetId);
+    if (!target || target.weapon !== weapon || target.state.crashed) return;
+
+    target.state = { ...target.state, crashed: true };
+    const bulletTargetHit = progress.bulletTargetHit || weapon === 'bullet';
+    const rocketTargetHit = progress.rocketTargetHit || weapon === 'rocket';
+    trainingProgressRef.current = { ...progress, bulletTargetHit, rocketTargetHit };
+    setTrainingWeaponHits({ bullet: bulletTargetHit, rocket: rocketTargetHit });
+
+    if (bulletTargetHit && rocketTargetHit) {
+      completeTrainingLesson(TRAINING_WEAPONS_LESSON_INDEX);
+    }
+  }, [completeTrainingLesson, gameMode, gameStarted]);
   const updateAmmoStatus = useCallback((nextStatus) => {
     setAmmoStatus((current) =>
       current.count === nextStatus.count && current.reloading === nextStatus.reloading ? current : nextStatus,
@@ -1826,8 +1938,8 @@ function App() {
   useEffect(() => {
     if (roomLobby?.weather || gameMode === 'training') {
       if (gameMode === 'training') {
-        setFogActive(false);
-        setFogAnimationsPaused(true);
+        setFogActive(trainingWeatherLessonActive);
+        setFogAnimationsPaused(!trainingWeatherLessonActive);
       }
       return undefined;
     }
@@ -1851,11 +1963,11 @@ function App() {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [gameMode, roomLobby?.weather]);
+  }, [gameMode, roomLobby?.weather, trainingWeatherLessonActive]);
 
   useEffect(() => {
     if (roomLobby?.weather || gameMode === 'training') {
-      if (gameMode === 'training') setRainActive(false);
+      if (gameMode === 'training') setRainActive(trainingWeatherLessonActive);
       return undefined;
     }
     let stopped = false;
@@ -1878,7 +1990,7 @@ function App() {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [gameMode, roomLobby?.weather]);
+  }, [gameMode, roomLobby?.weather, trainingWeatherLessonActive]);
 
   useEffect(() => {
     window.clearTimeout(rainSoundStartTimerRef.current);
@@ -1976,6 +2088,8 @@ function App() {
   const isRoomGame = gameStarted && gameMode === 'room';
   const isTrainingGame = gameStarted && gameMode === 'training';
   const trainingFuelTargetActive = isTrainingGame && !trainingComplete && trainingLessonIndex === 3;
+  const trainingWeaponsTargetActive = isTrainingGame && !trainingComplete && trainingLessonIndex === TRAINING_WEAPONS_LESSON_INDEX;
+  const trainingWeatherCheckpointActive = isTrainingGame && !trainingComplete && trainingLessonIndex === TRAINING_WEATHER_LESSON_INDEX;
   const roomEnvironment = roomLobby?.weather?.seed ? roomLobby.weather : null;
   const roomPlayerIndex = roomPlayers.findIndex((player) => player.id === localRoomPlayerId);
   const roomSpawnX = isRoomGame && roomPlayerIndex >= 0
@@ -2597,6 +2711,8 @@ function App() {
         <TrainingFlightHud
           lessonIndex={trainingLessonIndex}
           banks={trainingBanks}
+          weaponHits={trainingWeaponHits}
+          weatherProgress={trainingWeatherProgress}
           complete={trainingComplete}
           onSkip={skipTrainingLesson}
         />
@@ -2626,6 +2742,25 @@ function App() {
             }}
           />
         ))}
+        {trainingWeaponsTargetActive && trainingTargetStatesRef.current.map((target) => !target.state.crashed && (
+          <span
+            key={target.id}
+            className="map-training-target-dot"
+            style={{
+              left: `${Math.max(3, Math.min(97, (target.state.x / WORLD_WIDTH) * 100))}%`,
+              top: `${Math.max(3, Math.min(97, 100 - ((target.state.y + 50) / WORLD_HEIGHT) * 100))}%`,
+            }}
+          />
+        ))}
+        {trainingWeatherCheckpointActive && trainingWeatherCheckpoint && (
+          <span
+            className="map-training-checkpoint-dot"
+            style={{
+              left: `${Math.max(3, Math.min(97, (trainingWeatherCheckpoint.x / WORLD_WIDTH) * 100))}%`,
+              top: `${Math.max(3, Math.min(97, 100 - ((trainingWeatherCheckpoint.y + 50) / WORLD_HEIGHT) * 100))}%`,
+            }}
+          />
+        )}
         {gameMode === 'bots' && botStateRefs.current.map((botState, index) => (
           <span
             key={index}
@@ -2763,6 +2898,8 @@ function App() {
               <i />
             </div>
           )}
+          <TrainingPracticeTargets active={trainingWeaponsTargetActive} targets={trainingTargetStatesRef.current} />
+          <TrainingFogCheckpoint active={trainingWeatherCheckpointActive} checkpoint={trainingWeatherCheckpoint} />
           {hayPlacements.map((hay, index) =>
             hay.type === 'bale' ? (
               <HayBale key={index} className="hay" style={{ left: `${hay.x}vw` }} />
@@ -2775,6 +2912,7 @@ function App() {
             onFuelChange={updateFuelGauge}
             onFuelRefill={handleFuelRefill}
             onSafeLanding={handleTrainingSafeLanding}
+            onTrainingTargetHit={handleTrainingTargetHit}
             onKill={recordPlayerKill}
             onPlayerDeath={resetCurrentKills}
             onAmmoChange={updateAmmoStatus}
@@ -2784,6 +2922,7 @@ function App() {
             onRoomHit={sendRoomHit}
             onRoomCrash={sendRoomCrash}
             roomTargetStatesRef={remotePlayerStatesRef}
+            trainingTargetStatesRef={trainingTargetStatesRef}
             playerApiRef={playerApiRef}
             botStateRefs={botStateRefs}
             botApiRefs={botApiRefs}
@@ -2881,18 +3020,50 @@ function App() {
   );
 }
 
-function TrainingFlightHud({ lessonIndex, banks, complete, onSkip }) {
+function TrainingPracticeTargets({ active, targets }) {
+  if (!active) return null;
+
+  return (
+    <div className="training-practice-target-layer" aria-hidden="true">
+      {targets.filter((target) => !target.state.crashed).map((target) => (
+        <div
+          key={target.id}
+          className={`training-practice-target training-practice-target-${target.weapon}`}
+          style={{ transform: `translate(${target.state.x}vw, ${-target.state.y}vh)` }}
+        >
+          <span>{target.label}</span>
+          <i><b /></i>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TrainingFogCheckpoint({ active, checkpoint }) {
+  if (!active || !checkpoint) return null;
+
+  return (
+    <div className="training-fog-checkpoint-layer" aria-hidden="true">
+      <div className="training-fog-checkpoint" style={{ transform: `translate(${checkpoint.x}vw, ${-checkpoint.y}vh)` }}>
+        <span>FOG GATE</span>
+        <i><b /><b /></i>
+      </div>
+    </div>
+  );
+}
+
+function TrainingFlightHud({ lessonIndex, banks, weaponHits, weatherProgress, complete, onSkip }) {
   const lesson = TRAINING_LESSONS[Math.min(lessonIndex, TRAINING_LESSONS.length - 1)];
   const heading = complete ? 'Flight cleared' : lesson.title;
   const objective = complete
-    ? 'Four core lessons complete. Keep flying in free practice, or restart to choose another mode.'
+    ? 'Six flight lessons complete. Keep flying in free practice, or restart to choose another mode.'
     : lesson.objective;
 
   return (
     <aside className="training-hud" aria-label="Training lesson" aria-live="polite">
       <header className="training-hud-header">
         <span>FLIGHT LESSON</span>
-        <strong>{complete ? '4 / 4' : `${lessonIndex + 1} / 4`}</strong>
+        <strong>{complete ? `${TRAINING_LESSONS.length} / ${TRAINING_LESSONS.length}` : `${lessonIndex + 1} / ${TRAINING_LESSONS.length}`}</strong>
       </header>
       <div className="training-hud-body">
         <span className={`training-hud-badge${complete ? ' training-hud-badge-complete' : ''}`} aria-hidden="true">{complete ? '✓' : lessonIndex + 1}</span>
@@ -2906,6 +3077,18 @@ function TrainingFlightHud({ lessonIndex, banks, complete, onSkip }) {
                 <span className="training-bank-checks" aria-label={`${banks.left ? 'A bank complete' : 'A bank remaining'}, ${banks.right ? 'D bank complete' : 'D bank remaining'}`}>
                   <i className={banks.left ? 'training-bank-complete' : ''}>A</i>
                   <i className={banks.right ? 'training-bank-complete' : ''}>D</i>
+                </span>
+              )}
+              {lesson.id === 'weapons' && (
+                <span className="training-task-checks" aria-label={`${weaponHits.bullet ? 'Bullet target complete' : 'Bullet target remaining'}, ${weaponHits.rocket ? 'Rocket target complete' : 'Rocket target remaining'}`}>
+                  <i className={weaponHits.bullet ? 'training-task-complete' : ''}>BULLETS</i>
+                  <i className={weaponHits.rocket ? 'training-task-complete' : ''}>ROCKET</i>
+                </span>
+              )}
+              {lesson.id === 'weather' && (
+                <span className="training-task-checks" aria-label={`${weatherProgress.light ? 'Fog light active' : 'Fog light off'}, ${weatherProgress.checkpoint ? 'Fog gate complete' : 'Fog gate remaining'}`}>
+                  <i className={weatherProgress.light ? 'training-task-complete' : ''}>LIGHT</i>
+                  <i className={weatherProgress.checkpoint ? 'training-task-complete' : ''}>GATE</i>
                 </span>
               )}
             </div>
@@ -3402,6 +3585,7 @@ function PlayablePlane({
   onFuelChange,
   onFuelRefill,
   onSafeLanding,
+  onTrainingTargetHit,
   onKill,
   onPlayerDeath,
   onAmmoChange,
@@ -3411,6 +3595,7 @@ function PlayablePlane({
   onRoomHit,
   onRoomCrash,
   roomTargetStatesRef,
+  trainingTargetStatesRef,
   playerApiRef,
   botStateRefs,
   botApiRefs,
@@ -3438,6 +3623,7 @@ function PlayablePlane({
   const sfxMutedRef = useRef(sfxMuted);
   const audioSettingsRef = useRef(audioSettings);
   const onSafeLandingRef = useRef(onSafeLanding);
+  const onTrainingTargetHitRef = useRef(onTrainingTargetHit);
   const controlsEnabledRef = useRef(controlsEnabled);
   const pausedRef = useRef(paused);
   const startArmedRef = useRef(startArmed);
@@ -3604,6 +3790,10 @@ function PlayablePlane({
   useEffect(() => {
     onSafeLandingRef.current = onSafeLanding;
   }, [onSafeLanding]);
+
+  useEffect(() => {
+    onTrainingTargetHitRef.current = onTrainingTargetHit;
+  }, [onTrainingTargetHit]);
 
   useEffect(() => {
     controlsEnabledRef.current = controlsEnabled;
@@ -4454,12 +4644,23 @@ function PlayablePlane({
         }))
         .filter((target) => target.state && !target.state.crashed);
 
+    const getTrainingTargets = () =>
+      (trainingTargetStatesRef?.current || [])
+        .filter((target) => target.state && !target.state.crashed)
+        .map((target) => ({
+          type: 'training-target',
+          id: target.id,
+          weapon: target.weapon,
+          state: target.state,
+        }));
+
     const updatePlayerRockets = (now) => {
       if (rocketProjectilesRef.current.length === 0) return;
       const targets = botTargetsActive
         ? botStateRefs.current.map((bot, index) => ({ type: 'bot', index, state: bot }))
         : [];
-      const nextRockets = updateGuidedRockets(rocketProjectilesRef.current, now, [...targets, ...getRoomTargets()]);
+      const rocketTrainingTargets = getTrainingTargets().filter((target) => target.weapon === 'rocket');
+      const nextRockets = updateGuidedRockets(rocketProjectilesRef.current, now, [...targets, ...rocketTrainingTargets, ...getRoomTargets()]);
       if (nextRockets !== rocketProjectilesRef.current) {
         rocketProjectilesRef.current = nextRockets;
         setRocketProjectiles(nextRockets);
@@ -4503,6 +4704,36 @@ function PlayablePlane({
           removeRocketProjectile(projectile.id);
           onRoomHit?.({ targetId: target.id, projectileId: projectile.id, weapon: 'rocket' });
           return;
+        }
+      }
+    };
+
+    const scanTrainingHits = (now) => {
+      const trainingTargets = getTrainingTargets();
+      if (!trainingTargets.length) return;
+
+      for (const projectile of projectilesRef.current) {
+        const segment = getProjectileSegment(projectile, now);
+        const target = trainingTargets.find((candidate) =>
+          candidate.weapon === 'bullet' && segmentHitsPlane(segment, candidate.state, projectile.radius ?? 1.05),
+        );
+        if (target) {
+          removeProjectile(projectile.id);
+          onTrainingTargetHitRef.current?.(target.id, 'bullet');
+          break;
+        }
+      }
+
+      for (const projectile of rocketProjectilesRef.current) {
+        if (projectile.groundHit) continue;
+        const segment = getRocketSegment(projectile);
+        const target = trainingTargets.find((candidate) =>
+          candidate.weapon === 'rocket' && segmentHitsPlane(segment, candidate.state, projectile.radius ?? 2.25),
+        );
+        if (target) {
+          removeRocketProjectile(projectile.id);
+          onTrainingTargetHitRef.current?.(target.id, 'rocket');
+          break;
         }
       }
     };
@@ -4556,6 +4787,7 @@ function PlayablePlane({
       if (next.crashed) {
         updatePlayerBulletRenders(now);
         updatePlayerRockets(now);
+        scanTrainingHits(now);
         scanBotHits(now);
         scanRoomHits(now, next);
         if (now - next.crashTime > 1450) {
@@ -4613,6 +4845,7 @@ function PlayablePlane({
       }
       updatePlayerBulletRenders(now);
       updatePlayerRockets(now);
+      scanTrainingHits(now);
       scanBotHits(now);
       scanRoomHits(now, next);
       onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });

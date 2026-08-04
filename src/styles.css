@@ -413,7 +413,7 @@ button {
   z-index: 23;
   left: 20px;
   top: 204px;
-  width: min(236px, calc(100vw - 40px));
+  width: min(270px, calc(100vw - 40px));
   box-sizing: border-box;
   border: 1px solid rgba(255, 226, 101, 0.74);
   border-radius: 7px;
@@ -427,30 +427,30 @@ button {
 }
 
 .training-hud-header {
-  min-height: 25px;
+  min-height: 27px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 5px 9px;
   border-bottom: 1px solid rgba(30, 47, 62, 0.2);
   background: rgba(40, 60, 77, 0.12);
 }
 
 .training-hud-header span {
   color: #3d5662;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 950;
   letter-spacing: 0.12em;
 }
 
 .training-hud-header strong {
-  min-width: 34px;
+  min-width: 39px;
   padding: 3px 5px;
   border-radius: 3px;
   color: #fff16f;
   background: #374b5e;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
   text-align: center;
   text-shadow: 0 0 5px rgba(255, 241, 111, 0.72);
@@ -458,15 +458,15 @@ button {
 
 .training-hud-body {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 33px minmax(0, 1fr);
+  gap: 9px;
   align-items: start;
-  padding: 8px 9px 7px;
+  padding: 9px 10px 8px;
 }
 
 .training-hud-badge {
-  width: 26px;
-  height: 26px;
+  width: 29px;
+  height: 29px;
   display: grid;
   place-items: center;
   border: 2px solid #344d5a;
@@ -474,7 +474,7 @@ button {
   color: #fff4bd;
   background: #a4422d;
   box-shadow: inset 0 -2px 0 rgba(71, 24, 18, 0.28);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 950;
 }
 
@@ -492,7 +492,7 @@ button {
 
 .training-hud h2 {
   color: #1d3544;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 950;
   line-height: 1;
 }
@@ -500,7 +500,7 @@ button {
 .training-hud p {
   margin-top: 4px;
   color: #3c5661;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 750;
   line-height: 1.22;
 }
@@ -514,11 +514,11 @@ button {
 }
 
 .training-hud .gazette-key {
-  min-width: 20px;
-  min-height: 19px;
-  padding: 2px 4px;
+  min-width: 22px;
+  min-height: 21px;
+  padding: 2px 5px;
   border-width: 1px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .training-bank-checks {
@@ -549,16 +549,46 @@ button {
   box-shadow: 0 0 6px rgba(109, 255, 139, 0.48);
 }
 
+.training-task-checks {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.training-task-checks i {
+  min-height: 19px;
+  display: grid;
+  place-items: center;
+  padding: 1px 5px;
+  border: 1px solid rgba(44, 64, 77, 0.38);
+  border-radius: 3px;
+  color: #60747c;
+  background: rgba(57, 75, 89, 0.12);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+}
+
+.training-task-checks .training-task-complete {
+  color: #164c2a;
+  border-color: rgba(33, 122, 62, 0.68);
+  background: #6dff8b;
+  box-shadow: 0 0 6px rgba(109, 255, 139, 0.48);
+}
+
 .training-hud-skip {
   width: 100%;
-  min-height: 23px;
+  min-height: 25px;
   padding: 4px 8px;
   border: 0;
   border-top: 1px solid rgba(30, 47, 62, 0.18);
   border-radius: 0 0 6px 6px;
   color: #485f69;
   background: rgba(52, 73, 85, 0.1);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.05em;
   cursor: pointer;
@@ -4963,6 +4993,29 @@ button {
   animation: trainingFuelDotPulse 900ms ease-in-out infinite;
 }
 
+.map-training-target-dot,
+.map-training-checkpoint-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.map-training-target-dot {
+  border: 1px solid rgba(114, 53, 7, 0.92);
+  background: #ffb21f;
+  box-shadow: 0 0 0 2px rgba(255, 187, 38, 0.2), 0 0 11px rgba(255, 188, 42, 0.92);
+  animation: trainingFuelDotPulse 850ms ease-in-out infinite;
+}
+
+.map-training-checkpoint-dot {
+  border: 1px solid rgba(117, 231, 255, 0.92);
+  background: #68e8ff;
+  box-shadow: 0 0 0 2px rgba(104, 232, 255, 0.2), 0 0 12px rgba(104, 232, 255, 0.94);
+  animation: trainingFuelDotPulse 820ms ease-in-out infinite;
+}
+
 .map-pointer-dot {
   position: absolute;
   width: 14px;
@@ -5993,6 +6046,131 @@ button {
   filter: drop-shadow(0 2px 1px rgba(93, 56, 9, 0.4));
 }
 
+.training-practice-target-layer,
+.training-fog-checkpoint-layer {
+  position: absolute;
+  z-index: 14;
+  inset: 0;
+  pointer-events: none;
+}
+
+.training-practice-target,
+.training-fog-checkpoint {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% - 2px);
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+
+.training-practice-target > span,
+.training-fog-checkpoint > span {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  padding: 3px 5px;
+  border: 1px solid #73500e;
+  border-radius: 3px;
+  color: #3e2d09;
+  background: #ffe463;
+  box-shadow: 0 0 10px rgba(255, 218, 78, 0.82), inset 0 -2px 0 rgba(143, 91, 9, 0.2);
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+}
+
+.training-practice-target > i {
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 3px solid #ffbf2d;
+  border-radius: 50%;
+  background: rgba(42, 64, 82, 0.68);
+  box-shadow: 0 0 0 3px rgba(255, 190, 44, 0.18), 0 0 17px rgba(255, 190, 44, 0.88);
+  transform: translateX(-50%);
+  animation: trainingTargetPulse 900ms ease-in-out infinite;
+}
+
+.training-practice-target > i::before,
+.training-practice-target > i::after {
+  content: "";
+  position: absolute;
+  background: rgba(255, 231, 130, 0.94);
+}
+
+.training-practice-target > i::before {
+  width: 3px;
+  height: 100%;
+}
+
+.training-practice-target > i::after {
+  width: 100%;
+  height: 3px;
+}
+
+.training-practice-target > i b {
+  position: relative;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff6538;
+  box-shadow: 0 0 7px rgba(255, 80, 45, 0.92);
+}
+
+.training-practice-target-rocket > i {
+  border-color: #73e9ff;
+  box-shadow: 0 0 0 3px rgba(115, 233, 255, 0.2), 0 0 17px rgba(115, 233, 255, 0.9);
+}
+
+.training-practice-target-rocket > i b {
+  background: #7cf3ff;
+  box-shadow: 0 0 7px rgba(115, 233, 255, 0.94);
+}
+
+.training-fog-checkpoint > span {
+  bottom: 35px;
+  color: #073f51;
+  border-color: #12738f;
+  background: #8df2ff;
+  box-shadow: 0 0 12px rgba(114, 233, 255, 0.92), inset 0 -2px 0 rgba(5, 103, 133, 0.2);
+}
+
+.training-fog-checkpoint > i {
+  position: absolute;
+  left: 50%;
+  bottom: -25px;
+  width: 52px;
+  height: 52px;
+  box-sizing: border-box;
+  border: 4px solid #7ceeff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 5px rgba(113, 233, 255, 0.17), 0 0 26px rgba(113, 233, 255, 0.88), inset 0 0 14px rgba(113, 233, 255, 0.22);
+  transform: translateX(-50%);
+  animation: trainingFogGatePulse 1.05s ease-in-out infinite;
+}
+
+.training-fog-checkpoint > i b {
+  position: absolute;
+  top: -7px;
+  bottom: -7px;
+  width: 3px;
+  border-radius: 3px;
+  background: #d7fbff;
+  box-shadow: 0 0 8px rgba(168, 247, 255, 0.94);
+}
+
+.training-fog-checkpoint > i b:first-child { left: 9px; }
+.training-fog-checkpoint > i b:last-child { right: 9px; }
+
 @keyframes trainingFuelDotPulse {
   0%, 100% { transform: translate(-50%, 50%) scale(0.88); }
   50% { transform: translate(-50%, 50%) scale(1.2); }
@@ -6001,6 +6179,16 @@ button {
 @keyframes trainingFuelMarkerBob {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
+}
+
+@keyframes trainingTargetPulse {
+  0%, 100% { transform: translateX(-50%) scale(0.88); }
+  50% { transform: translateX(-50%) scale(1.12); }
+}
+
+@keyframes trainingFogGatePulse {
+  0%, 100% { transform: translateX(-50%) scale(0.92); opacity: 0.82; }
+  50% { transform: translateX(-50%) scale(1.08); opacity: 1; }
 }
 
 .hut {
@@ -7583,7 +7771,7 @@ button {
   .training-hud {
     left: 12px;
     top: 192px;
-    width: min(224px, calc(100vw - 24px));
+    width: min(252px, calc(100vw - 24px));
   }
 
   .room-leaderboard {
