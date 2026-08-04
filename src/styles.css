@@ -579,6 +579,102 @@ button {
   box-shadow: 0 0 6px rgba(109, 255, 139, 0.48);
 }
 
+.training-fuel-map-lesson {
+  display: grid;
+  grid-template-columns: 47px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  padding: 5px 6px;
+  border: 1px solid rgba(116, 84, 10, 0.42);
+  border-radius: 4px;
+  background: rgba(255, 233, 113, 0.19);
+  box-shadow: inset 0 -2px 0 rgba(111, 77, 9, 0.1);
+}
+
+.training-fuel-map-track {
+  position: relative;
+  height: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(42, 65, 78, 0.34);
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, rgba(52, 88, 103, 0.16) 0 44%, transparent 44% 48%, rgba(52, 88, 103, 0.16) 48% 100%),
+    rgba(34, 55, 70, 0.12);
+}
+
+.training-fuel-map-track::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  left: 8px;
+  height: 1px;
+  background: rgba(40, 55, 64, 0.36);
+  transform: translateY(-50%);
+}
+
+.training-fuel-map-player-dot,
+.training-fuel-map-pump-dot {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(30, 49, 57, 0.72);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.training-fuel-map-player-dot {
+  left: 11px;
+  background: #63f18a;
+  box-shadow: 0 0 5px rgba(80, 248, 124, 0.82);
+}
+
+.training-fuel-map-pump-dot {
+  left: calc(100% - 11px);
+  background: #ffe45c;
+  box-shadow: 0 0 7px rgba(255, 218, 74, 0.92);
+  animation: trainingFuelLessonDotPulse 920ms ease-in-out infinite;
+}
+
+.training-fuel-map-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.training-fuel-map-copy strong {
+  color: #5d4309;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: 0.045em;
+  line-height: 1.05;
+}
+
+.training-fuel-map-copy small {
+  color: #405965;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1.13;
+}
+
+.training-fuel-map-close {
+  border-color: rgba(105, 157, 42, 0.74);
+  background: rgba(149, 241, 101, 0.2);
+  box-shadow: 0 0 9px rgba(119, 229, 84, 0.26), inset 0 -2px 0 rgba(54, 107, 26, 0.12);
+}
+
+.training-fuel-map-close .training-fuel-map-pump-dot {
+  animation-duration: 560ms;
+}
+
+@keyframes trainingFuelLessonDotPulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(0.86); }
+  50% { transform: translate(-50%, -50%) scale(1.27); }
+}
+
 .training-hud-skip {
   width: 100%;
   min-height: 25px;
@@ -5624,6 +5720,35 @@ button {
 
 .scene-dark .training-hud h2 {
   color: #f2f8ff;
+}
+
+.scene-dark .training-fuel-map-lesson {
+  border-color: rgba(255, 222, 88, 0.46);
+  background: rgba(255, 222, 88, 0.14);
+}
+
+.scene-dark .training-fuel-map-track {
+  border-color: rgba(224, 240, 245, 0.28);
+  background:
+    linear-gradient(90deg, rgba(175, 222, 232, 0.15) 0 44%, transparent 44% 48%, rgba(175, 222, 232, 0.15) 48% 100%),
+    rgba(10, 25, 40, 0.26);
+}
+
+.scene-dark .training-fuel-map-track::before {
+  background: rgba(230, 246, 249, 0.28);
+}
+
+.scene-dark .training-fuel-map-copy strong {
+  color: #fff091;
+}
+
+.scene-dark .training-fuel-map-copy small {
+  color: rgba(237, 247, 250, 0.84);
+}
+
+.scene-dark .training-fuel-map-close {
+  border-color: rgba(126, 242, 125, 0.66);
+  background: rgba(91, 196, 102, 0.2);
 }
 
 .scene-dark .training-hud-skip {

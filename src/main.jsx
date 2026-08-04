@@ -123,15 +123,15 @@ const TRAINING_FUEL_STATION_INDEX = fuelTankPlacements.reduce(
 );
 const TRAINING_FUEL_STATION_X = fuelTankPlacements[TRAINING_FUEL_STATION_INDEX];
 const TRAINING_WEAPON_TARGETS = [
-  { id: 'training-static-target-1', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 28, y: 14, angle: 16, radius: 2.3 },
-  { id: 'training-static-target-2', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 72, y: 20, angle: 16, radius: 2.3 },
-  { id: 'training-static-target-3', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 118, y: 16, angle: 16, radius: 2.3 },
-  { id: 'training-static-target-4', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 164, y: 23, angle: 16, radius: 2.3 },
-  { id: 'training-static-target-5', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 210, y: 18, angle: 16, radius: 2.3 },
-  { id: 'training-moving-target-1', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 164, y: 28, angle: 16, radius: 2.45, motion: { x: 10, y: 2.5, speed: 0.00075, phase: 0.2 } },
-  { id: 'training-moving-target-2', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 208, y: 17, angle: 16, radius: 2.45, motion: { x: 8, y: 3.4, speed: 0.00062, phase: 2.1 } },
-  { id: 'training-moving-target-3', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 252, y: 24, angle: 16, radius: 2.45, motion: { x: 11, y: 2.2, speed: 0.0007, phase: 4.35 } },
-  { id: 'training-rocket-target', targetType: 'rocket', weapon: 'rocket', label: 'ROCKET', x: START_X - 270, y: 23, angle: 16, radius: 2.8 },
+  { id: 'training-static-target-1', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 28, y: 30, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-2', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 72, y: 37, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-3', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 118, y: 33, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-4', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 164, y: 42, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-5', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 210, y: 36, angle: 16, radius: 2.3 },
+  { id: 'training-moving-target-1', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 164, y: 46, angle: 16, radius: 2.45, motion: { x: 10, y: 2.5, speed: 0.00075, phase: 0.2 } },
+  { id: 'training-moving-target-2', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 208, y: 35, angle: 16, radius: 2.45, motion: { x: 8, y: 3.4, speed: 0.00062, phase: 2.1 } },
+  { id: 'training-moving-target-3', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 252, y: 41, angle: 16, radius: 2.45, motion: { x: 11, y: 2.2, speed: 0.0007, phase: 4.35 } },
+  { id: 'training-rocket-target', targetType: 'rocket', weapon: 'rocket', label: 'ROCKET', x: START_X - 270, y: 39, angle: 16, radius: 2.8 },
 ];
 const createTrainingWeaponTargets = () => TRAINING_WEAPON_TARGETS.map((target) => ({
   ...target,
@@ -173,7 +173,7 @@ const TRAINING_LESSONS = [
   {
     id: 'refuel',
     title: 'Refuel',
-    objective: 'Take off again and touch the glowing fuel station ahead.',
+    objective: 'Take off again. Follow the yellow map dot to the glowing fuel station ahead.',
     keys: ['W', '↑'],
   },
   {
@@ -265,6 +265,7 @@ function App() {
   const [trainingBanks, setTrainingBanks] = useState({ left: false, right: false });
   const [trainingWeaponHits, setTrainingWeaponHits] = useState(createTrainingWeaponProgress);
   const [trainingWeatherProgress, setTrainingWeatherProgress] = useState({ light: false, checkpoint: false });
+  const [trainingFuelApproach, setTrainingFuelApproach] = useState('follow');
   const [trainingWeatherCheckpoint, setTrainingWeatherCheckpoint] = useState(null);
   const [trainingComplete, setTrainingComplete] = useState(false);
   const [restartSignal, setRestartSignal] = useState(0);
@@ -342,6 +343,7 @@ function App() {
     rocketTargetHit: false,
     fogLightOn: false,
     fogCheckpointCleared: false,
+    fuelApproach: 'follow',
     complete: false,
   });
   const trainingTargetStatesRef = useRef(createTrainingWeaponTargets());
@@ -432,6 +434,7 @@ function App() {
       rocketTargetHit: false,
       fogLightOn: false,
       fogCheckpointCleared: false,
+      fuelApproach: 'follow',
       complete: false,
     };
     trainingTargetStatesRef.current = createTrainingWeaponTargets();
@@ -440,6 +443,7 @@ function App() {
     setTrainingBanks({ left: false, right: false });
     setTrainingWeaponHits(createTrainingWeaponProgress());
     setTrainingWeatherProgress({ light: false, checkpoint: false });
+    setTrainingFuelApproach('follow');
     setTrainingWeatherCheckpoint(null);
     setTrainingComplete(false);
   }, []);
@@ -460,6 +464,7 @@ function App() {
       rocketTargetHit: false,
       fogLightOn: false,
       fogCheckpointCleared: false,
+      fuelApproach: 'follow',
       complete,
     };
     if (expectedLessonIndex === TRAINING_WEAPONS_LESSON_INDEX) {
@@ -476,6 +481,7 @@ function App() {
     setTrainingBanks({ left: false, right: false });
     setTrainingWeaponHits(createTrainingWeaponProgress());
     setTrainingWeatherProgress({ light: false, checkpoint: false });
+    setTrainingFuelApproach('follow');
     setTrainingComplete(complete);
   }, []);
   const skipTrainingLesson = useCallback(() => {
@@ -1659,6 +1665,15 @@ function App() {
       }
     }
 
+    if (progress.lessonIndex === 3) {
+      const fuelApproach = Math.abs(planeState.x - TRAINING_FUEL_STATION_X) <= 28 ? 'close' : 'follow';
+      if (fuelApproach !== progress.fuelApproach) {
+        trainingProgressRef.current = { ...progress, fuelApproach };
+        setTrainingFuelApproach(fuelApproach);
+      }
+      return;
+    }
+
     if (progress.lessonIndex === TRAINING_WEATHER_LESSON_INDEX) {
       const checkpoint = trainingWeatherCheckpointRef.current;
       const fogLightOn = Boolean(planeState.searchLightOn);
@@ -2795,6 +2810,7 @@ function App() {
           banks={trainingBanks}
           weaponHits={trainingWeaponHits}
           weatherProgress={trainingWeatherProgress}
+          fuelApproach={trainingFuelApproach}
           complete={trainingComplete}
           onSkip={skipTrainingLesson}
         />
@@ -3200,7 +3216,7 @@ function TrainingFogCheckpoint({ active, checkpoint }) {
   );
 }
 
-function TrainingFlightHud({ lessonIndex, banks, weaponHits, weatherProgress, complete, onSkip }) {
+function TrainingFlightHud({ lessonIndex, banks, weaponHits, weatherProgress, fuelApproach, complete, onSkip }) {
   const lesson = TRAINING_LESSONS[Math.min(lessonIndex, TRAINING_LESSONS.length - 1)];
   const heading = complete ? 'Flight cleared' : lesson.title;
   const objective = complete
@@ -3240,6 +3256,18 @@ function TrainingFlightHud({ lessonIndex, banks, weaponHits, weatherProgress, co
                   <i className={weatherProgress.checkpoint ? 'training-task-complete' : ''}>GATE</i>
                 </span>
               )}
+            </div>
+          )}
+          {!complete && lesson.id === 'refuel' && (
+            <div className={`training-fuel-map-lesson training-fuel-map-${fuelApproach}`}>
+              <span className="training-fuel-map-track" aria-hidden="true">
+                <i className="training-fuel-map-player-dot" />
+                <i className="training-fuel-map-pump-dot" />
+              </span>
+              <span className="training-fuel-map-copy">
+                <strong>YELLOW DOT = FUEL PUMP</strong>
+                <small>{fuelApproach === 'close' ? 'Pump close — touch it to refill the tank.' : 'Green dot is you — fly toward yellow.'}</small>
+              </span>
             </div>
           )}
         </div>
