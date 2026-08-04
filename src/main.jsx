@@ -3030,33 +3030,58 @@ function GuideWeatherPage() {
   return (
     <>
       <GazetteHeader
-        issue="ATMOSPHERE AND AUDIO"
-        headline="Tune the night. Cut through the fog."
-        deck="Weather makes the field feel alive; the left-side tools keep every sound, light, and song under your control."
+        issue="WEATHER DESK"
+        headline="Watch the sky change."
+        deck="This live Field Guide reel follows the world through rain, fog, clear air, night, and back to day — the same atmosphere that surrounds every flight."
       />
-      <div className="gazette-weather-layout">
-        <section className="gazette-weather-scene">
-          <span className="gazette-moon-demo" /><span className="gazette-rain-demo"><i /><i /><i /><i /><i /></span>
-          <span className="gazette-fog-demo" /><span className="gazette-fog-demo gazette-fog-demo-two" />
-          <img src="/assets/exact-plane.png" alt="Bit Plane using its fog light" draggable="false" />
-          <span className="gazette-light-cone" />
-          <span className="gazette-beacon-demo gazette-beacon-front" /><span className="gazette-beacon-demo gazette-beacon-back" />
-        </section>
-        <section className="gazette-weather-copy">
-          <h4>Day, night, rain, and fog</h4>
-          <p>The bulb button switches the whole world between light and dark mode. In dark mode, the moon, stars, fuel beacons, and plane navigation lights become visible.</p>
-          <p>Fog stays low over the farm. Press <PixelKey>L</PixelKey> to project the cone light in front of the plane and reveal what is ahead. Rain starts and fades with its own softer sound.</p>
-          <p>Clouds, trees, huts, grass, hay, moving cows, the sun, moon, stars, and occasional shooting stars make up the living background. Hay is scenery until a plane physically collides with it.</p>
-          <p>Your plane has two pulsing beacons. The plane selector changes body color, and offers red/green, amber/cyan, or violet/lime beacon pairs. The settings panel controls their intensity.</p>
-        </section>
-      </div>
-      <div className="gazette-audio-report">
-        <section className="gazette-music-panel-demo"><img src="/assets/music-note-icon-transparent.png" alt="Music note" draggable="false" /><div>{Array.from({ length: 10 }, (_, index) => <span key={index}>{index + 1}</span>)}</div><b>VOLUME</b><i /></section>
-        <section>
-          <h4>Music and game sound</h4>
-          <p>The note button opens ten songs and the music volume slider. The speaker button mutes or restores engine, bullets, rockets, rain, crashes, and hit sounds without stopping the game.</p>
-          <p>The green gear opens individual sliders for propeller, ammo, rocket, rain, and plane beacon brightness. Music keeps its own slider in the song panel.</p>
-        </section>
+      <section className="gazette-weather-live-preview" role="img" aria-label="Animated Field Guide weather preview cycling through rain, fog, clear air, night, and day">
+        <div className="gazette-weather-live-sky">
+          <span className="gazette-weather-live-sun" aria-hidden="true" />
+          <span className="gazette-weather-live-moon" aria-hidden="true" />
+          <span className="gazette-weather-live-stars" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></span>
+          <span className="gazette-weather-live-cloud gazette-weather-live-cloud-one" aria-hidden="true" />
+          <span className="gazette-weather-live-cloud gazette-weather-live-cloud-two" aria-hidden="true" />
+          <span className="gazette-weather-live-rain" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <i key={index} />)}</span>
+          <span className="gazette-weather-live-fog gazette-weather-live-fog-back" aria-hidden="true" />
+          <span className="gazette-weather-live-fog gazette-weather-live-fog-front" aria-hidden="true" />
+          <span className="gazette-weather-live-forest gazette-weather-live-forest-back" aria-hidden="true" />
+          <span className="gazette-weather-live-forest gazette-weather-live-forest-front" aria-hidden="true" />
+          <Hut className="gazette-weather-live-hut" variant="low" />
+          <span className="gazette-weather-live-ground" aria-hidden="true" />
+          <img src="/assets/exact-plane.png" alt="" draggable="false" />
+          <span className="gazette-weather-live-light-cone" aria-hidden="true" />
+          <span className="gazette-weather-live-beacon gazette-weather-live-beacon-front" aria-hidden="true" />
+          <span className="gazette-weather-live-beacon gazette-weather-live-beacon-back" aria-hidden="true" />
+          <div className="gazette-weather-live-readout" aria-hidden="true">
+            <span className="gazette-weather-live-state gazette-weather-live-state-rain">RAIN</span>
+            <span className="gazette-weather-live-state gazette-weather-live-state-fog">FOG</span>
+            <span className="gazette-weather-live-state gazette-weather-live-state-clear">CLEAR</span>
+            <span className="gazette-weather-live-state gazette-weather-live-state-night">NIGHT</span>
+            <span className="gazette-weather-live-state gazette-weather-live-state-day">DAY</span>
+          </div>
+        </div>
+        <div className="gazette-weather-live-caption">
+          <span>LIVE WEATHER PREVIEW</span>
+          <p>Rain → fog → clear → night → day. The final day scene gives the reel a calm reset before the next weather pass.</p>
+        </div>
+      </section>
+      <div className="gazette-weather-guide">
+        <article>
+          <span className="gazette-weather-guide-icon gazette-weather-guide-rain">///</span>
+          <div><h4>Rain</h4><p>Rain fades in and out over the farm with its own softer game-sound channel. In a room, every pilot sees the same rain state.</p></div>
+        </article>
+        <article>
+          <span className="gazette-weather-guide-icon gazette-weather-guide-fog">≈</span>
+          <div><h4>Fog + light</h4><p>Fog stays low across the runway. Press <PixelKey>L</PixelKey> to toggle the forward fog light and make the air ahead easier to read.</p></div>
+        </article>
+        <article>
+          <span className="gazette-weather-guide-icon gazette-weather-guide-theme">☼</span>
+          <div><h4>Clear, night, and day</h4><p>The bulb on the left console switches between day and night. At night, the moon, stars, fuel beacons, and plane navigation lights stand out.</p></div>
+        </article>
+        <article>
+          <span className="gazette-weather-guide-icon gazette-weather-guide-lights">••</span>
+          <div><h4>Plane lights</h4><p>The plane panel chooses red/green, amber/cyan, or violet/lime beacons. The Flight Deck setting controls their brightness independently.</p></div>
+        </article>
       </div>
     </>
   );
