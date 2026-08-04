@@ -3146,40 +3146,87 @@ function GuideWeatherReplay() {
 }
 
 function GuideRoomPage() {
+  const roomDemoPilots = PLANE_COLOR_OPTIONS.slice(0, 3);
+
   return (
     <>
       <GazetteHeader
         issue="ROOM DISPATCH"
-        headline="Share one sky with six pilots"
-        deck="Room mode turns the map into a live match: shared weather, shared cows, names, voice, scores, and respawns."
+        headline="Six pilots. One shared sky."
+        deck="Create a room or enter a code, meet in the lobby, then let the host launch one live multiplayer match."
       />
       <div className="gazette-room-layout">
-        <section className="gazette-room-flow">
-          <div className="gazette-room-step"><span>1</span><div><h4>Create</h4><p>Type your name, choose dark or light, and receive a six-character room code. The host can start with one to six players.</p></div></div>
-          <div className="gazette-room-step"><span>2</span><div><h4>Join</h4><p>Enter your name on the left and the code on the right. Every joining pilot is assigned one of six body colors.</p></div></div>
-          <div className="gazette-room-step"><span>3</span><div><h4>Fly together</h4><p>Weather, fog, rain, cows, fuel stations, projectiles, plane lights, deaths, and respawns are shared inside the same room.</p></div></div>
+        <section className="gazette-room-entry">
+          <div className="gazette-room-section-intro">
+            <span>1</span>
+            <div>
+              <h4>Choose your way in</h4>
+              <p>Open <strong>Room</strong> on the start screen. A host creates the room; every other pilot joins with its code.</p>
+            </div>
+          </div>
+          <div className="gazette-room-entry-cards" aria-label="Create and join room examples">
+            <article className="gazette-room-entry-card">
+              <header><b>CREATE</b><span>HOST A MATCH</span></header>
+              <div className="gazette-room-field"><span>YOUR NAME</span><strong>SKY PILOT</strong></div>
+              <div className="gazette-room-entry-actions">
+                <div className="gazette-room-theme-demo"><b>Dark</b><span>Light</span></div>
+                <strong className="gazette-room-entry-button">Create</strong>
+              </div>
+              <p>Choose the shared dark or light theme. Creating gives the host a six-character room code.</p>
+            </article>
+            <article className="gazette-room-entry-card">
+              <header><b>JOIN</b><span>ENTER A CODE</span></header>
+              <div className="gazette-room-field"><span>YOUR NAME</span><strong>SKY PILOT</strong></div>
+              <div className="gazette-room-field gazette-room-field-code"><span>CODE</span><strong>SKY742</strong></div>
+              <strong className="gazette-room-entry-button gazette-room-entry-button-wide">Join room</strong>
+              <p>Enter the host's code before the match begins. A free plane colour is assigned automatically.</p>
+            </article>
+          </div>
         </section>
         <aside className="gazette-lobby-demo" aria-label="Room lobby illustration">
+          <div className="gazette-room-lobby-header-demo">
+            <div><b>ROOM</b><span>WAITING FOR PILOTS</span></div>
+            <strong>3/6</strong>
+          </div>
           <div className="gazette-room-code-demo"><span>CODE</span><strong>SKY742</strong></div>
-          <div className="gazette-room-theme-demo"><b>Dark</b><span>Light</span></div>
-          {PLANE_COLOR_OPTIONS.slice(0, 6).map((option, index) => (
-            <div key={option.id} className="gazette-room-player-demo"><img src={option.staticSrc} alt="" draggable="false" /><span>{index === 0 ? 'Host pilot' : `Pilot ${index + 1}`}</span></div>
-          ))}
+          <div className="gazette-room-lobby-settings">
+            <div className="gazette-room-theme-demo"><b>Dark</b><span>Light</span></div>
+            <div className="gazette-room-audio-demo"><RoomMicIcon className="gazette-room-audio-icon" /><b>Mic on</b></div>
+            <div className="gazette-room-audio-demo"><RoomSpeakerIcon className="gazette-room-audio-icon" /><b>Speaker on</b></div>
+          </div>
+          <div className="gazette-room-player-list-demo">
+            {roomDemoPilots.map((option, index) => (
+              <div key={option.id} className="gazette-room-player-demo">
+                <img src={option.staticSrc} alt="" draggable="false" />
+                <span>{index === 0 ? 'Sky Pilot · Host' : `Pilot ${index + 1} · ${option.label}`}</span>
+              </div>
+            ))}
+            {[4, 5, 6].map((slot) => (
+              <div key={slot} className="gazette-room-player-demo gazette-room-player-waiting"><b>{slot}</b><span>Waiting</span></div>
+            ))}
+          </div>
+          <div className="gazette-room-lobby-actions-demo"><span>Leave</span><span>Delete room</span><b>Start match</b></div>
         </aside>
+      </div>
+      <div className="gazette-mode-strip gazette-room-mode-strip">
+        <section><span className="gazette-mode-number">1</span><h4>Share the code</h4><p>The code is the invitation. A room holds from one to six pilots and cannot be joined after the match starts.</p></section>
+        <section><span className="gazette-mode-number">2</span><h4>Set up in the lobby</h4><p>Check the shared dark / light theme, pilot slots, microphone, and speaker before takeoff.</p></section>
+        <section><span className="gazette-mode-number">3</span><h4>Host starts the sky</h4><p>Only the current host can start or delete the room. If the host leaves, another connected pilot becomes host.</p></section>
       </div>
       <div className="gazette-leaderboard-report">
         <section className="gazette-leaderboard-demo">
           <h4>LEADERBOARD</h4>
-          <p><b>1</b><span>Player One</span><strong>4</strong><i className="gazette-mic-demo">M</i><i className="gazette-speaker-demo">S</i><em><u /><u /><u /></em></p>
-          <p><b>2</b><span>Player Two</span><strong>2</strong><i className="gazette-speaker-demo">S</i><em><u /><u /><u /></em></p>
+          <p><b>1</b><span>Sky Pilot</span><strong>4</strong><i><RoomMicIcon className="gazette-room-board-icon" /></i><i><RoomSpeakerIcon className="gazette-room-board-icon" /></i><em><u /><u /><u /></em></p>
+          <p><b>2</b><span>Orbit</span><strong>2</strong><i className="gazette-room-board-space" /><i><RoomSpeakerIcon className="gazette-room-board-icon" /></i><em><u /><u /><u /></em></p>
+          <p><b>3</b><span>Nova</span><strong>1</strong><i className="gazette-room-board-space" /><i><RoomSpeakerIcon className="gazette-room-board-icon" /></i><em className="gazette-room-bars-idle"><u /><u /><u /></em></p>
         </section>
         <section>
-          <h4>Voice, score, and room rules</h4>
-          <p>In the lobby, use <strong>Mic</strong> and <strong>Speaker</strong> controls before starting. In the live leaderboard, your own row has mic and speaker controls. Other pilots show speaker only, so you can mute an individual player without changing their microphone.</p>
-          <p>Green voice bars react to microphone volume. Higher kills rise in the leaderboard. When a pilot leaves, everyone receives a message. A plane death respawns that pilot; it does not reload or reset the room.</p>
+          <h4>Live board, voice, and shared world</h4>
+          <p>Once the host starts, the upper-left panel becomes the live leaderboard. Pilots are ranked by kills. Your row has <strong>Mic</strong> and <strong>Speaker</strong>; other rows keep an individual speaker control so you can mute one pilot.</p>
+          <p>Green bars move when an enabled microphone is speaking. Turning Mic on asks the browser for microphone access. The room shares weather, cows, fuel stations, projectiles, plane lights, crashes, and respawns—so everyone sees the same match.</p>
         </section>
       </div>
-      <p className="gazette-caption">Room host: change the room theme, start the match, leave, or delete the room. If the host leaves normally, another player becomes host.</p>
+      <p className="gazette-caption">Room host: set the shared theme, start the match, or delete the room. Leaving hands host control to a remaining connected pilot; a crash respawns that pilot without resetting the room.</p>
     </>
   );
 }
