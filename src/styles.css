@@ -2697,6 +2697,372 @@ button {
   line-height: 1.25;
 }
 
+.gazette-top-hud-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  border-bottom: 2px solid #263442;
+}
+
+.gazette-top-hud-map,
+.gazette-top-hud-resources {
+  padding: 16px 18px;
+}
+
+.gazette-top-hud-map {
+  border-right: 2px solid #263442;
+}
+
+.gazette-top-hud-map h4,
+.gazette-top-hud-resources h4,
+.gazette-station-copy h4 {
+  margin: 0 0 8px;
+  color: #263442;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.gazette-top-hud-map-demo {
+  height: 132px;
+  background: #70828d;
+}
+
+.gazette-top-hud-map-demo .gazette-map-dot-player {
+  width: 20px;
+  height: 20px;
+}
+
+.gazette-top-hud-legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.gazette-top-hud-legend p {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 13px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.gazette-top-hud-legend .gazette-map-dot {
+  position: relative;
+  left: auto;
+  top: auto;
+  width: 10px;
+  height: 10px;
+}
+
+.gazette-top-hud-edge-note {
+  margin: 9px 0 0;
+  color: #42575c;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.24;
+}
+
+.gazette-top-hud-instrument-art {
+  display: grid;
+  grid-template-areas:
+    'fuel ammo'
+    'fuel rockets';
+  grid-template-columns: minmax(152px, 0.9fr) minmax(0, 1.1fr);
+  grid-template-rows: minmax(74px, 1fr) minmax(58px, 0.8fr);
+  gap: 7px;
+}
+
+.gazette-top-hud-fuel-art,
+.gazette-top-hud-ammo-art,
+.gazette-top-hud-rocket-art {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 2px solid #53606b;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #b9c3cb 0%, #97a5b0 100%);
+  box-shadow: inset 0 -4px 0 rgba(52, 66, 76, 0.16);
+}
+
+.gazette-top-hud-fuel-art {
+  grid-area: fuel;
+  align-content: center;
+  overflow: hidden;
+}
+
+.gazette-top-hud-ammo-art { grid-area: ammo; }
+.gazette-top-hud-rocket-art { grid-area: rockets; }
+
+.gazette-top-hud-fuel-art > b,
+.gazette-top-hud-ammo-art > b,
+.gazette-top-hud-rocket-art > b {
+  color: #263442;
+  font: 900 8px/1 Arial, sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.gazette-top-hud-fuel-art .gazette-fuel-gauge-demo {
+  width: 144px;
+  height: 73px;
+  margin: 0 0 4px;
+  transform: scale(0.9);
+  transform-origin: bottom center;
+}
+
+.gazette-top-hud-ammo-art {
+  align-content: center;
+  gap: 3px;
+}
+
+.gazette-top-hud-ammo-art > div {
+  display: flex;
+  gap: 5px;
+  align-items: end;
+}
+
+.gazette-top-hud-ammo-art .guide-bullet-art {
+  width: 12px;
+  height: 37px;
+  border-width: 2px;
+  border-radius: 8px 8px 2px 2px;
+  box-shadow: inset 0 -13px 0 #ffe35a;
+}
+
+.gazette-top-hud-rocket-art {
+  align-content: center;
+  gap: 2px;
+}
+
+.gazette-top-hud-rocket-art > div {
+  display: flex;
+  gap: 17px;
+}
+
+.gazette-top-hud-rocket-art .guide-rocket-art {
+  width: 43px;
+  height: 14px;
+  border-width: 2px;
+}
+
+.gazette-top-hud-rocket-art .guide-rocket-art::before {
+  left: -12px;
+  top: 2px;
+  border-top-width: 3px;
+  border-bottom-width: 3px;
+  border-right-width: 10px;
+}
+
+.gazette-top-hud-rocket-art .guide-rocket-art::after {
+  right: 9px;
+  bottom: -7px;
+  width: 6px;
+  height: 7px;
+  border-width: 1px;
+}
+
+.gazette-top-hud-rules {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.gazette-top-hud-rules article {
+  min-width: 0;
+  padding: 6px 7px;
+  border-top: 2px solid #53606b;
+  background: rgba(135, 171, 189, 0.15);
+}
+
+.gazette-top-hud-rules article > span {
+  display: block;
+  margin-bottom: 3px;
+  color: #9e3b29;
+  font: 900 9px/1 Arial, sans-serif;
+  letter-spacing: 0.08em;
+}
+
+.gazette-top-hud-rules p {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.22;
+}
+
+.gazette-top-hud-rules .gazette-key {
+  min-width: 32px;
+  height: 19px;
+  padding: 0 3px;
+  font-size: 8px;
+  vertical-align: middle;
+}
+
+.gazette-station-spread {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.76fr) minmax(0, 1.24fr);
+  border-bottom: 2px solid #263442;
+}
+
+.gazette-station-scene {
+  position: relative;
+  min-height: 222px;
+  overflow: hidden;
+  border-right: 2px solid #263442;
+  background: linear-gradient(180deg, #233b5c 0%, #172f4b 69%, #315c31 70%, #315c31 75%, #553529 76% 100%);
+}
+
+.gazette-station-scene::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: 8px;
+  border: 1px dashed rgba(240, 244, 219, 0.24);
+}
+
+.gazette-station-moon {
+  position: absolute;
+  z-index: 1;
+  top: 24px;
+  right: 20%;
+  width: 43px;
+  height: 43px;
+  border-radius: 50%;
+  background: #d8ddc5;
+  box-shadow: 0 0 18px rgba(238, 242, 218, 0.82);
+}
+
+.gazette-station-trees {
+  position: absolute;
+  z-index: 2;
+  right: -12px;
+  bottom: 52px;
+  left: -12px;
+  height: 108px;
+  opacity: 0.86;
+  background: repeating-linear-gradient(120deg, transparent 0 20px, #16364b 21px 52px, transparent 53px 74px);
+}
+
+.gazette-station-map-dot {
+  position: absolute;
+  z-index: 4;
+  top: 28px;
+  left: 26px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #492075;
+  border-radius: 50%;
+  background: #a855f7;
+  box-shadow: 0 0 11px rgba(176, 82, 255, 0.95);
+}
+
+.gazette-station-pump-wrap {
+  position: absolute;
+  z-index: 4;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.gazette-station-pump-wrap .fuel-station {
+  position: relative;
+  bottom: auto;
+  left: auto !important;
+  width: 102px;
+}
+
+.gazette-station-pump-wrap .fuel-beacon {
+  animation: none;
+}
+
+.gazette-station-grass {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  bottom: 25px;
+  left: 0;
+  height: 7px;
+  border-top: 2px solid #6fdd36;
+  background: repeating-linear-gradient(100deg, #278b2c 0 11px, #3ca62f 12px 21px);
+}
+
+.gazette-station-touch {
+  position: absolute;
+  z-index: 6;
+  right: 12px;
+  bottom: 11px;
+  padding: 4px 5px;
+  border: 1px solid rgba(250, 239, 166, 0.8);
+  background: rgba(10, 30, 47, 0.8);
+  color: #fff0a6;
+  font: 900 8px/1 Arial, sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.gazette-station-copy {
+  padding: 18px 20px;
+}
+
+.gazette-station-copy > span {
+  display: block;
+  margin-bottom: 3px;
+  color: #9e3b29;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+}
+
+.gazette-station-copy > p {
+  margin: 0 0 11px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.gazette-station-steps {
+  display: grid;
+  gap: 5px;
+}
+
+.gazette-station-steps p {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding-top: 5px;
+  border-top: 1px dotted rgba(38, 52, 66, 0.4);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.22;
+}
+
+.gazette-station-steps b {
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #263442;
+  border-radius: 50%;
+  color: #f7ecc1;
+  background: #9e3b29;
+  font: 900 11px/1 Arial, sans-serif;
+}
+
+.gazette-top-hud-status-note {
+  margin: 0;
+  padding: 9px 18px;
+  background: rgba(135, 171, 189, 0.24);
+  color: #42575c;
+  font-size: 10px !important;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
 .gazette-flight-scene {
   background: #1f3854;
 }
@@ -3128,6 +3494,8 @@ button {
   .gazette-navigation-layout,
   .gazette-flight-layout,
   .gazette-console-layout,
+  .gazette-top-hud-layout,
+  .gazette-station-spread,
   .gazette-weather-layout,
   .gazette-room-layout,
   .gazette-combat-grid,
@@ -3138,6 +3506,8 @@ button {
   .gazette-map-report,
   .gazette-keyboard-story,
   .gazette-console-board,
+  .gazette-top-hud-map,
+  .gazette-station-scene,
   .gazette-weather-scene,
   .gazette-room-flow,
   .gazette-combat-grid > section + section,
@@ -3147,6 +3517,12 @@ button {
   .gazette-console-popouts { grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr); }
   .gazette-console-guide { grid-template-columns: 1fr; }
   .gazette-console-guide article:nth-child(odd) { border-right: 0; }
+  .gazette-top-hud-legend,
+  .gazette-top-hud-rules { grid-template-columns: 1fr; }
+  .gazette-top-hud-legend p { grid-template-columns: 13px minmax(0, 1fr); }
+  .gazette-top-hud-map,
+  .gazette-top-hud-resources,
+  .gazette-station-copy { padding: 13px 14px; }
   .gazette-hero-art,
   .gazette-flight-sketch,
   .gazette-weather-scene { min-height: 205px; }

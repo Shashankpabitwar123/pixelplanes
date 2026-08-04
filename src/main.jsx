@@ -2967,37 +2967,61 @@ function GuideCombatPage() {
   return (
     <>
       <GazetteHeader
-        issue="COMBAT AND FUEL"
-        headline="Keep the needle green. Keep the sky clear."
-        deck="Fuel, ammo, rockets, damage, landing, and scoring all sit in the top HUD."
+        issue="TOP HUD"
+        headline="Read the sky. Mind the fuel."
+        deck="The upper-right instruments show where everyone is, how much flight you have left, and what is ready to fire. Purple locator dots lead to fuel stations."
       />
-      <div className="gazette-combat-grid">
-        <section className="gazette-fuel-report">
-          <div className="gazette-fuel-gauge-demo" aria-hidden="true"><i /><i /><i /><i /><b /><em /></div>
-          <h4>{FUEL_SECONDS}-second fuel tank</h4>
-          <p>The needle starts horizontal in the green zone, then crosses yellow, orange, and red. A red pulse around the gauge means the engine will soon stop.</p>
-          <div className="gazette-fuel-tank-wrap"><FuelTank active={false} /></div>
-          <p><strong>Fuel station:</strong> touch the pump itself to refill all fuel. Its beacon and your fuel box pulse green for two seconds. It also repairs the first-hit propeller damage.</p>
-        </section>
-        <section className="gazette-weapons-report">
-          <div className="gazette-ammo-demo" aria-label={`${MAX_BULLETS} bullet meter illustration`}>
-            {Array.from({ length: MAX_BULLETS }, (_, index) => <i key={index} className="guide-bullet-art" />)}
+      <div className="gazette-top-hud-layout">
+        <section className="gazette-top-hud-map">
+          <h4>Locator map</h4>
+          <div className="gazette-map-demo gazette-top-hud-map-demo" aria-label="Top-right locator map illustration">
+            <span className="gazette-map-grid-line gazette-map-grid-a" /><span className="gazette-map-grid-line gazette-map-grid-b" />
+            <span className="gazette-map-edge gazette-map-edge-left" /><span className="gazette-map-edge gazette-map-edge-right" />
+            <span className="gazette-map-dot gazette-map-dot-player" /><span className="gazette-map-label gazette-map-player-label">YOU</span>
+            <span className="gazette-map-dot gazette-map-dot-fuel gazette-map-fuel-one" /><span className="gazette-map-dot gazette-map-dot-fuel gazette-map-fuel-two" />
+            <span className="gazette-map-dot gazette-map-dot-enemy gazette-map-enemy-one" /><span className="gazette-map-dot gazette-map-dot-enemy gazette-map-enemy-two" />
           </div>
-          <h4>{MAX_BULLETS} bullets</h4>
-          <p>Hold <PixelKey wide>SPACE</PixelKey> to burst-fire. Each bullet is straight, leaves the propeller shaft, stops when it hits ground, and refills every seven seconds even when the magazine is partly used.</p>
-          <div className="gazette-rockets-demo" aria-label="Two rocket meter illustration"><span className="guide-rocket-art" /><span className="guide-rocket-art" /></div>
-          <h4>Two rockets</h4>
-          <p>Press <PixelKey>R</PixelKey>. A rocket homes toward the nearest target within {ROCKET_DETECTION_RANGE} units for {ROCKET_HOMING_MS / 1000} seconds. No target? It travels straight ahead, and expires after {ROCKET_LIFETIME_MS / 1000} seconds. Rockets explode on planes or ground.</p>
+          <div className="gazette-top-hud-legend">
+            <p><i className="gazette-map-dot gazette-map-dot-player" /><span><strong>Green:</strong> your Bit Plane.</span></p>
+            <p><i className="gazette-map-dot gazette-map-dot-fuel" /><span><strong>Purple:</strong> fuel station.</span></p>
+            <p><i className="gazette-map-dot gazette-map-dot-enemy" /><span><strong>Red:</strong> a bot or room pilot.</span></p>
+          </div>
+          <p className="gazette-top-hud-edge-note"><strong>Map edge:</strong> red warning edges mean you are near the end of the world. Turn back before the full border pulses and the plane crashes.</p>
+        </section>
+        <section className="gazette-top-hud-resources">
+          <h4>Fuel, bullets, and rockets</h4>
+          <div className="gazette-top-hud-instrument-art" aria-label="Fuel, bullet, and rocket meter illustration">
+            <div className="gazette-top-hud-fuel-art"><div className="gazette-fuel-gauge-demo" aria-hidden="true"><i /><i /><i /><i /><b /><em /></div><b>{FUEL_SECONDS} SEC FUEL</b></div>
+            <div className="gazette-top-hud-ammo-art"><div>{Array.from({ length: MAX_BULLETS }, (_, index) => <i key={index} className="guide-bullet-art" />)}</div><b>{MAX_BULLETS} BULLETS</b></div>
+            <div className="gazette-top-hud-rocket-art"><div><span className="guide-rocket-art" /><span className="guide-rocket-art" /></div><b>{MAX_ROCKETS} ROCKETS</b></div>
+          </div>
+          <div className="gazette-top-hud-rules">
+            <article><span>FUEL</span><p><strong>{FUEL_SECONDS} seconds.</strong> The needle begins horizontal in green, then crosses yellow, orange, and red. At empty, the engine has no thrust.</p></article>
+            <article><span>AMMO</span><p><strong>{MAX_BULLETS} shots.</strong> Hold <PixelKey wide>SPACE</PixelKey> to fire every {BULLET_COOLDOWN_MS} ms. Once any are used, the whole magazine refills after {BULLET_RELOAD_MS / 1000} seconds.</p></article>
+            <article><span>ROCKETS</span><p><strong>{MAX_ROCKETS} ready.</strong> Press <PixelKey>R</PixelKey>; a rocket tracks a valid plane within {ROCKET_DETECTION_RANGE} units for {ROCKET_HOMING_MS / 1000} seconds, then expires after {ROCKET_LIFETIME_MS / 1000} seconds.</p></article>
+          </div>
         </section>
       </div>
-      <div className="gazette-damage-report">
-        <div className="gazette-damage-planes"><img src="/assets/exact-plane.png" alt="Player plane" draggable="false" /><span className="gazette-hit-one">HIT 1</span><span className="gazette-smoke-puffs"><i /><i /><i /></span><img src="/assets/exact-plane-purple.png" alt="Enemy plane" draggable="false" /><span className="gazette-hit-two">HIT 2</span><span className="gazette-blast-mark">*</span></div>
-        <div>
-          <h4>Damage, crashes, and score</h4>
-          <p><strong>First bullet hit:</strong> propeller smoke begins. <strong>Second bullet hit:</strong> the plane blasts. You also crash on hay, hard ground impacts, the map edge, or another plane. A gentle wheel-first runway landing is safe.</p>
-          <p>Bot mode shows <strong>Kills</strong> and <strong>High Score</strong>. A kill counts when your final hit destroys the plane. If you crash yourself, one kill is deducted. Death restores your fuel, bullets, and rockets, then respawns you.</p>
-        </div>
+      <div className="gazette-station-spread">
+        <section className="gazette-station-scene" aria-label="Fuel station at night illustration">
+          <span className="gazette-station-moon" aria-hidden="true" /><span className="gazette-station-trees" aria-hidden="true" />
+          <span className="gazette-station-map-dot" aria-hidden="true" />
+          <div className="gazette-station-pump-wrap"><FuelTank active={false} /></div>
+          <span className="gazette-station-grass" aria-hidden="true" />
+          <span className="gazette-station-touch">TOUCH THE PUMP</span>
+        </section>
+        <section className="gazette-station-copy">
+          <span>FUEL STATIONS</span>
+          <h4>One purple dot can save the flight.</h4>
+          <p>Fuel stations sit along the ground and appear as purple dots in the locator map. Fly down gently and touch the pump itself—there is no separate key.</p>
+          <div className="gazette-station-steps">
+            <p><b>1</b><span><strong>Find it.</strong> Follow a purple dot on the map to the glowing beacon.</span></p>
+            <p><b>2</b><span><strong>Refuel.</strong> Contact restores the full {FUEL_SECONDS}-second tank; the station beacon flashes and the fuel gauge pulses green.</span></p>
+            <p><b>3</b><span><strong>Repair.</strong> A fuel stop clears first-hit propeller damage and smoke. Bullets and rockets follow their own reload rules.</span></p>
+          </div>
+        </section>
       </div>
+      <p className="gazette-top-hud-status-note"><strong>Flight readouts:</strong> FPS reports the frames your screen is drawing. In a room, MS is your ping to the room server—lower is faster.</p>
     </>
   );
 }
