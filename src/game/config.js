@@ -28,12 +28,12 @@ export const SOLO_GAME_RULE_DEFAULTS = Object.freeze({
 const SOLO_GAME_RULE_LIMITS = Object.freeze({
   botCount: [1, MAX_SOLO_BOTS],
   botDifficulty: [1, 5],
-  flightPace: [70, 125],
-  turnPace: [65, 135],
-  bulletPace: [70, 140],
+  flightPace: [70, 100],
+  turnPace: [65, 100],
+  bulletPace: [70, 100],
   bulletCooldownMs: [45, 180],
   bulletReloadSeconds: [3, 10],
-  rocketPace: [75, 125],
+  rocketPace: [75, 100],
   fuelSeconds: [20, 60],
   weatherMode: [0, 3],
 });

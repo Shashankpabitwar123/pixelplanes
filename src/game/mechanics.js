@@ -261,7 +261,7 @@ export function getPlaneForwardVector(plane) {
 
 function getRulePace(rules, key) {
   const value = Number(rules?.[key]);
-  return Number.isFinite(value) ? Math.max(0.35, Math.min(2, value / 100)) : 1;
+  return Number.isFinite(value) ? Math.max(0.35, Math.min(1, value / 100)) : 1;
 }
 
 export function getBulletTrajectory(plane, rules = null) {

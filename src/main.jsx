@@ -218,21 +218,23 @@ const COW_INSTANCES = cowOffsets.flatMap((offset) =>
 const BOT_DIFFICULTY_LABELS = ['Easy', 'Casual', 'Standard', 'Hard', 'Ace'];
 const WEATHER_MODE_LABELS = ['Clear', 'Normal', 'Harsh', 'Random'];
 const SOLO_GAME_CONTROL_DEFINITIONS = [
+  // Flight tuning is first because it is the most immediately felt local rule.
+  // Every pace selector is deliberately capped at the stock 100% ceiling.
+  { key: 'flightPace', label: 'Flight pace', detail: 'Thrust + top speed', min: 70, max: 100, format: (value) => `${value}%` },
+  { key: 'turnPace', label: 'Turn speed', detail: 'Steering response', min: 65, max: 100, format: (value) => `${value}%` },
+  { key: 'bulletPace', label: 'Bullet pace', detail: 'Same aiming range', min: 70, max: 100, format: (value) => `${value}%` },
+  { key: 'rocketPace', label: 'Rocket pace', detail: '2 s track · 5 s life', min: 75, max: 100, format: (value) => `${value}%` },
   { key: 'botCount', label: 'Enemy bots', detail: 'Start mode', min: 1, max: MAX_SOLO_BOTS, format: (value) => `${value}` },
   { key: 'botDifficulty', label: 'Bot skill', detail: 'Easy to ace', min: 1, max: 5, format: (value) => BOT_DIFFICULTY_LABELS[value - 1] || 'Standard' },
-  { key: 'flightPace', label: 'Flight pace', detail: 'Thrust + top speed', min: 70, max: 125, format: (value) => `${value}%` },
-  { key: 'turnPace', label: 'Turn speed', detail: 'Steering response', min: 65, max: 135, format: (value) => `${value}%` },
-  { key: 'bulletPace', label: 'Bullet pace', detail: 'Same aiming range', min: 70, max: 140, format: (value) => `${value}%` },
   { key: 'bulletCooldownMs', label: 'Fire gap', detail: 'SPACE burst', min: 45, max: 180, format: (value) => `${value} ms` },
   { key: 'bulletReloadSeconds', label: 'Ammo reload', detail: 'Full magazine', min: 3, max: 10, format: (value) => `${value} s` },
-  { key: 'rocketPace', label: 'Rocket pace', detail: '2 s track · 5 s life', min: 75, max: 125, format: (value) => `${value}%` },
   { key: 'fuelSeconds', label: 'Fuel tank', detail: 'Full refill capacity', min: 20, max: 60, format: (value) => `${value} s` },
   { key: 'weatherMode', label: 'Weather', detail: 'Solo bot sky', min: 0, max: 3, format: getWeatherModeLabel },
 ];
 
 function getRulePace(rules, key) {
   const value = Number(rules?.[key]);
-  return Number.isFinite(value) ? value / 100 : 1;
+  return Number.isFinite(value) ? clamp(value / 100, 0, 1) : 1;
 }
 
 function getRuleFuelSeconds(rules) {
@@ -255,8 +257,8 @@ function getWeatherModeLabel(value) {
 }
 
 function getPlayerFlightTuning(rules) {
-  const flightPace = clamp(getRulePace(rules, 'flightPace'), 0.7, 1.25);
-  const turnPace = clamp(getRulePace(rules, 'turnPace'), 0.65, 1.35);
+  const flightPace = clamp(getRulePace(rules, 'flightPace'), 0.7, 1);
+  const turnPace = clamp(getRulePace(rules, 'turnPace'), 0.65, 1);
   const accelerationPace = Math.pow(flightPace, 0.86);
   const responsePace = 0.8 + flightPace * 0.2;
   const base = ACTIVE_GAMEPLAY_PACING.player;
@@ -2995,7 +2997,7 @@ function App() {
                       })}
                     </div>
                     <div className="flight-deck-rule-footer">
-                      <p>Rules apply to your next local flight. Training keeps its scripted Fog Run; rooms stay standard.</p>
+                      <p>Local rules only. Rooms stay standard.</p>
                       <button className="flight-deck-reset-rules" type="button" onClick={resetSoloGameRules}>Reset rules</button>
                     </div>
                   </section>

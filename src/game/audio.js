@@ -25,18 +25,18 @@ export function playFlightDeckTick(muted = false) {
   const gain = context.createGain();
   const filter = context.createBiquadFilter();
   tone.type = 'sine';
-  tone.frequency.setValueAtTime(138, t);
-  tone.frequency.exponentialRampToValueAtTime(106, t + 0.055);
+  tone.frequency.setValueAtTime(132, t);
+  tone.frequency.exponentialRampToValueAtTime(112, t + 0.05);
   filter.type = 'lowpass';
   filter.frequency.setValueAtTime(540, t);
   gain.gain.setValueAtTime(0.0001, t);
-  gain.gain.exponentialRampToValueAtTime(0.05, t + 0.006);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.065);
+  gain.gain.exponentialRampToValueAtTime(0.028, t + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
   tone.connect(filter);
   filter.connect(gain);
   gain.connect(context.destination);
   tone.start(t);
-  tone.stop(t + 0.075);
+  tone.stop(t + 0.07);
   tone.addEventListener('ended', () => {
     tone.disconnect();
     filter.disconnect();
