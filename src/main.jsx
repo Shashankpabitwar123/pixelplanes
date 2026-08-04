@@ -2916,38 +2916,49 @@ function GuideNavigationPage() {
   return (
     <>
       <GazetteHeader
-        issue="NAVIGATION REPORT"
-        headline="Read the whole map at a glance"
-        deck="The pale gray locator in the upper right is the map. Its dots and alert edges tell you where to fly next."
+        issue="LEFT CONSOLE"
+        headline="Every switch on the left"
+        deck="The flight deck stays close to your hand: pause, restart, music, game sound, quick rules, plane colours, day and night, plus your score."
       />
-      <div className="gazette-navigation-layout">
-        <section className="gazette-map-report">
-          <div className="gazette-map-demo" aria-label="Map locator dot legend illustration">
-            <span className="gazette-map-grid-line gazette-map-grid-a" /><span className="gazette-map-grid-line gazette-map-grid-b" />
-            <span className="gazette-map-edge gazette-map-edge-left" /><span className="gazette-map-edge gazette-map-edge-right" />
-            <span className="gazette-map-dot gazette-map-dot-player" /><span className="gazette-map-label gazette-map-player-label">YOU</span>
-            <span className="gazette-map-dot gazette-map-dot-fuel gazette-map-fuel-one" /><span className="gazette-map-dot gazette-map-dot-fuel gazette-map-fuel-two" />
-            <span className="gazette-map-dot gazette-map-dot-enemy gazette-map-enemy-one" /><span className="gazette-map-dot gazette-map-dot-enemy gazette-map-enemy-two" />
-          </div>
-          <div className="gazette-map-legend">
-            <p><i className="gazette-map-dot gazette-map-dot-player" /><span><strong>Green dot:</strong> your Bit Plane.</span></p>
-            <p><i className="gazette-map-dot gazette-map-dot-fuel" /><span><strong>Purple dots:</strong> fuel stations.</span></p>
-            <p><i className="gazette-map-dot gazette-map-dot-enemy" /><span><strong>Red dots:</strong> bots or other room pilots.</span></p>
-            <p><i className="gazette-map-edge-sample" /><span><strong>Red edge:</strong> you are close to the map border. When the full border pulses, turn back or crash.</span></p>
+      <div className="gazette-console-layout">
+        <section className="gazette-console-board">
+          <div className="gazette-console-board-heading"><span>Flight deck layout</span><p>The same button positions you see during a flight.</p></div>
+          <div className="gazette-console-grid" aria-label="Top-left flight deck button layout illustration">
+            <div className="gazette-console-button gazette-console-pause" aria-hidden="true"><i /><b>PAUSE</b></div>
+            <div className="gazette-console-button gazette-console-restart" aria-hidden="true"><img src="/assets/restart-icon.png" alt="" draggable="false" /><b>RESTART</b></div>
+            <div className="gazette-console-button"><img src="/assets/music-note-icon-transparent.png" alt="" draggable="false" /><b>MUSIC</b></div>
+            <div className="gazette-console-button"><img src="/assets/sfx-speaker-icon.svg" alt="" draggable="false" /><b>SOUND</b></div>
+            <div className="gazette-console-button"><img src="/assets/help-question-icon.png" alt="" draggable="false" /><b>RULES</b></div>
+            <div className="gazette-console-button"><img src="/assets/exact-plane.png" alt="" draggable="false" /><b>PLANE</b></div>
+            <div className="gazette-console-button"><img src="/assets/theme-lightbulb-icon.svg" alt="" draggable="false" /><b>THEME</b></div>
+            <div className="gazette-console-score" aria-hidden="true"><div><span>KILLS</span><strong>3</strong></div><div><span>HIGH</span><strong>6</strong></div></div>
           </div>
         </section>
-        <aside className="gazette-hud-report">
-          <div className="gazette-performance-demo">
-            <div><strong>60</strong><span>FPS</span></div>
-            <div><strong>48</strong><span>MS</span></div>
+        <aside className="gazette-console-popouts">
+          <h4>What opens when you click</h4>
+          <div className="gazette-console-music-demo" aria-label="Music panel illustration">
+            <div><img src="/assets/music-note-icon-transparent.png" alt="Music note" draggable="false" /><b>MUSIC</b></div>
+            <section>{Array.from({ length: 10 }, (_, index) => <span key={index} className={index === 4 ? 'gazette-console-track-active' : ''}>{index + 1}</span>)}</section>
+            <i><em /></i>
           </div>
-          <p><strong>FPS box:</strong> the measured frames currently drawn by your screen. The game uses the browser's animation frame, so it follows the display as closely as the device allows.</p>
-          <p><strong>MS box:</strong> multiplayer ping to the room server. Lower milliseconds mean faster room updates.</p>
-          <div className="gazette-edge-scene" aria-hidden="true"><span className="gazette-tree-row" /><span className="gazette-edge-glow" /><img src="/assets/exact-plane.png" alt="" draggable="false" /></div>
-          <p><strong>World limits:</strong> the forest fades and a red edge glow appears at both map ends. The plane cannot pass either side.</p>
+          <div className="gazette-console-plane-demo" aria-label="Plane colour and blinking light choices illustration">
+            <b>PLANE + BEACONS</b>
+            <div>{PLANE_COLOR_OPTIONS.map((option, index) => <img key={option.id} className={index === 0 ? 'gazette-console-plane-active' : ''} src={option.staticSrc} alt={`${option.label} plane`} draggable="false" />)}</div>
+            <section>{PLANE_LIGHT_OPTIONS.map((option, index) => <span key={option.id} className={index === 0 ? 'gazette-console-light-active' : ''}><i style={{ '--console-light': option.front }} /><i style={{ '--console-light': option.back }} /></span>)}</section>
+          </div>
         </aside>
       </div>
-      <div className="gazette-aim-note"><span className="gazette-dotted-aim"><i /><i /><i /><i /></span><p><strong>White dotted path:</strong> always shows the straight bullet trajectory from the nose shaft before you fire.</p></div>
+      <div className="gazette-console-guide">
+        <article><div className="gazette-console-mini gazette-console-mini-pause"><i /></div><div><h4>Pause / resume</h4><p>Click the orange control to freeze a started flight. Click it again, or press <PixelKey wide>SPACE</PixelKey> while paused, to continue.</p></div></article>
+        <article><div className="gazette-console-mini"><img src="/assets/restart-icon.png" alt="Restart" draggable="false" /></div><div><h4>Restart</h4><p>Ends the local run, resets its score and supplies, and returns you to the Start screen. In a room, it also leaves the room.</p></div></article>
+        <article><div className="gazette-console-mini"><img src="/assets/music-note-icon-transparent.png" alt="Music" draggable="false" /></div><div><h4>Music</h4><p>Opens ten songs. Choose a number to play it, then use the slider beneath the grid to set background-music volume.</p></div></article>
+        <article><div className="gazette-console-mini"><img src="/assets/sfx-speaker-icon.svg" alt="Speaker" draggable="false" /></div><div><h4>Game sound</h4><p>Mutes or restores engine, bullets, rockets, hits, crashes, and rain. Background music keeps playing.</p></div></article>
+        <article><div className="gazette-console-mini"><img src="/assets/help-question-icon.png" alt="Question mark" draggable="false" /></div><div><h4>Quick rules</h4><p>Opens the short in-game reference for keys, modes, landing, fuel, weapons, map dots, hits, and scoring. It does not pause the flight.</p></div></article>
+        <article><div className="gazette-console-mini"><img src="/assets/exact-plane.png" alt="Plane" draggable="false" /></div><div><h4>Plane colours</h4><p>Opens six body colours—blue, red, yellow, purple, green, and cyan—and three blinking-beacon pairs.</p></div></article>
+        <article><div className="gazette-console-mini"><img src="/assets/theme-lightbulb-icon.svg" alt="Light bulb" draggable="false" /></div><div><h4>Day / night</h4><p>Switches the world between light and dark. The moon, stars, fuel beacons, and navigation lights are strongest at night.</p></div></article>
+        <article><div className="gazette-console-mini gazette-console-mini-score"><strong>3</strong><span>HIGH<br />6</span></div><div><h4>Kills / High</h4><p>Kills are your current local total and reset after a crash or restart. High keeps your best total in this browser.</p></div></article>
+      </div>
+      <p className="gazette-console-room-note"><strong>Room note:</strong> in multiplayer rooms the day/night bulb and local Kills / High boxes are replaced by the live room leaderboard. The other flight-deck controls remain available.</p>
     </>
   );
 }
