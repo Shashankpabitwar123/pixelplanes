@@ -3,6 +3,7 @@ import http from 'node:http';
 import { Pool } from 'pg';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createLiveKitVoiceToken, readLiveKitConfig } from './livekit-auth.js';
+import { createRoomOwnerRecord, readRegionalRoomsConfig, RoomDirectory } from './room-directory.js';
 import {
   ROOM_SERVER_SNAPSHOT_MS,
   ROOM_SERVER_TICK_MS,
@@ -21,6 +22,7 @@ const PLANE_COLORS = ['blue', 'red', 'yellow', 'purple', 'green', 'cyan'];
 const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 const ROOM_RECONNECT_GRACE_MS = 30_000;
 const ROOM_WEATHER_STATE_INTERVAL_MS = 500;
+const ROOM_DIRECTORY_HEARTBEAT_MS = 30_000;
 const SOCKET_HEARTBEAT_INTERVAL_MS = 30_000;
 const MAX_VOLATILE_SOCKET_BUFFER_BYTES = 256 * 1024;
 const MAX_SOCKET_MESSAGE_BYTES = 16 * 1024;
@@ -32,8 +34,30 @@ const VOLATILE_MESSAGE_TYPES = new Set(['weather_state', 'room_snapshot']);
 
 const rooms = new Map();
 const socketSessions = new WeakMap();
+const regionalRoomsConfig = readRegionalRoomsConfig();
+const roomDirectory = new RoomDirectory(regionalRoomsConfig);
 let dbPool = null;
 let dbReady = false;
+
+function regionalRoutingIsUnavailable() {
+  return roomDirectory.required && !roomDirectory.active;
+}
+
+function getLocalRoomOwner(code, createdAt) {
+  return createRoomOwnerRecord({ code, config: regionalRoomsConfig, createdAt });
+}
+
+function ownerIsLocal(owner) {
+  return Boolean(
+    owner &&
+    owner.regionId === regionalRoomsConfig.regionId &&
+    owner.wsUrl === regionalRoomsConfig.publicWsUrl,
+  );
+}
+
+function logDirectoryFailure(operation, error) {
+  console.warn(`[directory] ${operation} skipped:`, error.message);
+}
 
 function safeJson(value) {
   try {
@@ -304,6 +328,7 @@ function serializeRoom(room) {
     createdAt: room.createdAt,
     serverNow: now,
     weather: serializeWeather(room, now),
+    regionId: regionalRoomsConfig.enabled ? regionalRoomsConfig.regionId : undefined,
     players,
   };
 }
@@ -393,7 +418,17 @@ function announceSession(socket, room, player) {
     playerId: player.id,
     resumeToken: player.resumeToken,
     expiresInMs: ROOM_RECONNECT_GRACE_MS,
+    serverUrl: regionalRoomsConfig.enabled ? regionalRoomsConfig.publicWsUrl : undefined,
   });
+}
+
+async function releaseDirectoryRoom(room) {
+  if (!roomDirectory.active) return;
+  try {
+    await roomDirectory.remove(room.code, getLocalRoomOwner(room.code, room.createdAt));
+  } catch (error) {
+    logDirectoryFailure('remove room', error);
+  }
 }
 
 function leaveRoom(socket, reason = 'left') {
@@ -410,6 +445,7 @@ function leaveRoom(socket, reason = 'left') {
 
   if (!room.players.size) {
     rooms.delete(room.code);
+    void releaseDirectoryRoom(room);
     logRoomEvent(room.code, 'room_empty', { reason });
     return;
   }
@@ -467,9 +503,26 @@ function disconnectRoom(socket, reason = 'socket_close') {
   broadcastRoomState(room);
 }
 
-function resumeRoom(socket, payload) {
+async function resumeRoom(socket, payload) {
   const code = String(payload.code || '').trim().toUpperCase();
   const resumeToken = String(payload.resumeToken || '');
+  if (regionalRoutingIsUnavailable()) {
+    send(socket, { type: 'room_error', message: 'Regional room routing is temporarily unavailable. Please try again shortly.' });
+    return;
+  }
+  if (roomDirectory.active) {
+    try {
+      const owner = await roomDirectory.find(code);
+      if (owner && !ownerIsLocal(owner)) {
+        send(socket, { type: 'room_redirect', wsUrl: owner.wsUrl, code, action: 'resume' });
+        return;
+      }
+    } catch (error) {
+      logDirectoryFailure('resolve room for resume', error);
+      send(socket, { type: 'room_error', message: 'Regional room routing is temporarily unavailable. Please try again shortly.' });
+      return;
+    }
+  }
   const room = rooms.get(code);
   const player = room && Array.from(room.players.values()).find((candidate) => candidate.resumeToken === resumeToken);
   if (!room || !player || player.connected || Date.now() - (player.disconnectedAt || 0) > ROOM_RECONNECT_GRACE_MS) {
@@ -488,10 +541,38 @@ function resumeRoom(socket, payload) {
   broadcastRoomState(room);
 }
 
-function createRoom(socket, payload) {
+async function createRoom(socket, payload) {
   leaveRoom(socket, 'new_room');
 
-  const code = generateRoomCode();
+  if (regionalRoutingIsUnavailable()) {
+    send(socket, { type: 'room_error', message: 'Regional room routing is temporarily unavailable. Please try again shortly.' });
+    return;
+  }
+
+  let code = '';
+  let directoryClaimed = false;
+  if (roomDirectory.active) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const candidate = generateRoomCode();
+      try {
+        if (await roomDirectory.claim(candidate, getLocalRoomOwner(candidate))) {
+          code = candidate;
+          directoryClaimed = true;
+          break;
+        }
+      } catch (error) {
+        logDirectoryFailure('claim room', error);
+        send(socket, { type: 'room_error', message: 'Regional room routing is temporarily unavailable. Please try again shortly.' });
+        return;
+      }
+    }
+    if (!directoryClaimed) {
+      send(socket, { type: 'room_error', message: 'Could not reserve a room code. Please try again.' });
+      return;
+    }
+  } else {
+    code = generateRoomCode();
+  }
   const room = {
     code,
     hostId: '',
@@ -518,10 +599,31 @@ function createRoom(socket, payload) {
   broadcastRoomState(room);
 }
 
-function joinRoom(socket, payload) {
+async function joinRoom(socket, payload) {
   leaveRoom(socket, 'join_other_room');
 
   const code = String(payload.code || '').trim().toUpperCase();
+  if (regionalRoutingIsUnavailable()) {
+    send(socket, { type: 'room_error', message: 'Regional room routing is temporarily unavailable. Please try again shortly.' });
+    return;
+  }
+  if (roomDirectory.active) {
+    try {
+      const owner = await roomDirectory.find(code);
+      if (!owner) {
+        send(socket, { type: 'room_error', message: 'Room not found.' });
+        return;
+      }
+      if (!ownerIsLocal(owner)) {
+        send(socket, { type: 'room_redirect', wsUrl: owner.wsUrl, code, action: 'join' });
+        return;
+      }
+    } catch (error) {
+      logDirectoryFailure('resolve room for join', error);
+      send(socket, { type: 'room_error', message: 'Regional room routing is temporarily unavailable. Please try again shortly.' });
+      return;
+    }
+  }
   const room = rooms.get(code);
   if (!room) {
     send(socket, { type: 'room_error', message: 'Room not found.' });
@@ -561,6 +663,7 @@ function deleteRoom(socket) {
     send(peer, { type: 'room_deleted' });
   }
   rooms.delete(room.code);
+  void releaseDirectoryRoom(room);
   logRoomEvent(room.code, 'room_deleted', { hostId: playerId });
 }
 
@@ -687,7 +790,7 @@ function acceptSocketMessage(socket, raw) {
   return true;
 }
 
-function handleSocketMessage(socket, raw) {
+async function handleSocketMessage(socket, raw) {
   if (!acceptSocketMessage(socket, raw)) {
     send(socket, { type: 'room_error', message: 'Message rate or size limit reached.' });
     return;
@@ -702,13 +805,13 @@ function handleSocketMessage(socket, raw) {
 
   switch (message.type) {
     case 'create_room':
-      createRoom(socket, message);
+      await createRoom(socket, message);
       break;
     case 'join_room':
-      joinRoom(socket, message);
+      await joinRoom(socket, message);
       break;
     case 'resume_room':
-      resumeRoom(socket, message);
+      await resumeRoom(socket, message);
       break;
     case 'leave_room':
       leaveRoom(socket, 'client_leave');
@@ -769,6 +872,10 @@ const server = http.createServer(async (request, response) => {
       voice: readLiveKitConfig() ? 'livekit' : 'webrtc-fallback',
       livekit: Boolean(readLiveKitConfig()),
       turn: hasTurnServer(iceServers),
+      region: {
+        id: regionalRoomsConfig.regionId || 'single-region',
+        routing: roomDirectory.required ? (roomDirectory.active ? 'ready' : 'unavailable') : 'disabled',
+      },
     });
     return;
   }
@@ -818,7 +925,15 @@ wss.on('connection', (socket) => {
     socket.isAlive = true;
   });
   send(socket, { type: 'connected', at: Date.now() });
-  socket.on('message', (raw) => handleSocketMessage(socket, raw));
+  socket.messageChain = Promise.resolve();
+  socket.on('message', (raw) => {
+    socket.messageChain = socket.messageChain
+      .then(() => handleSocketMessage(socket, raw))
+      .catch((error) => {
+        console.warn('[rooms] message handling failed:', error.message);
+        send(socket, { type: 'room_error', message: 'The room server could not process that request.' });
+      });
+  });
   socket.on('close', () => disconnectRoom(socket, 'socket_close'));
   socket.on('error', () => disconnectRoom(socket, 'socket_error'));
 });
@@ -857,6 +972,7 @@ setInterval(() => {
         send(peer, { type: 'room_deleted' });
       }
       rooms.delete(code);
+      void releaseDirectoryRoom(room);
       logRoomEvent(code, 'room_expired');
     } else {
       broadcastRoomState(room);
@@ -884,7 +1000,23 @@ setInterval(() => {
   }
 }, ROOM_WEATHER_STATE_INTERVAL_MS).unref();
 
+setInterval(() => {
+  if (!roomDirectory.active) return;
+  for (const room of rooms.values()) {
+    roomDirectory
+      .refresh(room.code, getLocalRoomOwner(room.code, room.createdAt))
+      .catch((error) => logDirectoryFailure('refresh room lease', error));
+  }
+}, ROOM_DIRECTORY_HEARTBEAT_MS).unref();
+
 server.listen(PORT, () => {
   initDb().catch((error) => console.warn('[db] init skipped:', error.message));
+  if (regionalRoomsConfig.configurationError) {
+    console.warn(`[directory] ${regionalRoomsConfig.configurationError}`);
+  } else if (regionalRoomsConfig.enabled) {
+    roomDirectory.connect().then((ready) => {
+      if (ready) console.log(`[directory] regional room routing ready for ${regionalRoomsConfig.regionId}`);
+    });
+  }
   console.log(`Pixelplanes realtime server listening on ${PORT}`);
 });

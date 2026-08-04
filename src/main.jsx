@@ -39,6 +39,7 @@ import {
   ROOM_MAX_PLAYERS,
   ROOM_SPAWN_OFFSETS,
   MULTIPLAYER_WS_URL,
+  MULTIPLAYER_REGION_WS_URLS,
   MULTIPLAYER_API_URL,
   RTC_ICE_SERVERS,
   ROOM_WEATHER_TICK_MS,
@@ -168,6 +169,61 @@ function readRoomSession() {
   } catch {
     return null;
   }
+}
+
+function normalizeRoomWebSocketUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return '';
+    if (url.username || url.password || !url.pathname.endsWith('/rooms')) return '';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+function multiplayerApiUrlFromRoomWebSocketUrl(wsUrl) {
+  const normalized = normalizeRoomWebSocketUrl(wsUrl);
+  if (!normalized) return '';
+  const url = new URL(normalized);
+  url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+  url.pathname = url.pathname.replace(/\/rooms\/?$/, '');
+  return url.toString().replace(/\/$/, '');
+}
+
+async function measureRoomEndpoint(wsUrl) {
+  const apiUrl = multiplayerApiUrlFromRoomWebSocketUrl(wsUrl);
+  if (!apiUrl) throw new Error('Invalid multiplayer endpoint.');
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 1800);
+  const startedAt = performance.now();
+  try {
+    const response = await fetch(`${apiUrl}/health`, { cache: 'no-store', signal: controller.signal });
+    if (!response.ok) throw new Error('Room server is unavailable.');
+    return { wsUrl, latency: performance.now() - startedAt };
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function selectCreateRoomEndpoint() {
+  const fallback = normalizeRoomWebSocketUrl(MULTIPLAYER_WS_URL);
+  const candidates = Array.from(new Set([
+    fallback,
+    ...MULTIPLAYER_REGION_WS_URLS.map(normalizeRoomWebSocketUrl),
+  ].filter(Boolean)));
+  if (candidates.length <= 1) return fallback;
+
+  const measurements = await Promise.allSettled(candidates.map(measureRoomEndpoint));
+  const reachable = measurements
+    .filter((result) => result.status === 'fulfilled')
+    .map((result) => result.value)
+    .sort((first, second) => first.latency - second.latency);
+  return reachable[0]?.wsUrl || fallback;
 }
 const TRAINING_LESSONS = [
   {
@@ -391,6 +447,7 @@ function App() {
   const [roomLobby, setRoomLobby] = useState(null);
   const [localRoomPlayerId, setLocalRoomPlayerId] = useState('');
   const [roomConnectionStatus, setRoomConnectionStatus] = useState('idle');
+  const [roomRedirectRequest, setRoomRedirectRequest] = useState(null);
   const [roomPingMs, setRoomPingMs] = useState(null);
   const [roomError, setRoomError] = useState('');
   const [roomNotifications, setRoomNotifications] = useState([]);
@@ -481,6 +538,7 @@ function App() {
   const roomSessionRef = useRef(readRoomSession());
   const roomReconnectTimerRef = useRef(0);
   const roomReconnectAttemptsRef = useRef(0);
+  const pendingRoomActionRef = useRef(null);
   const intentionalRoomDisconnectRef = useRef(false);
   const pendingRoomPingSentAtRef = useRef(0);
   const rtcPeerConnectionsRef = useRef(new Map());
@@ -638,6 +696,8 @@ function App() {
         // Session storage can be disabled by the browser.
       }
     }
+    pendingRoomActionRef.current = null;
+    setRoomRedirectRequest(null);
     setLocalRoomPlayerId('');
     setRoomConnectionStatus('idle');
     setRoomPingMs(null);
@@ -1581,8 +1641,9 @@ function App() {
     });
     playerApiRef.current?.applyAuthoritativeRoomState?.(snapshot.local);
   }, [replaceRemoteProjectiles, updateRemotePlayerState]);
-  const connectRoomSocket = useCallback(() => new Promise((resolve, reject) => {
-    if (!MULTIPLAYER_WS_URL) {
+  const connectRoomSocket = useCallback((requestedUrl = '') => new Promise((resolve, reject) => {
+    const endpoint = normalizeRoomWebSocketUrl(requestedUrl || MULTIPLAYER_WS_URL);
+    if (!endpoint) {
       reject(new Error('Multiplayer server is not configured yet.'));
       return;
     }
@@ -1594,7 +1655,7 @@ function App() {
     }
 
     setRoomConnectionStatus('connecting');
-    const socket = new WebSocket(MULTIPLAYER_WS_URL);
+    const socket = new WebSocket(endpoint);
     roomSocketRef.current = socket;
     let settled = false;
 
@@ -1616,6 +1677,7 @@ function App() {
           roomCode: message.roomCode,
           playerId: message.playerId,
           resumeToken: message.resumeToken,
+          serverUrl: normalizeRoomWebSocketUrl(message.serverUrl) || endpoint,
         };
         if (session.roomCode && session.playerId && session.resumeToken) {
           roomSessionRef.current = session;
@@ -1631,6 +1693,20 @@ function App() {
       }
       if (message.type === 'room_state') {
         applyServerRoomState(message.room, message.localPlayerId);
+      }
+      if (message.type === 'room_redirect') {
+        const targetUrl = normalizeRoomWebSocketUrl(message.wsUrl);
+        const pendingAction = pendingRoomActionRef.current;
+        if (!targetUrl || !pendingAction || (message.action && pendingAction.type !== `${message.action}_room`)) {
+          setRoomError('The room server gave an invalid regional route. Please try again.');
+          return;
+        }
+        intentionalRoomDisconnectRef.current = true;
+        if (roomSocketRef.current === socket) roomSocketRef.current = null;
+        socket.close();
+        setRoomConnectionStatus('connecting');
+        setRoomRedirectRequest({ id: `${Date.now()}-${Math.random()}`, wsUrl: targetUrl, action: pendingAction });
+        return;
       }
       if (message.type === 'room_resumed') {
         roomReconnectAttemptsRef.current = 0;
@@ -1820,13 +1896,16 @@ function App() {
       }
     });
     socket.addEventListener('close', () => {
-      if (roomSocketRef.current === socket) {
+      const ownsSocket = roomSocketRef.current === socket;
+      if (ownsSocket) {
         roomSocketRef.current = null;
       }
-      const canReconnect = settled && !intentionalRoomDisconnectRef.current && Boolean(roomSessionRef.current);
-      setRoomConnectionStatus(canReconnect ? 'reconnecting' : 'idle');
-      setRoomPingMs(null);
-      pendingRoomPingSentAtRef.current = 0;
+      if (ownsSocket) {
+        const canReconnect = settled && !intentionalRoomDisconnectRef.current && Boolean(roomSessionRef.current);
+        setRoomConnectionStatus(canReconnect ? 'reconnecting' : 'idle');
+        setRoomPingMs(null);
+        pendingRoomPingSentAtRef.current = 0;
+      }
       if (!settled) {
         reject(new Error('Could not connect to multiplayer server.'));
       }
@@ -1840,6 +1919,30 @@ function App() {
       }
     });
   }), [applyAuthoritativeRoomSnapshot, applyServerRoomState, clearRoomNotifications, handleVoiceSignal, localRoomPlayerId, pushRoomNotification, replaceRemotePlayerStates, replaceRemoteProjectiles, startGame, updateRemotePlayerState]);
+  useEffect(() => {
+    if (!roomRedirectRequest) return undefined;
+    const request = roomRedirectRequest;
+    setRoomRedirectRequest(null);
+    let cancelled = false;
+    intentionalRoomDisconnectRef.current = false;
+
+    const followRoute = async () => {
+      try {
+        const socket = await connectRoomSocket(request.wsUrl);
+        if (cancelled || socket.readyState !== WebSocket.OPEN) return;
+        socket.send(JSON.stringify(request.action));
+      } catch {
+        if (!cancelled) {
+          setRoomError('Could not reach the room server. Please try again.');
+          setRoomConnectionStatus('idle');
+        }
+      }
+    };
+    void followRoute();
+    return () => {
+      cancelled = true;
+    };
+  }, [connectRoomSocket, roomRedirectRequest]);
   useEffect(() => {
     if (roomConnectionStatus !== 'reconnecting') return undefined;
     if (!MULTIPLAYER_WS_URL) return undefined;
@@ -1855,12 +1958,14 @@ function App() {
       roomReconnectAttemptsRef.current += 1;
       intentionalRoomDisconnectRef.current = false;
       try {
-        const socket = await connectRoomSocket();
-        socket.send(JSON.stringify({
+        const socket = await connectRoomSocket(session.serverUrl || MULTIPLAYER_WS_URL);
+        const action = {
           type: 'resume_room',
           code: session.roomCode,
           resumeToken: session.resumeToken,
-        }));
+        };
+        pendingRoomActionRef.current = action;
+        socket.send(JSON.stringify(action));
       } catch {
         setRoomConnectionStatus('reconnecting');
       }
@@ -1906,14 +2011,17 @@ function App() {
 
     if (MULTIPLAYER_WS_URL) {
       try {
-        const socket = await connectRoomSocket();
-        socket.send(JSON.stringify({
+        const endpoint = await selectCreateRoomEndpoint();
+        const socket = await connectRoomSocket(endpoint);
+        const action = {
           type: 'create_room',
           name: roomPlayerName,
           theme: roomTheme,
           micEnabled,
           speakerEnabled: roomSpeakerEnabled,
-        }));
+        };
+        pendingRoomActionRef.current = action;
+        socket.send(JSON.stringify(action));
       } catch (error) {
         setRoomError(error.message);
       }
@@ -1944,13 +2052,15 @@ function App() {
     try {
       const micEnabled = roomVoiceEnabled;
       const socket = await connectRoomSocket();
-      socket.send(JSON.stringify({
+      const action = {
         type: 'join_room',
         code: roomCode,
         name: roomPlayerName,
         micEnabled,
         speakerEnabled: roomSpeakerEnabled,
-      }));
+      };
+      pendingRoomActionRef.current = action;
+      socket.send(JSON.stringify(action));
     } catch (error) {
       setRoomError(error.message);
     }

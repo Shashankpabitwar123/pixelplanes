@@ -59,6 +59,7 @@ Frontend multiplayer env vars:
 VITE_WS_URL=wss://pixelplanes-realtime-eu.onrender.com/rooms
 VITE_API_URL=https://pixelplanes-realtime-eu.onrender.com
 VITE_RTC_ICE_SERVERS='[{"urls":["stun:stun.l.google.com:19302","stun:stun1.l.google.com:19302"]}]'
+VITE_MULTIPLAYER_REGIONS='["wss://pixelplanes-realtime-us.onrender.com/rooms","wss://pixelplanes-realtime-eu.onrender.com/rooms","wss://pixelplanes-realtime-asia.onrender.com/rooms"]'
 ```
 
 Backend env vars:
@@ -75,6 +76,10 @@ TURN_TTL_SECONDS=86400
 LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
+REGIONAL_ROOMS_ENABLED=false
+REGION_ID=eu
+PUBLIC_WS_URL=wss://pixelplanes-realtime-eu.onrender.com/rooms
+REDIS_URL=rediss://your_managed_redis_url
 ```
 
 Rooms and gameplay sync run through the Render WebSocket server. Voice uses
@@ -113,6 +118,37 @@ so a player far from Frankfurt will still have network latency in plane input
 and combat. LiveKit solves the group-voice/SFU side; a future multi-region game
 state service with shared room state is the separate next scaling step.
 
+### Regional room routing (prepared, off by default)
+
+The repository now contains the first safe part of the regional game rollout.
+It remains disabled until `REGIONAL_ROOMS_ENABLED=true` is set on **every**
+regional game service and all services share one reachable Redis/Valkey
+`REDIS_URL`. With the flag off, the current Frankfurt WebSocket room behavior
+is unchanged.
+
+When enabled, a room owner record is written with the room code, owning region,
+and public `/rooms` WebSocket URL. A player who reaches a different regional
+server for a join or reconnect receives a validated `room_redirect`; the
+browser follows it automatically. Redis is used only for ownership, routing,
+and lease refreshes. Each live match still has exactly one Node server running
+its 60 Hz simulation; it is never replicated frame-by-frame through Redis.
+
+Before enabling the flag, create these three always-on Render web services from
+the same commit and give each the same `REDIS_URL`, `CLIENT_ORIGIN`,
+`CLIENT_ORIGINS`, and `LIVEKIT_*` values:
+
+- `pixelplanes-realtime-us` — Virginia, `REGION_ID=us-east`
+- `pixelplanes-realtime-eu` — Frankfurt, `REGION_ID=eu`
+- `pixelplanes-realtime-asia` — Singapore, `REGION_ID=asia`
+
+Set each service's `PUBLIC_WS_URL` to its own public `wss://.../rooms` URL.
+Only then enable `REGIONAL_ROOMS_ENABLED=true` in all three services. New-room
+regional placement is enabled by adding the three non-secret URLs to Vercel as
+the JSON `VITE_MULTIPLAYER_REGIONS` value, then redeploying the frontend. The
+browser measures each service's public health endpoint when a host creates a
+room and chooses the quickest available one. Existing rooms safely route joins
+and reconnects to the server that owns them.
+
 ### Room simulation contract
 
 Room matches are server-authoritative. Browsers send only sequenced control
@@ -138,6 +174,7 @@ inbound messages.
 ```bash
 npm run test:room
 npm run test:server
+npm run test:directory
 npm run test:voice
 npm run build
 ```
@@ -146,21 +183,21 @@ npm run build
 `test:server` starts a temporary WebSocket service and verifies input handling,
 rejection of a forged player-state message, LiveKit being unavailable without
 credentials, and reconnect recovery. `test:voice` validates that issued
-LiveKit tokens are scoped to exactly one room and player.
+LiveKit tokens are scoped to exactly one room and player. `test:directory`
+validates that regional routing cannot activate with missing or unsafe settings.
 
 ### Production gaps to provision before a global launch
 
-The committed source provides the LiveKit Cloud integration and requests an
-always-on Render plan, but it cannot create paid Cloud accounts, activate
-billing, or enter secrets for you. The realtime game server remains a single
-Frankfurt service until a later multi-region state upgrade is made.
+The committed source provides the LiveKit Cloud integration, always-on Render
+configuration, and disabled regional room-directory code. It cannot create the
+new paid regional services, activate Redis billing, or enter external secrets
+for you. The active production game server remains a single Frankfurt service
+until the regional services are provisioned and the feature flag is enabled.
 
 For a true global production launch, provision and configure all of the
 following outside this repository:
 
-- A non-sleeping, horizontally scalable WebSocket runtime in more than one
-  region, with sticky/session-aware routing.
-- Redis (or an equivalent shared real-time state layer) so rooms survive an
-  individual server restart and can span multiple instances.
+- Two additional non-sleeping WebSocket services: Virginia and Singapore.
+- A managed Redis/Valkey directory that all three services can reach securely.
 - Monitoring, rate-limit alerts, structured logs, and load testing before
   raising the room or region limits.

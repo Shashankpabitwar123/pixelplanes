@@ -253,6 +253,37 @@ const viteEnv = import.meta.env ?? {};
 
 export const MULTIPLAYER_WS_URL = viteEnv.VITE_WS_URL || '';
 
+function normalizeMultiplayerWsUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return '';
+    if (url.username || url.password || !url.pathname.endsWith('/rooms')) return '';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+function parseMultiplayerRegionUrls() {
+  const raw = viteEnv.VITE_MULTIPLAYER_REGIONS;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    const values = Array.isArray(parsed) ? parsed : [];
+    return Array.from(new Set(values.map(normalizeMultiplayerWsUrl).filter(Boolean)));
+  } catch {
+    return [];
+  }
+}
+
+// Public endpoints only. This variable is intentionally safe to expose through
+// Vite and is used solely to pick the closest server when creating a new room.
+export const MULTIPLAYER_REGION_WS_URLS = parseMultiplayerRegionUrls();
+
 function multiplayerApiUrlFromWsUrl() {
   if (!MULTIPLAYER_WS_URL) return '';
   try {

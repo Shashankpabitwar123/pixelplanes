@@ -35,3 +35,14 @@ services:
         sync: false
       - key: LIVEKIT_API_SECRET
         sync: false
+      # Keep regional routing off until the US, EU, and Asia services share a
+      # managed Redis/Valkey directory. The current Frankfurt room path is
+      # unchanged while this remains false.
+      - key: REGIONAL_ROOMS_ENABLED
+        value: "false"
+      - key: REGION_ID
+        value: eu
+      - key: PUBLIC_WS_URL
+        value: wss://pixelplanes-realtime-eu.onrender.com/rooms
+      - key: REDIS_URL
+        sync: false
