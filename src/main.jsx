@@ -9,6 +9,7 @@ import {
   FUEL_GAUGE_EMPTY_ANGLE,
   FUEL_GAUGE_SWEEP,
   FUEL_GAUGE_ZONE_SIZE,
+  ACTIVE_GAMEPLAY_PACING,
   MAX_BULLETS,
   BULLET_RELOAD_MS,
   BULLET_COOLDOWN_MS,
@@ -3853,6 +3854,7 @@ function PlayablePlane({
   fogActive,
   registerGameFrameCallback,
 }) {
+  const playerFlightTuning = ACTIVE_GAMEPLAY_PACING.player;
   const keysRef = useRef(new Set());
   const planeRef = useRef(null);
   const aimGuideDotRefs = useRef([]);
@@ -4677,11 +4679,11 @@ function PlayablePlane({
       const powerRequested = keys.has('power') && next.fuel > 0;
       if (powerRequested) {
         next.fuel = Math.max(0, next.fuel - dt);
-        next.throttle = Math.min(1, next.throttle + dt * 0.8);
+        next.throttle = Math.min(1, next.throttle + dt * playerFlightTuning.throttleRise);
       }
       else next.throttle = Math.max(0, next.throttle - dt * 1.35);
       if (keys.has('down')) next.throttle = Math.max(0, next.throttle - dt * 2.65);
-      next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * 6.2);
+      next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * playerFlightTuning.thrustResponse);
       if (next.fuel <= 0) {
         next.throttle = 0;
         next.thrust = Math.max(0, next.thrust - dt * 12);
@@ -4696,10 +4698,10 @@ function PlayablePlane({
       const speedAuthority = clamp(speed / 18, 0, 1);
       const groundAuthority = onRunway ? clamp(Math.abs(next.vx) / 8 + next.thrust * 0.55, 0.28, 0.95) : 1;
       const turnAuthority = clamp(0.35 + speedAuthority * 0.75 + next.thrust * 0.42, 0.38, 1.45) * groundAuthority;
-      const targetTurnRate = elevator * (210 + turnAuthority * 165);
+      const targetTurnRate = elevator * (playerFlightTuning.turnBaseRate + turnAuthority * playerFlightTuning.turnAuthorityRate);
 
-      next.turnRate += (targetTurnRate - next.turnRate) * Math.min(1, dt * (elevator ? 18 : 10));
-      next.turnRate *= Math.exp(-dt * (elevator ? 0.65 : 3.6));
+      next.turnRate += (targetTurnRate - next.turnRate) * Math.min(1, dt * (elevator ? playerFlightTuning.turnInputResponse : 10));
+      next.turnRate *= Math.exp(-dt * (elevator ? playerFlightTuning.turnHeldDamping : playerFlightTuning.turnReleaseDamping));
       next.angle = normalizeAngle(next.angle + next.turnRate * dt);
 
       const rad = (next.angle * Math.PI) / 180;
@@ -4710,7 +4712,7 @@ function PlayablePlane({
       const diving = forwardY < -0.15;
       const climbing = forwardY > 0.15;
       const runwaySpeed = Math.abs(next.vx);
-      const takeoffReady = runwaySpeed > 14.5 && next.thrust > 0.58 && climbing;
+      const takeoffReady = runwaySpeed > playerFlightTuning.takeoffSpeed && next.thrust > 0.58 && climbing;
 
       if (onRunway) {
         if (preStepGroundPoint < 0) next.y -= preStepGroundPoint;
@@ -4725,13 +4727,13 @@ function PlayablePlane({
         }
       }
 
-      const thrustForce = onRunway ? 56 : 70;
-      const thrustBoost = diving ? 1.55 : climbing ? 1.3 : 1;
+      const thrustForce = onRunway ? playerFlightTuning.runwayThrust : playerFlightTuning.flightThrust;
+      const thrustBoost = diving ? playerFlightTuning.diveBoost : climbing ? playerFlightTuning.climbBoost : 1;
       next.vx += forwardX * thrustForce * next.thrust * thrustBoost * dt;
       if (!onRunway || takeoffReady) {
         next.vy += forwardY * thrustForce * next.thrust * thrustBoost * dt;
         if (diving) {
-          next.vy -= Math.abs(forwardY) * next.thrust * 40 * dt;
+          next.vy -= Math.abs(forwardY) * next.thrust * playerFlightTuning.divePull * dt;
         }
       }
 
@@ -4761,7 +4763,7 @@ function PlayablePlane({
       next.vy *= drag;
 
       if (poweredDive && !onRunway) {
-        next.vy -= Math.abs(forwardY) * next.thrust * 46 * dt;
+        next.vy -= Math.abs(forwardY) * next.thrust * playerFlightTuning.poweredDivePull * dt;
       }
 
       if (keys.has('down')) {
@@ -4771,7 +4773,11 @@ function PlayablePlane({
       }
 
       const cappedSpeed = Math.hypot(next.vx, next.vy);
-      const maxSpeed = diving ? 58.8 + next.thrust * 9.2 : climbing ? 54.6 : 42;
+      const maxSpeed = diving
+        ? playerFlightTuning.maxDiveBaseSpeed + next.thrust * playerFlightTuning.maxDiveThrustBonus
+        : climbing
+          ? playerFlightTuning.maxClimbSpeed
+          : playerFlightTuning.maxLevelSpeed;
       if (cappedSpeed > maxSpeed) {
         const cap = maxSpeed / cappedSpeed;
         next.vx *= cap;
@@ -5703,6 +5709,7 @@ function RoomProjectilesLayer({
 }
 
 function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, audioSettings, fogActive, registerGameFrameCallback }) {
+  const botFlightTuning = ACTIVE_GAMEPLAY_PACING.bot;
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
@@ -6006,10 +6013,10 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       const desiredAngle = angleToPoint(next, target);
       const angleError = normalizeAngle(desiredAngle - next.angle);
       const speed = Math.hypot(next.vx, next.vy);
-      const turnLimit = 250 + clamp(speed / 40, 0, 1) * 130;
-      const targetTurnRate = clamp(angleError * 6.3, -turnLimit, turnLimit);
-      next.turnRate += (targetTurnRate - next.turnRate) * Math.min(1, dt * 7.8);
-      next.turnRate *= Math.exp(-dt * 0.85);
+      const turnLimit = botFlightTuning.turnLimitBase + clamp(speed / 40, 0, 1) * botFlightTuning.turnLimitSpeedBonus;
+      const targetTurnRate = clamp(angleError * botFlightTuning.steeringGain, -turnLimit, turnLimit);
+      next.turnRate += (targetTurnRate - next.turnRate) * Math.min(1, dt * botFlightTuning.turnResponse);
+      next.turnRate *= Math.exp(-dt * botFlightTuning.turnDamping);
       next.angle = normalizeAngle(next.angle + next.turnRate * dt);
 
       const rad = (next.angle * Math.PI) / 180;
@@ -6019,13 +6026,13 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       const normalY = Math.cos(rad);
       const onRunway = !next.airborne && next.y <= 0.08;
       const targetThrottle = pursuing ? (avoidingTarget && closingSpeed > 0 ? 0.34 : 1) : 0.56;
-      next.throttle += (targetThrottle - next.throttle) * Math.min(1, dt * (pursuing ? 1.45 : 1.1));
-      next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * 5.8);
+      next.throttle += (targetThrottle - next.throttle) * Math.min(1, dt * (pursuing ? botFlightTuning.pursuitThrottleResponse : botFlightTuning.cruiseThrottleResponse));
+      next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * botFlightTuning.thrustResponse);
 
       if (onRunway) {
         next.y = 0;
         next.vy = 0;
-        next.vx += forwardX * 46 * next.thrust * dt;
+        next.vx += forwardX * botFlightTuning.runwayThrust * next.thrust * dt;
         if (Math.abs(next.vx) > 10.5 && next.thrust > 0.55) {
           next.airborne = true;
           next.vy = Math.max(next.vy, 5.5 + Math.max(0, forwardY) * 8);
@@ -6033,7 +6040,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       }
 
       if (next.airborne) {
-        const thrustForce = 64;
+        const thrustForce = botFlightTuning.flightThrust;
         next.vx += forwardX * thrustForce * next.thrust * dt;
         next.vy += forwardY * thrustForce * next.thrust * dt;
         const updatedSpeed = Math.max(0.001, Math.hypot(next.vx, next.vy));
@@ -6052,7 +6059,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       }
 
       const cappedSpeed = Math.hypot(next.vx, next.vy);
-      const maxSpeed = 48;
+      const maxSpeed = botFlightTuning.maxSpeed;
       if (cappedSpeed > maxSpeed) {
         const cap = maxSpeed / cappedSpeed;
         next.vx *= cap;

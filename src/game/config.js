@@ -12,17 +12,103 @@ export const FUEL_GAUGE_SWEEP = 180;
 
 export const FUEL_GAUGE_ZONE_SIZE = FUEL_GAUGE_SWEEP / 4;
 
+// Keep flight feel in one profile. Switching ACTIVE_GAMEPLAY_PACING to `classic`
+// restores the pre-smooth-arcade motion values without touching simulation code.
+export const GAMEPLAY_PACING_PRESETS = Object.freeze({
+  classic: Object.freeze({
+    player: Object.freeze({
+      throttleRise: 0.8,
+      thrustResponse: 6.2,
+      turnBaseRate: 210,
+      turnAuthorityRate: 165,
+      turnInputResponse: 18,
+      turnHeldDamping: 0.65,
+      turnReleaseDamping: 3.6,
+      takeoffSpeed: 14.5,
+      runwayThrust: 56,
+      flightThrust: 70,
+      diveBoost: 1.55,
+      climbBoost: 1.3,
+      divePull: 40,
+      poweredDivePull: 46,
+      maxLevelSpeed: 42,
+      maxClimbSpeed: 54.6,
+      maxDiveBaseSpeed: 58.8,
+      maxDiveThrustBonus: 9.2,
+    }),
+    bot: Object.freeze({
+      steeringGain: 6.3,
+      turnLimitBase: 250,
+      turnLimitSpeedBonus: 130,
+      turnResponse: 7.8,
+      turnDamping: 0.85,
+      pursuitThrottleResponse: 1.45,
+      cruiseThrottleResponse: 1.1,
+      thrustResponse: 5.8,
+      runwayThrust: 46,
+      flightThrust: 64,
+      maxSpeed: 48,
+    }),
+    bulletLifetimeMs: 1200,
+    bulletInheritedFlightSeconds: 1.2,
+    botBulletCooldownMs: 280,
+    rocketSpeed: 640 / 12,
+  }),
+  smoothArcade: Object.freeze({
+    player: Object.freeze({
+      throttleRise: 0.68,
+      thrustResponse: 5.4,
+      turnBaseRate: 160,
+      turnAuthorityRate: 124,
+      turnInputResponse: 14,
+      turnHeldDamping: 0.85,
+      turnReleaseDamping: 4.2,
+      takeoffSpeed: 13.5,
+      runwayThrust: 48,
+      flightThrust: 60,
+      diveBoost: 1.48,
+      climbBoost: 1.2,
+      divePull: 34,
+      poweredDivePull: 39,
+      maxLevelSpeed: 35,
+      maxClimbSpeed: 45,
+      maxDiveBaseSpeed: 50,
+      maxDiveThrustBonus: 6,
+    }),
+    bot: Object.freeze({
+      steeringGain: 5.1,
+      turnLimitBase: 200,
+      turnLimitSpeedBonus: 100,
+      turnResponse: 6.2,
+      turnDamping: 1.05,
+      pursuitThrottleResponse: 1.2,
+      cruiseThrottleResponse: 0.95,
+      thrustResponse: 5.1,
+      runwayThrust: 40,
+      flightThrust: 54,
+      maxSpeed: 40,
+    }),
+    bulletLifetimeMs: 1350,
+    bulletInheritedFlightSeconds: 1.2,
+    botBulletCooldownMs: 360,
+    rocketSpeed: 640 / 12,
+  }),
+});
+
+export const ACTIVE_GAMEPLAY_PACING = GAMEPLAY_PACING_PRESETS.smoothArcade;
+
 export const MAX_BULLETS = 7;
 
 export const BULLET_RELOAD_MS = 7000;
 
 export const BULLET_COOLDOWN_MS = 60;
 
-export const BULLET_LIFETIME_MS = 1200;
+export const BULLET_LIFETIME_MS = ACTIVE_GAMEPLAY_PACING.bulletLifetimeMs;
 
 export const BULLET_RANGE = 102;
 
-export const BULLET_FLIGHT_SECONDS = BULLET_LIFETIME_MS / 1000;
+// Keep the original inherited-velocity distance while extending visual travel time.
+export const BULLET_FLIGHT_SECONDS = ACTIVE_GAMEPLAY_PACING.bulletInheritedFlightSeconds;
 
 export const BULLET_MUZZLE_POINT = { x: 0.051, y: 0.505 };
 
@@ -44,8 +130,8 @@ export const ROCKET_COOLDOWN_MS = 520;
 
 export const ROCKET_LIFETIME_MS = 5000;
 
-// Preserve the original 640-unit / 12-second flight speed after shortening rocket life.
-export const ROCKET_SPEED = 640 / 12;
+// Rocket homing and five-second expiry stay unchanged; this profile intentionally keeps rocket speed stable.
+export const ROCKET_SPEED = ACTIVE_GAMEPLAY_PACING.rocketSpeed;
 
 export const ROCKET_RANGE = ROCKET_SPEED * (ROCKET_LIFETIME_MS / 1000);
 
@@ -75,7 +161,7 @@ export const BOT_AVOID_DISTANCE = 42;
 
 export const BOT_MIN_FIRE_DISTANCE = 34;
 
-export const BOT_BULLET_COOLDOWN_MS = 280;
+export const BOT_BULLET_COOLDOWN_MS = ACTIVE_GAMEPLAY_PACING.botBulletCooldownMs;
 
 export const BOT_BULLET_RELOAD_MS = BULLET_RELOAD_MS;
 
