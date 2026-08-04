@@ -117,25 +117,20 @@ const TRAINING_WEATHER_LESSON_INDEX = 5;
 const TRAINING_FOG_CHECKPOINT_RADIUS = 5.4;
 const TRAINING_STATIC_TARGET_CLEAR_COUNT = 3;
 const TRAINING_MOVING_TARGET_CLEAR_COUNT = 2;
-const TRAINING_FUEL_STATION_INDEX = fuelTankPlacements.reduce(
-  (closestIndex, x, index) => (x < START_X && (closestIndex < 0 || x > fuelTankPlacements[closestIndex]) ? index : closestIndex),
-  -1,
-);
-const TRAINING_FUEL_STATION_X = fuelTankPlacements[TRAINING_FUEL_STATION_INDEX];
 const TRAINING_WEAPON_TARGETS = [
-  { id: 'training-static-target-1', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 28, y: 30, angle: 16, radius: 2.3 },
-  { id: 'training-static-target-2', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 72, y: 37, angle: 16, radius: 2.3 },
-  { id: 'training-static-target-3', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 118, y: 33, angle: 16, radius: 2.3 },
-  { id: 'training-static-target-4', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 164, y: 42, angle: 16, radius: 2.3 },
-  { id: 'training-static-target-5', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 210, y: 36, angle: 16, radius: 2.3 },
-  { id: 'training-moving-target-1', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 164, y: 46, angle: 16, radius: 2.45, motion: { x: 10, y: 2.5, speed: 0.00075, phase: 0.2 } },
-  { id: 'training-moving-target-2', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 208, y: 35, angle: 16, radius: 2.45, motion: { x: 8, y: 3.4, speed: 0.00062, phase: 2.1 } },
-  { id: 'training-moving-target-3', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 252, y: 41, angle: 16, radius: 2.45, motion: { x: 11, y: 2.2, speed: 0.0007, phase: 4.35 } },
-  { id: 'training-rocket-target', targetType: 'rocket', weapon: 'rocket', label: 'ROCKET', x: START_X - 270, y: 39, angle: 16, radius: 2.8 },
+  { id: 'training-static-target-1', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 28, y: 68, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-2', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 72, y: 100, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-3', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 118, y: 113, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-4', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 164, y: 128, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-5', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 210, y: 107, angle: 16, radius: 2.3 },
+  { id: 'training-moving-target-1', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 164, y: 126, angle: 16, radius: 2.45, motion: { x: 10, y: 4.5, speed: 0.00075, phase: 0.2 } },
+  { id: 'training-moving-target-2', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 208, y: 110, angle: 16, radius: 2.45, motion: { x: 8, y: 5.4, speed: 0.00062, phase: 2.1 } },
+  { id: 'training-moving-target-3', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 252, y: 138, angle: 16, radius: 2.45, motion: { x: 11, y: 4.2, speed: 0.0007, phase: 4.35 } },
+  { id: 'training-rocket-target', targetType: 'rocket', weapon: 'rocket', label: 'ROCKET', x: START_X - 270, y: 122, angle: 16, radius: 2.8 },
 ];
 const createTrainingWeaponTargets = () => TRAINING_WEAPON_TARGETS.map((target) => ({
   ...target,
-  active: target.targetType === 'static',
+  active: false,
   hit: false,
   state: {
     x: target.x,
@@ -145,6 +140,9 @@ const createTrainingWeaponTargets = () => TRAINING_WEAPON_TARGETS.map((target) =
   },
 }));
 const createTrainingWeaponProgress = () => ({
+  bulletDemoFired: false,
+  rocketDemoFired: false,
+  targetsUnlocked: false,
   staticHits: 0,
   movingHits: 0,
   movingUnlocked: false,
@@ -173,13 +171,13 @@ const TRAINING_LESSONS = [
   {
     id: 'refuel',
     title: 'Refuel',
-    objective: 'Take off again. Follow the yellow map dot to the glowing fuel station ahead.',
+    objective: 'Take off again. Purple map dots mark fuel stations; touch any glowing REFUEL pump.',
     keys: ['W', '↑'],
   },
   {
     id: 'weapons',
     title: 'Range practice',
-    objective: 'Clear three static circles, then two slow-moving circles. Finish with one guided rocket.',
+    objective: 'First fire one bullet with SPACE, then launch one rocket with R. Targets appear after both; one rocket stays ready.',
     keys: ['SPACE', 'R'],
   },
   {
@@ -336,6 +334,9 @@ function App() {
     lessonIndex: 0,
     leftBanked: false,
     rightBanked: false,
+    bulletDemoFired: false,
+    rocketDemoFired: false,
+    targetsUnlocked: false,
     staticTargetHits: 0,
     movingTargetHits: 0,
     movingTargetsUnlocked: false,
@@ -427,6 +428,9 @@ function App() {
       lessonIndex: 0,
       leftBanked: false,
       rightBanked: false,
+      bulletDemoFired: false,
+      rocketDemoFired: false,
+      targetsUnlocked: false,
       staticTargetHits: 0,
       movingTargetHits: 0,
       movingTargetsUnlocked: false,
@@ -457,6 +461,9 @@ function App() {
       lessonIndex: nextLessonIndex,
       leftBanked: false,
       rightBanked: false,
+      bulletDemoFired: false,
+      rocketDemoFired: false,
+      targetsUnlocked: false,
       staticTargetHits: 0,
       movingTargetHits: 0,
       movingTargetsUnlocked: false,
@@ -1666,7 +1673,9 @@ function App() {
     }
 
     if (progress.lessonIndex === 3) {
-      const fuelApproach = Math.abs(planeState.x - TRAINING_FUEL_STATION_X) <= 28 ? 'close' : 'follow';
+      const fuelApproach = fuelTankPlacements.some((stationX) => Math.hypot(planeState.x - stationX, planeState.y) <= 28)
+        ? 'close'
+        : 'follow';
       if (fuelApproach !== progress.fuelApproach) {
         trainingProgressRef.current = { ...progress, fuelApproach };
         setTrainingFuelApproach(fuelApproach);
@@ -1698,9 +1707,45 @@ function App() {
   }, [completeTrainingLesson, gameMode, gameStarted]);
   const handleFuelRefill = useCallback((stationIndex) => {
     triggerFuelRefillFeedback(stationIndex);
-    if (gameMode !== 'training' || !gameStarted || stationIndex !== TRAINING_FUEL_STATION_INDEX) return;
+    if (gameMode !== 'training' || !gameStarted) return;
     completeTrainingLesson(3);
   }, [completeTrainingLesson, gameMode, gameStarted, triggerFuelRefillFeedback]);
+  const handleTrainingWeaponFired = useCallback((weapon) => {
+    if (gameMode !== 'training' || !gameStarted) return;
+    const progress = trainingProgressRef.current;
+    if (progress.complete || progress.lessonIndex !== TRAINING_WEAPONS_LESSON_INDEX) return;
+
+    const bulletDemoFired = progress.bulletDemoFired || weapon === 'bullet';
+    const rocketDemoFired = progress.rocketDemoFired || weapon === 'rocket';
+    const targetsUnlocked = progress.targetsUnlocked || (bulletDemoFired && rocketDemoFired);
+
+    if (
+      bulletDemoFired === progress.bulletDemoFired &&
+      rocketDemoFired === progress.rocketDemoFired &&
+      targetsUnlocked === progress.targetsUnlocked
+    ) return;
+
+    if (targetsUnlocked && !progress.targetsUnlocked) {
+      trainingTargetStatesRef.current.forEach((target) => {
+        if (target.targetType !== 'static') return;
+        target.active = true;
+        target.state = { ...target.state, crashed: false };
+      });
+    }
+
+    const nextProgress = { ...progress, bulletDemoFired, rocketDemoFired, targetsUnlocked };
+    trainingProgressRef.current = nextProgress;
+    setTrainingWeaponHits({
+      bulletDemoFired,
+      rocketDemoFired,
+      targetsUnlocked,
+      staticHits: progress.staticTargetHits,
+      movingHits: progress.movingTargetHits,
+      movingUnlocked: progress.movingTargetsUnlocked,
+      rocketUnlocked: progress.rocketTargetUnlocked,
+      rocketHit: progress.rocketTargetHit,
+    });
+  }, [gameMode, gameStarted]);
   const handleTrainingTargetHit = useCallback((targetId, weapon) => {
     if (gameMode !== 'training' || !gameStarted) return;
     const progress = trainingProgressRef.current;
@@ -1756,6 +1801,9 @@ function App() {
     };
     trainingProgressRef.current = nextProgress;
     setTrainingWeaponHits({
+      bulletDemoFired: nextProgress.bulletDemoFired,
+      rocketDemoFired: nextProgress.rocketDemoFired,
+      targetsUnlocked: nextProgress.targetsUnlocked,
       staticHits: staticTargetHits,
       movingHits: movingTargetHits,
       movingUnlocked: movingTargetsUnlocked,
@@ -2184,7 +2232,7 @@ function App() {
   const roomIsHost = roomLobby?.hostId ? roomLobby.hostId === localRoomPlayerId : roomPlayers[0]?.id === 'host';
   const isRoomGame = gameStarted && gameMode === 'room';
   const isTrainingGame = gameStarted && gameMode === 'training';
-  const trainingFuelTargetActive = isTrainingGame && !trainingComplete && trainingLessonIndex === 3;
+  const trainingFuelLessonActive = isTrainingGame && !trainingComplete && trainingLessonIndex === 3;
   const trainingWeaponsTargetActive = isTrainingGame && !trainingComplete && trainingLessonIndex === TRAINING_WEAPONS_LESSON_INDEX;
   const trainingWeatherCheckpointActive = isTrainingGame && !trainingComplete && trainingLessonIndex === TRAINING_WEATHER_LESSON_INDEX;
   const roomEnvironment = roomLobby?.weather?.seed ? roomLobby.weather : null;
@@ -2834,7 +2882,7 @@ function App() {
         {fuelTankPlacements.map((x, index) => (
           <span
             key={index}
-            className={`map-fuel-dot${trainingFuelTargetActive && index === TRAINING_FUEL_STATION_INDEX ? ' map-fuel-dot-training' : ''}`}
+            className="map-fuel-dot"
             style={{
               left: `${Math.max(3, Math.min(97, (x / WORLD_WIDTH) * 100))}%`,
             }}
@@ -2987,12 +3035,12 @@ function App() {
           {fuelTankPlacements.map((x, index) => (
             <FuelTank key={index} active={Boolean(fuelStationPulses[index])} style={{ left: `${x}vw` }} />
           ))}
-          {trainingFuelTargetActive && (
-            <div className="training-fuel-marker" style={{ left: `${TRAINING_FUEL_STATION_X}vw` }} aria-hidden="true">
+          {trainingFuelLessonActive && fuelTankPlacements.map((x, index) => (
+            <div key={`training-fuel-marker-${index}`} className="training-fuel-marker" style={{ left: `${x}vw` }} aria-hidden="true">
               <span>REFUEL</span>
               <i />
             </div>
-          )}
+          ))}
           <TrainingPracticeTargets
             active={trainingWeaponsTargetActive}
             targets={trainingTargetStatesRef.current}
@@ -3014,6 +3062,7 @@ function App() {
             onFuelRefill={handleFuelRefill}
             onSafeLanding={handleTrainingSafeLanding}
             onTrainingTargetHit={handleTrainingTargetHit}
+            onTrainingWeaponFired={handleTrainingWeaponFired}
             onKill={recordPlayerKill}
             onPlayerDeath={resetCurrentKills}
             onAmmoChange={updateAmmoStatus}
@@ -3219,9 +3268,12 @@ function TrainingFogCheckpoint({ active, checkpoint }) {
 function TrainingFlightHud({ lessonIndex, banks, weaponHits, weatherProgress, fuelApproach, complete, onSkip }) {
   const lesson = TRAINING_LESSONS[Math.min(lessonIndex, TRAINING_LESSONS.length - 1)];
   const heading = complete ? 'Flight cleared' : lesson.title;
+  const weaponTargetsReady = lesson.id === 'weapons' && weaponHits.targetsUnlocked;
   const objective = complete
     ? 'Six flight lessons complete. Keep flying in free practice, or restart to choose another mode.'
-    : lesson.objective;
+    : weaponTargetsReady
+      ? 'Range open: clear three static circles, then two slow-moving circles. Use your one remaining rocket to finish.'
+      : lesson.objective;
 
   return (
     <aside className="training-hud" aria-label="Training lesson" aria-live="polite">
@@ -3243,7 +3295,14 @@ function TrainingFlightHud({ lessonIndex, banks, weaponHits, weatherProgress, fu
                   <i className={banks.right ? 'training-bank-complete' : ''}>D</i>
                 </span>
               )}
-              {lesson.id === 'weapons' && (
+              {lesson.id === 'weapons' && !weaponTargetsReady && (
+                <span className="training-task-checks training-range-checks" aria-label={`${weaponHits.bulletDemoFired ? 'Bullet test complete' : 'Bullet test remaining'}, ${weaponHits.rocketDemoFired ? 'Rocket test complete' : 'Rocket test remaining'}`}>
+                  <i className={weaponHits.bulletDemoFired ? 'training-task-complete' : ''}>SPACE</i>
+                  <i className={weaponHits.rocketDemoFired ? 'training-task-complete' : ''}>R</i>
+                  <i className={weaponHits.rocketDemoFired ? 'training-task-complete' : ''}>{weaponHits.rocketDemoFired ? '1 ROCKET LEFT' : 'SAVE 1 ROCKET'}</i>
+                </span>
+              )}
+              {lesson.id === 'weapons' && weaponTargetsReady && (
                 <span className="training-task-checks training-range-checks" aria-label={`${weaponHits.staticHits} of ${TRAINING_STATIC_TARGET_CLEAR_COUNT} static targets hit, ${weaponHits.movingHits} of ${TRAINING_MOVING_TARGET_CLEAR_COUNT} moving targets hit, ${weaponHits.rocketHit ? 'rocket target complete' : 'rocket target remaining'}`}>
                   <i className={weaponHits.staticHits >= TRAINING_STATIC_TARGET_CLEAR_COUNT ? 'training-task-complete' : ''}>STATIC {weaponHits.staticHits}/{TRAINING_STATIC_TARGET_CLEAR_COUNT}</i>
                   <i className={weaponHits.movingHits >= TRAINING_MOVING_TARGET_CLEAR_COUNT ? 'training-task-complete' : ''}>MOVING {weaponHits.movingHits}/{TRAINING_MOVING_TARGET_CLEAR_COUNT}</i>
@@ -3262,11 +3321,13 @@ function TrainingFlightHud({ lessonIndex, banks, weaponHits, weatherProgress, fu
             <div className={`training-fuel-map-lesson training-fuel-map-${fuelApproach}`}>
               <span className="training-fuel-map-track" aria-hidden="true">
                 <i className="training-fuel-map-player-dot" />
-                <i className="training-fuel-map-pump-dot" />
+                <i className="training-fuel-map-pump-dot training-fuel-map-pump-dot-near" />
+                <i className="training-fuel-map-pump-dot training-fuel-map-pump-dot-mid" />
+                <i className="training-fuel-map-pump-dot training-fuel-map-pump-dot-far" />
               </span>
               <span className="training-fuel-map-copy">
-                <strong>YELLOW DOT = FUEL PUMP</strong>
-                <small>{fuelApproach === 'close' ? 'Pump close — touch it to refill the tank.' : 'Green dot is you — fly toward yellow.'}</small>
+                <strong>PURPLE DOTS = FUEL STATIONS</strong>
+                <small>{fuelApproach === 'close' ? 'Station close — touch any REFUEL pump to fill the tank.' : 'Green dot is you — any purple dot can refuel you.'}</small>
               </span>
             </div>
           )}
@@ -3298,7 +3359,7 @@ function BulletMeter({ count, reloading }) {
 
 function RocketMeter({ rocketCount }) {
   return (
-    <div className="rocket-meter" aria-label={`${rocketCount} rockets`}>
+    <div className="rocket-meter" aria-label={`${rocketCount} rocket${rocketCount === 1 ? '' : 's'}`}>
       <div className="rocket-meter-row" aria-hidden="true">
         {Array.from({ length: MAX_ROCKETS }, (_, index) => (
           <span key={index} className={`meter-rocket${index < rocketCount ? ' meter-rocket-loaded' : ' meter-rocket-empty'}`}>
@@ -3763,6 +3824,7 @@ function PlayablePlane({
   onFuelRefill,
   onSafeLanding,
   onTrainingTargetHit,
+  onTrainingWeaponFired,
   onKill,
   onPlayerDeath,
   onAmmoChange,
@@ -3801,6 +3863,7 @@ function PlayablePlane({
   const audioSettingsRef = useRef(audioSettings);
   const onSafeLandingRef = useRef(onSafeLanding);
   const onTrainingTargetHitRef = useRef(onTrainingTargetHit);
+  const onTrainingWeaponFiredRef = useRef(onTrainingWeaponFired);
   const controlsEnabledRef = useRef(controlsEnabled);
   const pausedRef = useRef(paused);
   const startArmedRef = useRef(startArmed);
@@ -3971,6 +4034,10 @@ function PlayablePlane({
   useEffect(() => {
     onTrainingTargetHitRef.current = onTrainingTargetHit;
   }, [onTrainingTargetHit]);
+
+  useEffect(() => {
+    onTrainingWeaponFiredRef.current = onTrainingWeaponFired;
+  }, [onTrainingWeaponFired]);
 
   useEffect(() => {
     controlsEnabledRef.current = controlsEnabled;
@@ -4270,6 +4337,7 @@ function PlayablePlane({
       const nextAmmo = ammoRef.current - 1;
       setAmmo(nextAmmo, reloadingRef.current);
       startReload();
+      onTrainingWeaponFiredRef.current?.('bullet');
     };
 
     const queueBulletFire = () => {
@@ -4294,6 +4362,7 @@ function PlayablePlane({
       rocketsRef.current = nextRockets;
       setRocketsRemaining(nextRockets);
       onRocketChange(nextRockets);
+      onTrainingWeaponFiredRef.current?.('rocket');
     };
 
     crashSoundRef.current = (impact = 1) => {
