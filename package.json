@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
+    "test:room": "node --test server/room-runtime.test.js",
+    "test:server": "node --test server/room-protocol.test.js",
     "preview": "vite preview --host 127.0.0.1",
     "server:start": "node server/index.js",
     "server:dev": "node --watch server/index.js"

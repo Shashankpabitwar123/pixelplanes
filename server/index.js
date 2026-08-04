@@ -2,6 +2,15 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import { Pool } from 'pg';
 import { WebSocket, WebSocketServer } from 'ws';
+import {
+  ROOM_SERVER_SNAPSHOT_MS,
+  ROOM_SERVER_TICK_MS,
+  acceptRoomInput,
+  createRoomSnapshot,
+  createRuntimePlayer,
+  resetAuthoritativeRoom,
+  stepAuthoritativeRoom,
+} from './room-runtime.js';
 
 const PORT = Number.parseInt(process.env.PORT || '4000', 10);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://127.0.0.1:5173';
@@ -9,14 +18,16 @@ const ROOM_MAX_PLAYERS = 6;
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const PLANE_COLORS = ['blue', 'red', 'yellow', 'purple', 'green', 'cyan'];
 const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
-const HIT_DEDUPE_TTL_MS = 20_000;
+const ROOM_RECONNECT_GRACE_MS = 30_000;
 const ROOM_WEATHER_STATE_INTERVAL_MS = 500;
 const SOCKET_HEARTBEAT_INTERVAL_MS = 30_000;
 const MAX_VOLATILE_SOCKET_BUFFER_BYTES = 256 * 1024;
-const WORLD_WIDTH = 700;
-const WORLD_HEIGHT = 400;
+const MAX_SOCKET_MESSAGE_BYTES = 16 * 1024;
+const MAX_SOCKET_MESSAGES_PER_SECOND = 90;
+const MAX_SOCKET_RATE_VIOLATIONS = 4;
+const ROOM_SPAWN_OFFSETS = [-84, -50, -17, 17, 50, 84];
 const DEFAULT_STUN_URLS = ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'];
-const VOLATILE_MESSAGE_TYPES = new Set(['remote_player_state', 'weather_state']);
+const VOLATILE_MESSAGE_TYPES = new Set(['weather_state', 'room_snapshot']);
 
 const rooms = new Map();
 const socketSessions = new WeakMap();
@@ -115,8 +126,15 @@ function getCorsOrigin(request) {
   if (!origin) return CLIENT_ORIGIN;
   const allowedOrigins = new Set([CLIENT_ORIGIN, ...parseUrlList(process.env.CLIENT_ORIGINS)]);
   if (allowedOrigins.has(origin)) return origin;
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\\d+)?$/.test(origin)) return origin;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return origin;
   return CLIENT_ORIGIN;
+}
+
+function isAllowedSocketOrigin(request) {
+  const origin = String(request.headers.origin || '');
+  if (!origin) return process.env.NODE_ENV !== 'production';
+  const allowedOrigins = new Set([CLIENT_ORIGIN, ...parseUrlList(process.env.CLIENT_ORIGINS)]);
+  return allowedOrigins.has(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 }
 
 function getDbPool() {
@@ -234,56 +252,6 @@ function serializeWeather(room, now = Date.now()) {
   };
 }
 
-function finiteNumber(value, fallback = 0, min = -Infinity, max = Infinity, precision = 3) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-  const clamped = Math.max(min, Math.min(max, number));
-  if (!Number.isFinite(precision)) return clamped;
-  const scale = 10 ** precision;
-  return Math.round(clamped * scale) / scale;
-}
-
-function sanitizePlaneState(state = {}) {
-  return {
-    x: finiteNumber(state.x, 350, 0, WORLD_WIDTH),
-    y: finiteNumber(state.y, 0, 0, WORLD_HEIGHT),
-    vx: finiteNumber(state.vx, 0, -120, 120),
-    vy: finiteNumber(state.vy, 0, -120, 120),
-    angle: finiteNumber(state.angle, 16, -720, 720),
-    thrust: finiteNumber(state.thrust, 0, 0, 1),
-    throttle: finiteNumber(state.throttle, 0, 0, 1),
-    crashed: Boolean(state.crashed),
-    damage: finiteNumber(state.damage, 0, 0, 2),
-    fuel: finiteNumber(state.fuel, 20, 0, 20),
-    searchLightOn: Boolean(state.searchLightOn),
-  };
-}
-
-function sanitizeProjectile(projectile = {}, ownerId, weapon) {
-  const isRocket = weapon === 'rocket';
-  return {
-    id: String(projectile.id || crypto.randomUUID()).slice(0, 96),
-    ownerId,
-    weapon,
-    x: finiteNumber(projectile.x, 0, 0, WORLD_WIDTH),
-    y: finiteNumber(projectile.y, 0, 0, WORLD_HEIGHT),
-    previousX: finiteNumber(projectile.previousX ?? projectile.x, projectile.x, 0, WORLD_WIDTH),
-    previousY: finiteNumber(projectile.previousY ?? projectile.y, projectile.y, 0, WORLD_HEIGHT),
-    renderX: finiteNumber(projectile.renderX ?? projectile.x, 0, 0, WORLD_WIDTH),
-    renderY: finiteNumber(projectile.renderY ?? projectile.y, 0, 0, WORLD_HEIGHT),
-    dx: finiteNumber(projectile.dx, 0, -240, 240),
-    dy: finiteNumber(projectile.dy, 0, -240, 240),
-    vx: finiteNumber(projectile.vx, 0, -140, 140),
-    vy: finiteNumber(projectile.vy, 0, -140, 140),
-    angle: finiteNumber(projectile.angle, 0, -720, 720),
-    radius: finiteNumber(projectile.radius, isRocket ? 2.25 : 1.05, 0.2, 4),
-    groundHit: Boolean(projectile.groundHit),
-    life: finiteNumber(projectile.life, isRocket ? 12000 : 1200, 80, isRocket ? 12000 : 2200),
-    unit: projectile.unit === 'world' ? 'world' : 'world',
-    createdAt: Date.now(),
-  };
-}
-
 function pickPlaneColor(room) {
   const used = new Set(Array.from(room.players.values()).map((player) => player.color));
   const available = PLANE_COLORS.filter((color) => !used.has(color));
@@ -319,11 +287,11 @@ function serializeRoom(room) {
     color: player.color,
     role: player.id === room.hostId ? 'Host' : 'Player',
     kills: player.kills,
-    damage: player.damage || 0,
-    alive: player.alive !== false,
+    damage: player.state?.damage || 0,
+    alive: !player.state?.crashed,
     micEnabled: player.micEnabled,
     speakerEnabled: player.speakerEnabled,
-    connected: room.sockets.has(player.id),
+    connected: Boolean(player.connected && room.sockets.has(player.id)),
   }));
 
   return {
@@ -364,6 +332,69 @@ function broadcastRoomState(room) {
   }
 }
 
+function broadcastRoomSnapshots(room, now = Date.now()) {
+  if (!room.started || !room.sockets.size) return;
+  for (const [playerId, socket] of room.sockets.entries()) {
+    const snapshot = createRoomSnapshot(room, playerId, now);
+    if (snapshot) send(socket, snapshot);
+  }
+}
+
+function processAuthoritativeRoomEvents(room, events, now) {
+  let roomStateChanged = false;
+  for (const event of events) {
+    if (event.type === 'player_hit') {
+      for (const socket of room.sockets.values()) {
+        send(socket, { ...event, at: now });
+      }
+      logRoomEvent(room.code, event.killed ? 'player_killed' : 'player_damaged', event);
+      roomStateChanged = true;
+      continue;
+    }
+    if (event.type === 'player_crashed') {
+      for (const socket of room.sockets.values()) {
+        send(socket, { ...event, at: now });
+      }
+      logRoomEvent(room.code, 'player_crashed', event);
+      roomStateChanged = true;
+      continue;
+    }
+    if (event.type === 'fuel_refilled') {
+      const playerSocket = room.sockets.get(event.playerId);
+      if (playerSocket) send(playerSocket, { ...event, at: now });
+    }
+  }
+  if (roomStateChanged) broadcastRoomState(room);
+}
+
+function createRoomPlayer(room, payload, fallbackName) {
+  const playerId = crypto.randomUUID();
+  const runtime = createRuntimePlayer({
+    id: playerId,
+    spawnX: 350 + (ROOM_SPAWN_OFFSETS[room.players.size] ?? 0),
+    resumeToken: crypto.randomUUID(),
+  });
+  return {
+    ...runtime,
+    id: playerId,
+    name: normalizeName(payload.name, fallbackName),
+    color: pickPlaneColor(room),
+    kills: 0,
+    micEnabled: payload.micEnabled !== false,
+    speakerEnabled: payload.speakerEnabled !== false,
+  };
+}
+
+function announceSession(socket, room, player) {
+  send(socket, {
+    type: 'room_session',
+    roomCode: room.code,
+    playerId: player.id,
+    resumeToken: player.resumeToken,
+    expiresInMs: ROOM_RECONNECT_GRACE_MS,
+  });
+}
+
 function leaveRoom(socket, reason = 'left') {
   const session = socketSessions.get(socket);
   if (!session) return;
@@ -383,8 +414,12 @@ function leaveRoom(socket, reason = 'left') {
   }
 
   if (room.hostId === session.playerId) {
-    const remaining = Array.from(room.players.keys());
-    room.hostId = remaining[Math.floor(Math.random() * remaining.length)];
+    const remaining = Array.from(room.players.values())
+      .filter((player) => player.connected)
+      .map((player) => player.id);
+    const fallback = Array.from(room.players.keys());
+    const pool = remaining.length ? remaining : fallback;
+    room.hostId = pool[Math.floor(Math.random() * pool.length)] || '';
   }
 
   for (const peerSocket of room.sockets.values()) {
@@ -405,6 +440,53 @@ function leaveRoom(socket, reason = 'left') {
   broadcastRoomState(room);
 }
 
+function disconnectRoom(socket, reason = 'socket_close') {
+  const session = socketSessions.get(socket);
+  if (!session) return;
+
+  const room = rooms.get(session.roomCode);
+  socketSessions.delete(socket);
+  if (!room) return;
+
+  const player = room.players.get(session.playerId);
+  room.sockets.delete(session.playerId);
+  if (!player) return;
+  player.connected = false;
+  player.disconnectedAt = Date.now();
+  player.input = { power: false, down: false, left: false, right: false, fire: false, light: Boolean(player.state?.searchLightOn), rocketPress: player.lastRocketPress };
+  if (room.hostId === player.id) {
+    room.hostId = Array.from(room.players.values()).find((candidate) => candidate.id !== player.id && candidate.connected)?.id
+      || room.hostId;
+  }
+  room.lastActivityAt = Date.now();
+  logRoomEvent(room.code, 'player_disconnected', { playerId: player.id, reason });
+  for (const peerSocket of room.sockets.values()) {
+    send(peerSocket, { type: 'player_disconnected', playerId: player.id, reason });
+  }
+  broadcastRoomState(room);
+}
+
+function resumeRoom(socket, payload) {
+  const code = String(payload.code || '').trim().toUpperCase();
+  const resumeToken = String(payload.resumeToken || '');
+  const room = rooms.get(code);
+  const player = room && Array.from(room.players.values()).find((candidate) => candidate.resumeToken === resumeToken);
+  if (!room || !player || player.connected || Date.now() - (player.disconnectedAt || 0) > ROOM_RECONNECT_GRACE_MS) {
+    send(socket, { type: 'room_error', message: 'That room session expired. Rejoin from the lobby.' });
+    return;
+  }
+  leaveRoom(socket, 'resume_other_room');
+  player.connected = true;
+  player.disconnectedAt = 0;
+  room.sockets.set(player.id, socket);
+  room.lastActivityAt = Date.now();
+  socketSessions.set(socket, { roomCode: room.code, playerId: player.id });
+  announceSession(socket, room, player);
+  send(socket, { type: 'room_resumed', room: serializeRoom(room), localPlayerId: player.id });
+  logRoomEvent(room.code, 'player_reconnected', { playerId: player.id });
+  broadcastRoomState(room);
+}
+
 function createRoom(socket, payload) {
   leaveRoom(socket, 'new_room');
 
@@ -415,30 +497,23 @@ function createRoom(socket, payload) {
     theme: normalizeTheme(payload.theme),
     players: new Map(),
     sockets: new Map(),
-    hitProjectiles: new Map(),
+    projectiles: new Map(),
     started: false,
     createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+    lastSnapshotAt: 0,
   };
   room.weather = createRoomWeather(room.createdAt);
 
-  const playerId = crypto.randomUUID();
-  room.hostId = playerId;
-  room.players.set(playerId, {
-    id: playerId,
-    name: normalizeName(payload.name, 'Player 1'),
-    color: pickPlaneColor(room),
-    kills: 0,
-    damage: 0,
-    alive: true,
-    state: null,
-    micEnabled: payload.micEnabled !== false,
-    speakerEnabled: payload.speakerEnabled !== false,
-  });
-  room.sockets.set(playerId, socket);
+  const player = createRoomPlayer(room, payload, 'Player 1');
+  room.hostId = player.id;
+  room.players.set(player.id, player);
+  room.sockets.set(player.id, socket);
   rooms.set(code, room);
-  socketSessions.set(socket, { roomCode: code, playerId });
+  socketSessions.set(socket, { roomCode: code, playerId: player.id });
 
-  logRoomEvent(code, 'room_created', { hostId: playerId, theme: room.theme });
+  announceSession(socket, room, player);
+  logRoomEvent(code, 'room_created', { hostId: player.id, theme: room.theme });
   broadcastRoomState(room);
 }
 
@@ -460,22 +535,14 @@ function joinRoom(socket, payload) {
     return;
   }
 
-  const playerId = crypto.randomUUID();
-  room.players.set(playerId, {
-    id: playerId,
-    name: normalizeName(payload.name, `Player ${room.players.size + 1}`),
-    color: pickPlaneColor(room),
-    kills: 0,
-    damage: 0,
-    alive: true,
-    state: null,
-    micEnabled: payload.micEnabled !== false,
-    speakerEnabled: payload.speakerEnabled !== false,
-  });
-  room.sockets.set(playerId, socket);
-  socketSessions.set(socket, { roomCode: code, playerId });
+  const player = createRoomPlayer(room, payload, `Player ${room.players.size + 1}`);
+  room.players.set(player.id, player);
+  room.sockets.set(player.id, socket);
+  room.lastActivityAt = Date.now();
+  socketSessions.set(socket, { roomCode: code, playerId: player.id });
 
-  logRoomEvent(code, 'player_joined', { playerId });
+  announceSession(socket, room, player);
+  logRoomEvent(code, 'player_joined', { playerId: player.id });
   broadcastRoomState(room);
 }
 
@@ -532,13 +599,11 @@ function startRoom(socket) {
 
   room.started = true;
   room.weather = createRoomWeather(Date.now());
+  resetAuthoritativeRoom(room);
   for (const player of room.players.values()) {
     player.kills = 0;
-    player.damage = 0;
-    player.alive = true;
-    player.state = null;
   }
-  room.hitProjectiles.clear();
+  room.lastActivityAt = Date.now();
   logRoomEvent(room.code, 'room_started', {
     playerCount: room.players.size,
     theme: room.theme,
@@ -548,139 +613,13 @@ function startRoom(socket) {
   }
 }
 
-function updateKills(socket, payload) {
+function receiveRoomInput(socket, payload) {
   const current = roomForSocket(socket);
-  if (!current) return;
+  if (!current || !current.room.started) return;
   const player = current.room.players.get(current.playerId);
-  if (!player) return;
-
-  const kills = Number.parseInt(payload.kills, 10);
-  player.kills = Number.isFinite(kills) ? Math.max(-99, Math.min(999, kills)) : player.kills;
-  broadcastRoomState(current.room);
-}
-
-function relayPlayerState(socket, payload) {
-  const current = roomForSocket(socket);
-  if (!current) return;
-  const { room, playerId } = current;
-  const player = room.players.get(playerId);
-  if (!player) return;
-  const state = sanitizePlaneState(payload.state);
-  const seq = Number.isSafeInteger(Number(payload.seq)) && Number(payload.seq) > 0
-    ? Number(payload.seq)
-    : 0;
-  player.state = state;
-  player.damage = state.damage;
-  player.alive = !state.crashed && state.damage < 2;
-  const message = {
-    type: 'remote_player_state',
-    playerId,
-    state,
-    seq,
-    at: Date.now(),
-  };
-  for (const [peerId, peer] of room.sockets.entries()) {
-    if (peerId !== playerId) send(peer, message);
-  }
-}
-
-function relayProjectile(socket, payload) {
-  const current = roomForSocket(socket);
-  if (!current) return;
-  const { room, playerId } = current;
-  const weapon = payload.weapon === 'rocket' ? 'rocket' : 'bullet';
-  const projectile = sanitizeProjectile(payload.projectile, playerId, weapon);
-  const message = {
-    type: 'room_projectile',
-    playerId,
-    projectile,
-    at: Date.now(),
-  };
-  for (const [peerId, peer] of room.sockets.entries()) {
-    if (peerId !== playerId) send(peer, message);
-  }
-}
-
-function pruneHitDedupe(room) {
-  const now = Date.now();
-  for (const [projectileId, timestamp] of room.hitProjectiles.entries()) {
-    if (now - timestamp > HIT_DEDUPE_TTL_MS) {
-      room.hitProjectiles.delete(projectileId);
-    }
-  }
-}
-
-function registerPlayerHit(socket, payload) {
-  const current = roomForSocket(socket);
-  if (!current) return;
-  const { room, playerId: attackerId } = current;
-  const targetId = String(payload.targetId || '');
-  const target = room.players.get(targetId);
-  const attacker = room.players.get(attackerId);
-  if (!target || !attacker || targetId === attackerId) return;
-
-  pruneHitDedupe(room);
-  const projectileId = String(payload.projectileId || crypto.randomUUID()).slice(0, 96);
-  if (room.hitProjectiles.has(projectileId)) return;
-  room.hitProjectiles.set(projectileId, Date.now());
-
-  const weapon = payload.weapon === 'rocket' || payload.weapon === 'collision' ? payload.weapon : 'bullet';
-  const previousDamage = Math.max(0, Math.min(2, Number(target.damage) || 0));
-  const killed = weapon === 'rocket' || weapon === 'collision' || previousDamage >= 1;
-  target.damage = killed ? 2 : 1;
-  target.alive = !killed;
-  if (target.state) {
-    target.state = { ...target.state, damage: target.damage, crashed: killed };
-  }
-  if (killed) {
-    attacker.kills = Math.max(-99, Math.min(999, (Number(attacker.kills) || 0) + 1));
-  }
-
-  const hitMessage = {
-    type: 'player_hit',
-    targetId,
-    attackerId,
-    projectileId,
-    weapon,
-    damage: target.damage,
-    killed,
-    at: Date.now(),
-  };
-  for (const peer of room.sockets.values()) {
-    send(peer, hitMessage);
-  }
-  logRoomEvent(room.code, killed ? 'player_killed' : 'player_damaged', {
-    targetId,
-    attackerId,
-    weapon,
-  });
-  broadcastRoomState(room);
-}
-
-function registerPlayerCrash(socket, payload) {
-  const current = roomForSocket(socket);
-  if (!current) return;
-  const { room, playerId } = current;
-  const player = room.players.get(playerId);
-  if (!player) return;
-
-  player.damage = 2;
-  player.alive = false;
-  if (player.state) {
-    player.state = { ...player.state, crashed: true, damage: 2 };
-  }
-  if (payload.selfCrash !== false) {
-    player.kills = Math.max(-99, Math.min(999, (Number(player.kills) || 0) - 1));
-  }
-  for (const peer of room.sockets.values()) {
-    send(peer, {
-      type: 'player_crashed',
-      playerId,
-      selfCrash: payload.selfCrash !== false,
-      at: Date.now(),
-    });
-  }
-  broadcastRoomState(room);
+  if (!player || !player.connected) return;
+  if (!acceptRoomInput(player, payload)) return;
+  current.room.lastActivityAt = Date.now();
 }
 
 function relayVoiceSignal(socket, payload) {
@@ -700,7 +639,31 @@ function relayVoiceSignal(socket, payload) {
   });
 }
 
+function acceptSocketMessage(socket, raw) {
+  const size = Buffer.isBuffer(raw) ? raw.length : Buffer.byteLength(String(raw));
+  if (size > MAX_SOCKET_MESSAGE_BYTES) return false;
+  const now = Date.now();
+  const rate = socket.messageRate || { startedAt: now, count: 0, violations: 0 };
+  if (now - rate.startedAt >= 1000) {
+    rate.startedAt = now;
+    rate.count = 0;
+  }
+  rate.count += 1;
+  if (rate.count > MAX_SOCKET_MESSAGES_PER_SECOND) {
+    rate.violations += 1;
+    socket.messageRate = rate;
+    if (rate.violations >= MAX_SOCKET_RATE_VIOLATIONS) socket.close(1008, 'Too many messages');
+    return false;
+  }
+  socket.messageRate = rate;
+  return true;
+}
+
 function handleSocketMessage(socket, raw) {
+  if (!acceptSocketMessage(socket, raw)) {
+    send(socket, { type: 'room_error', message: 'Message rate or size limit reached.' });
+    return;
+  }
   let message;
   try {
     message = JSON.parse(raw.toString());
@@ -715,6 +678,9 @@ function handleSocketMessage(socket, raw) {
       break;
     case 'join_room':
       joinRoom(socket, message);
+      break;
+    case 'resume_room':
+      resumeRoom(socket, message);
       break;
     case 'leave_room':
       leaveRoom(socket, 'client_leave');
@@ -732,20 +698,8 @@ function handleSocketMessage(socket, raw) {
     case 'start_room':
       startRoom(socket);
       break;
-    case 'update_kills':
-      updateKills(socket, message);
-      break;
-    case 'player_state':
-      relayPlayerState(socket, message);
-      break;
-    case 'fire_projectile':
-      relayProjectile(socket, message);
-      break;
-    case 'player_hit':
-      registerPlayerHit(socket, message);
-      break;
-    case 'player_crashed':
-      registerPlayerCrash(socket, message);
+    case 'room_input':
+      receiveRoomInput(socket, message);
       break;
     case 'voice_signal':
       relayVoiceSignal(socket, message);
@@ -800,12 +754,21 @@ const server = http.createServer(async (request, response) => {
   writeJson(request, response, 404, { error: 'Not found.' });
 });
 
-const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
+const wss = new WebSocketServer({
+  noServer: true,
+  perMessageDeflate: false,
+  maxPayload: MAX_SOCKET_MESSAGE_BYTES,
+});
 
 server.on('upgrade', (request, socket, head) => {
   const { pathname } = new URL(request.url || '/', 'http://localhost');
   if (pathname !== '/rooms') {
     socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+  if (!isAllowedSocketOrigin(request)) {
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
     socket.destroy();
     return;
   }
@@ -817,14 +780,15 @@ server.on('upgrade', (request, socket, head) => {
 
 wss.on('connection', (socket) => {
   socket.isAlive = true;
+  socket.messageRate = { startedAt: Date.now(), count: 0, violations: 0 };
   socket._socket?.setNoDelay?.(true);
   socket.on('pong', () => {
     socket.isAlive = true;
   });
   send(socket, { type: 'connected', at: Date.now() });
   socket.on('message', (raw) => handleSocketMessage(socket, raw));
-  socket.on('close', () => leaveRoom(socket, 'socket_close'));
-  socket.on('error', () => leaveRoom(socket, 'socket_error'));
+  socket.on('close', () => disconnectRoom(socket, 'socket_close'));
+  socket.on('error', () => disconnectRoom(socket, 'socket_error'));
 });
 
 setInterval(() => {
@@ -842,16 +806,44 @@ setInterval(() => {
 setInterval(() => {
   const now = Date.now();
   for (const [code, room] of rooms.entries()) {
-    if (!room.players.size || now - room.createdAt > ROOM_TTL_MS) {
+    for (const [playerId, player] of room.players.entries()) {
+      if (player.connected || now - (player.disconnectedAt || now) < ROOM_RECONNECT_GRACE_MS) continue;
+      room.players.delete(playerId);
+      if (room.hostId === playerId) {
+        room.hostId = Array.from(room.players.values()).find((candidate) => candidate.connected)?.id
+          || Array.from(room.players.keys())[0]
+          || '';
+      }
+      for (const peer of room.sockets.values()) {
+        send(peer, { type: 'player_left', playerId, playerName: player.name, reason: 'reconnect_expired' });
+      }
+      logRoomEvent(room.code, 'player_left', { playerId, reason: 'reconnect_expired' });
+    }
+    if (!room.players.size || (!room.started && now - (room.lastActivityAt || room.createdAt) > ROOM_TTL_MS)) {
       for (const peer of room.sockets.values()) {
         socketSessions.delete(peer);
         send(peer, { type: 'room_deleted' });
       }
       rooms.delete(code);
       logRoomEvent(code, 'room_expired');
+    } else {
+      broadcastRoomState(room);
     }
   }
 }, 60_000).unref();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const room of rooms.values()) {
+    if (!room.started) continue;
+    const events = stepAuthoritativeRoom(room, now);
+    processAuthoritativeRoomEvents(room, events, now);
+    if (now - room.lastSnapshotAt >= ROOM_SERVER_SNAPSHOT_MS) {
+      room.lastSnapshotAt = now;
+      broadcastRoomSnapshots(room, now);
+    }
+  }
+}, ROOM_SERVER_TICK_MS).unref();
 
 setInterval(() => {
   const now = Date.now();

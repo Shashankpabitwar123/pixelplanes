@@ -246,7 +246,12 @@ export const ROOM_MAX_PLAYERS = 6;
 
 export const ROOM_SPAWN_OFFSETS = [-84, -50, -17, 17, 50, 84];
 
-export const MULTIPLAYER_WS_URL = import.meta.env.VITE_WS_URL || '';
+// The room simulator is imported by the Node authoritative server as well as
+// the Vite client. Node has no `import.meta.env`, so read Vite values only when
+// that object exists.
+const viteEnv = import.meta.env ?? {};
+
+export const MULTIPLAYER_WS_URL = viteEnv.VITE_WS_URL || '';
 
 function multiplayerApiUrlFromWsUrl() {
   if (!MULTIPLAYER_WS_URL) return '';
@@ -263,14 +268,14 @@ function multiplayerApiUrlFromWsUrl() {
 }
 
 export const MULTIPLAYER_API_URL =
-  (import.meta.env.VITE_API_URL || multiplayerApiUrlFromWsUrl()).replace(/\/$/, '');
+  (viteEnv.VITE_API_URL || multiplayerApiUrlFromWsUrl()).replace(/\/$/, '');
 
 const DEFAULT_RTC_ICE_SERVERS = [
   { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
 ];
 
 function parseRtcIceServers() {
-  const raw = import.meta.env.VITE_RTC_ICE_SERVERS;
+  const raw = viteEnv.VITE_RTC_ICE_SERVERS;
   if (!raw) return DEFAULT_RTC_ICE_SERVERS;
   try {
     const parsed = JSON.parse(raw);
