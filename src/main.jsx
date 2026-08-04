@@ -109,6 +109,40 @@ const GUIDE_WEATHER_REPLAY_TREES = [
   { x: '31%', width: 48, height: 90 }, { x: '43%', width: 68, height: 124 }, { x: '56%', width: 46, height: 86 },
   { x: '67%', width: 64, height: 116 }, { x: '80%', width: 49, height: 94 }, { x: '92%', width: 62, height: 121 }, { x: '104%', width: 45, height: 82 },
 ];
+const TRAINING_TAKEOFF_ALTITUDE = 9;
+const TRAINING_BANK_ANGLE = 26;
+const TRAINING_LEVEL_ANGLE = 12;
+const TRAINING_FUEL_STATION_INDEX = fuelTankPlacements.reduce(
+  (closestIndex, x, index) => (x < START_X && (closestIndex < 0 || x > fuelTankPlacements[closestIndex]) ? index : closestIndex),
+  -1,
+);
+const TRAINING_FUEL_STATION_X = fuelTankPlacements[TRAINING_FUEL_STATION_INDEX];
+const TRAINING_LESSONS = [
+  {
+    id: 'takeoff',
+    title: 'Lift off',
+    objective: 'Hold thrust, build runway speed, then climb above the treetops.',
+    keys: ['W', '↑'],
+  },
+  {
+    id: 'handling',
+    title: 'Bank and recover',
+    objective: 'Make one gentle bank with A, one with D, then level the plane.',
+    keys: ['A', 'D'],
+  },
+  {
+    id: 'landing',
+    title: 'Land softly',
+    objective: 'Touch down wheel-first. Use S or ↓ to reduce speed before the ground.',
+    keys: ['S', '↓'],
+  },
+  {
+    id: 'refuel',
+    title: 'Refuel',
+    objective: 'Take off again and touch the glowing fuel station ahead.',
+    keys: ['W', '↑'],
+  },
+];
 const GAME_FRAME_PRIORITY = {
   PLAYER: 0,
   ROOM_MAP_DOTS: 0.1,
@@ -179,6 +213,9 @@ function App() {
   const [paused, setPaused] = useState(false);
   const [startScreen, setStartScreen] = useState('home');
   const [gameMode, setGameMode] = useState('bots');
+  const [trainingLessonIndex, setTrainingLessonIndex] = useState(0);
+  const [trainingBanks, setTrainingBanks] = useState({ left: false, right: false });
+  const [trainingComplete, setTrainingComplete] = useState(false);
   const [restartSignal, setRestartSignal] = useState(0);
   const [fogActive, setFogActive] = useState(false);
   const [fogAnimationsPaused, setFogAnimationsPaused] = useState(true);
@@ -238,6 +275,7 @@ function App() {
   const mapBotDotRefs = useRef([]);
   const fuelGaugeRef = useRef(null);
   const playerStateRef = useRef(createInitialPlaneState());
+  const trainingProgressRef = useRef({ lessonIndex: 0, leftBanked: false, rightBanked: false, complete: false });
   const remotePlayerStatesRef = useRef({});
   const remoteProjectilesRef = useRef([]);
   const remoteProjectileElementRefs = useRef(new Map());
@@ -312,6 +350,31 @@ function App() {
     setPlaneMenuOpen(false);
     setKillCount(0);
   }, []);
+  const resetTrainingProgress = useCallback(() => {
+    trainingProgressRef.current = { lessonIndex: 0, leftBanked: false, rightBanked: false, complete: false };
+    setTrainingLessonIndex(0);
+    setTrainingBanks({ left: false, right: false });
+    setTrainingComplete(false);
+  }, []);
+  const completeTrainingLesson = useCallback((expectedLessonIndex) => {
+    const current = trainingProgressRef.current;
+    if (current.complete || current.lessonIndex !== expectedLessonIndex) return;
+
+    const nextLessonIndex = current.lessonIndex + 1;
+    const complete = nextLessonIndex >= TRAINING_LESSONS.length;
+    trainingProgressRef.current = {
+      lessonIndex: nextLessonIndex,
+      leftBanked: false,
+      rightBanked: false,
+      complete,
+    };
+    setTrainingLessonIndex(nextLessonIndex);
+    setTrainingBanks({ left: false, right: false });
+    setTrainingComplete(complete);
+  }, []);
+  const skipTrainingLesson = useCallback(() => {
+    completeTrainingLesson(trainingProgressRef.current.lessonIndex);
+  }, [completeTrainingLesson]);
   const disconnectRoomSocket = useCallback(() => {
     if (roomSocketRef.current) {
       roomSocketRef.current.close();
@@ -1253,12 +1316,13 @@ function App() {
     setPlaneMenuOpen(false);
   }, []);
   const armTrainingStart = useCallback(() => {
+    resetTrainingProgress();
     setGameMode('training');
     setStartScreen('training-ready');
     setMusicOpen(false);
     setHelpOpen(false);
     setPlaneMenuOpen(false);
-  }, []);
+  }, [resetTrainingProgress]);
   const createRoomLobby = useCallback(async () => {
     setRoomError('');
     setKillCount(0);
@@ -1460,6 +1524,44 @@ function App() {
     }, 2000);
     fuelPulseTimersRef.current.push(stationTimeoutId, meterTimeoutId);
   }, []);
+  const updateTrainingFlight = useCallback((planeState) => {
+    if (gameMode !== 'training' || !gameStarted || planeState.crashed) return;
+    const progress = trainingProgressRef.current;
+    if (progress.complete) return;
+
+    if (progress.lessonIndex === 0) {
+      if (planeState.hasLifted && planeState.y >= TRAINING_TAKEOFF_ALTITUDE) {
+        completeTrainingLesson(0);
+      }
+      return;
+    }
+
+    if (progress.lessonIndex === 1 && planeState.hasLifted && planeState.y >= 5) {
+      const bankAngle = normalizeAngle(planeState.angle - 16);
+      let leftBanked = progress.leftBanked;
+      let rightBanked = progress.rightBanked;
+      if (bankAngle <= -TRAINING_BANK_ANGLE) leftBanked = true;
+      if (bankAngle >= TRAINING_BANK_ANGLE) rightBanked = true;
+
+      if (leftBanked !== progress.leftBanked || rightBanked !== progress.rightBanked) {
+        trainingProgressRef.current = { ...progress, leftBanked, rightBanked };
+        setTrainingBanks({ left: leftBanked, right: rightBanked });
+      }
+
+      if (leftBanked && rightBanked && Math.abs(bankAngle) <= TRAINING_LEVEL_ANGLE) {
+        completeTrainingLesson(1);
+      }
+    }
+  }, [completeTrainingLesson, gameMode, gameStarted]);
+  const handleTrainingSafeLanding = useCallback(() => {
+    if (gameMode !== 'training' || !gameStarted) return;
+    completeTrainingLesson(2);
+  }, [completeTrainingLesson, gameMode, gameStarted]);
+  const handleFuelRefill = useCallback((stationIndex) => {
+    triggerFuelRefillFeedback(stationIndex);
+    if (gameMode !== 'training' || !gameStarted || stationIndex !== TRAINING_FUEL_STATION_INDEX) return;
+    completeTrainingLesson(3);
+  }, [completeTrainingLesson, gameMode, gameStarted, triggerFuelRefillFeedback]);
   const updateAmmoStatus = useCallback((nextStatus) => {
     setAmmoStatus((current) =>
       current.count === nextStatus.count && current.reloading === nextStatus.reloading ? current : nextStatus,
@@ -1527,6 +1629,7 @@ function App() {
     setPaused(false);
     setStartScreen('home');
     setGameMode('bots');
+    resetTrainingProgress();
     setRoomLobby(null);
     setRoomMutedPlayers({});
     clearRoomNotifications();
@@ -1553,9 +1656,10 @@ function App() {
     updateCamera({ x: getCameraX(START_X), y: getCameraY(0) });
     updateFuelGauge(1);
     setRestartSignal((signal) => signal + 1);
-  }, [clearRoomNotifications, disconnectRoomSocket, updateCamera, updateFuelGauge]);
+  }, [clearRoomNotifications, disconnectRoomSocket, resetTrainingProgress, updateCamera, updateFuelGauge]);
   const updatePlayerState = useCallback((nextState) => {
     playerStateRef.current = nextState;
+    updateTrainingFlight(nextState);
     if (gameMode !== 'room' || !gameStarted || !localRoomPlayerIdRef.current) return;
     const now = performance.now();
     if (now - lastRoomStateSentRef.current < ROOM_STATE_SEND_INTERVAL_MS) return;
@@ -1568,7 +1672,7 @@ function App() {
       state: nextState,
       seq,
     });
-  }, [gameMode, gameStarted, sendRoomMessage, sendRoomStateDataChannel]);
+  }, [gameMode, gameStarted, sendRoomMessage, sendRoomStateDataChannel, updateTrainingFlight]);
   const updateBotLocator = useCallback((botIndex, botState) => {
     botStateRefs.current[botIndex] = botState;
     const dot = mapBotDotRefs.current[botIndex];
@@ -1720,7 +1824,13 @@ function App() {
   }, [roomConnectionStatus, roomLobby?.weather?.seed, roomLobby?.weather?.startedAt]);
 
   useEffect(() => {
-    if (roomLobby?.weather) return undefined;
+    if (roomLobby?.weather || gameMode === 'training') {
+      if (gameMode === 'training') {
+        setFogActive(false);
+        setFogAnimationsPaused(true);
+      }
+      return undefined;
+    }
     let stopped = false;
     let timer = 0;
 
@@ -1741,10 +1851,13 @@ function App() {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [roomLobby?.weather]);
+  }, [gameMode, roomLobby?.weather]);
 
   useEffect(() => {
-    if (roomLobby?.weather) return undefined;
+    if (roomLobby?.weather || gameMode === 'training') {
+      if (gameMode === 'training') setRainActive(false);
+      return undefined;
+    }
     let stopped = false;
     let timer = 0;
 
@@ -1765,7 +1878,7 @@ function App() {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [roomLobby?.weather]);
+  }, [gameMode, roomLobby?.weather]);
 
   useEffect(() => {
     window.clearTimeout(rainSoundStartTimerRef.current);
@@ -1861,6 +1974,8 @@ function App() {
   const roomSlots = Array.from({ length: ROOM_MAX_PLAYERS }, (_, index) => roomPlayers[index] ?? null);
   const roomIsHost = roomLobby?.hostId ? roomLobby.hostId === localRoomPlayerId : roomPlayers[0]?.id === 'host';
   const isRoomGame = gameStarted && gameMode === 'room';
+  const isTrainingGame = gameStarted && gameMode === 'training';
+  const trainingFuelTargetActive = isTrainingGame && !trainingComplete && trainingLessonIndex === 3;
   const roomEnvironment = roomLobby?.weather?.seed ? roomLobby.weather : null;
   const roomPlayerIndex = roomPlayers.findIndex((player) => player.id === localRoomPlayerId);
   const roomSpawnX = isRoomGame && roomPlayerIndex >= 0
@@ -1890,7 +2005,7 @@ function App() {
     : [];
 
   return (
-    <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}`} aria-label="Animated Bitplanes background">
+    <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}${isTrainingGame ? ' scene-training' : ''}`} aria-label="Animated Bitplanes background">
       <div className="sky-gradient" />
       {roomNotifications.length > 0 && (
         <div className="room-notification-stack" aria-live="polite" aria-atomic="false">
@@ -1993,7 +2108,7 @@ function App() {
           <img src="/assets/theme-lightbulb-icon.svg" alt="" draggable="false" aria-hidden="true" />
         </button>
       )}
-      {!isRoomGame && (
+      {!isRoomGame && gameMode !== 'training' && (
         <div className="score-panel" aria-label="Kill counter and high score">
           <div className="score-row">
             <span>Kills</span>
@@ -2208,11 +2323,11 @@ function App() {
             )}
             {(startScreen === 'bot-ready' || startScreen === 'training-ready') && (
               <div className="bot-start-prompt">
-                <span>Click</span>
+                <span>{startScreen === 'training-ready' ? 'Hold' : 'Click'}</span>
                 <kbd>W</kbd>
-                <span>thrust or</span>
+                <span>{startScreen === 'training-ready' ? 'or' : 'thrust or'}</span>
                 <kbd>↑</kbd>
-                <span>to start</span>
+                <span>{startScreen === 'training-ready' ? 'to begin lesson 1' : 'to start'}</span>
               </div>
             )}
             {startScreen === 'join' && (
@@ -2478,6 +2593,14 @@ function App() {
           </div>
         </div>
       )}
+      {isTrainingGame && (
+        <TrainingFlightHud
+          lessonIndex={trainingLessonIndex}
+          banks={trainingBanks}
+          complete={trainingComplete}
+          onSkip={skipTrainingLesson}
+        />
+      )}
 
       <div
         className="frame-rate-badge"
@@ -2497,7 +2620,7 @@ function App() {
         {fuelTankPlacements.map((x, index) => (
           <span
             key={index}
-            className="map-fuel-dot"
+            className={`map-fuel-dot${trainingFuelTargetActive && index === TRAINING_FUEL_STATION_INDEX ? ' map-fuel-dot-training' : ''}`}
             style={{
               left: `${Math.max(3, Math.min(97, (x / WORLD_WIDTH) * 100))}%`,
             }}
@@ -2634,6 +2757,12 @@ function App() {
           {fuelTankPlacements.map((x, index) => (
             <FuelTank key={index} active={Boolean(fuelStationPulses[index])} style={{ left: `${x}vw` }} />
           ))}
+          {trainingFuelTargetActive && (
+            <div className="training-fuel-marker" style={{ left: `${TRAINING_FUEL_STATION_X}vw` }} aria-hidden="true">
+              <span>REFUEL</span>
+              <i />
+            </div>
+          )}
           {hayPlacements.map((hay, index) =>
             hay.type === 'bale' ? (
               <HayBale key={index} className="hay" style={{ left: `${hay.x}vw` }} />
@@ -2644,7 +2773,8 @@ function App() {
           <PlayablePlane
             onMove={updateCamera}
             onFuelChange={updateFuelGauge}
-            onFuelRefill={triggerFuelRefillFeedback}
+            onFuelRefill={handleFuelRefill}
+            onSafeLanding={handleTrainingSafeLanding}
             onKill={recordPlayerKill}
             onPlayerDeath={resetCurrentKills}
             onAmmoChange={updateAmmoStatus}
@@ -2748,6 +2878,42 @@ function App() {
         </div>
       )}
     </main>
+  );
+}
+
+function TrainingFlightHud({ lessonIndex, banks, complete, onSkip }) {
+  const lesson = TRAINING_LESSONS[Math.min(lessonIndex, TRAINING_LESSONS.length - 1)];
+  const heading = complete ? 'Flight cleared' : lesson.title;
+  const objective = complete
+    ? 'Four core lessons complete. Keep flying in free practice, or restart to choose another mode.'
+    : lesson.objective;
+
+  return (
+    <aside className="training-hud" aria-label="Training lesson" aria-live="polite">
+      <header className="training-hud-header">
+        <span>FLIGHT LESSON</span>
+        <strong>{complete ? '4 / 4' : `${lessonIndex + 1} / 4`}</strong>
+      </header>
+      <div className="training-hud-body">
+        <span className={`training-hud-badge${complete ? ' training-hud-badge-complete' : ''}`} aria-hidden="true">{complete ? '✓' : lessonIndex + 1}</span>
+        <div>
+          <h2>{heading}</h2>
+          <p>{objective}</p>
+          {!complete && (
+            <div className="training-hud-controls" aria-label="Required controls">
+              {lesson.keys.map((key) => <PixelKey key={key}>{key}</PixelKey>)}
+              {lesson.id === 'handling' && (
+                <span className="training-bank-checks" aria-label={`${banks.left ? 'A bank complete' : 'A bank remaining'}, ${banks.right ? 'D bank complete' : 'D bank remaining'}`}>
+                  <i className={banks.left ? 'training-bank-complete' : ''}>A</i>
+                  <i className={banks.right ? 'training-bank-complete' : ''}>D</i>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      {!complete && <button className="training-hud-skip" type="button" onClick={onSkip}>Skip lesson</button>}
+    </aside>
   );
 }
 
@@ -3235,6 +3401,7 @@ function PlayablePlane({
   onMove,
   onFuelChange,
   onFuelRefill,
+  onSafeLanding,
   onKill,
   onPlayerDeath,
   onAmmoChange,
@@ -3270,6 +3437,7 @@ function PlayablePlane({
   const crashSoundRef = useRef(null);
   const sfxMutedRef = useRef(sfxMuted);
   const audioSettingsRef = useRef(audioSettings);
+  const onSafeLandingRef = useRef(onSafeLanding);
   const controlsEnabledRef = useRef(controlsEnabled);
   const pausedRef = useRef(paused);
   const startArmedRef = useRef(startArmed);
@@ -3432,6 +3600,10 @@ function PlayablePlane({
   useEffect(() => {
     audioSettingsRef.current = audioSettings;
   }, [audioSettings]);
+
+  useEffect(() => {
+    onSafeLandingRef.current = onSafeLanding;
+  }, [onSafeLanding]);
 
   useEffect(() => {
     controlsEnabledRef.current = controlsEnabled;
@@ -4245,6 +4417,7 @@ function PlayablePlane({
         next.airborne = false;
         next.hasLifted = false;
         next.angle = normalizeAngle(next.angle + normalizeAngle(14 - next.angle) * 0.3);
+        onSafeLandingRef.current?.(next);
       } else if (hitGround || hitHay || hitWorldEdge) {
         const crashLowestPoint = Math.min(...planeModel.groundPoints.map((point) => getPlanePoint(next, point).y));
         if (crashLowestPoint < 0) next.y -= crashLowestPoint;

@@ -408,6 +408,169 @@ button {
     0 2px 0 rgba(0, 42, 18, 0.3);
 }
 
+.training-hud {
+  position: absolute;
+  z-index: 23;
+  left: 20px;
+  top: 204px;
+  width: min(236px, calc(100vw - 40px));
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 226, 101, 0.74);
+  border-radius: 7px;
+  color: #172c3b;
+  background: rgba(229, 237, 235, 0.78);
+  box-shadow:
+    0 0 0 2px rgba(255, 219, 81, 0.16),
+    0 10px 23px rgba(31, 65, 86, 0.18),
+    inset 0 -3px 0 rgba(48, 67, 77, 0.12);
+  backdrop-filter: blur(10px);
+}
+
+.training-hud-header {
+  min-height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(30, 47, 62, 0.2);
+  background: rgba(40, 60, 77, 0.12);
+}
+
+.training-hud-header span {
+  color: #3d5662;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+}
+
+.training-hud-header strong {
+  min-width: 34px;
+  padding: 3px 5px;
+  border-radius: 3px;
+  color: #fff16f;
+  background: #374b5e;
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 0 5px rgba(255, 241, 111, 0.72);
+}
+
+.training-hud-body {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px 9px 7px;
+}
+
+.training-hud-badge {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #344d5a;
+  border-radius: 50%;
+  color: #fff4bd;
+  background: #a4422d;
+  box-shadow: inset 0 -2px 0 rgba(71, 24, 18, 0.28);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.training-hud-badge-complete {
+  color: #123e22;
+  border-color: #1f7340;
+  background: #6dff8b;
+  box-shadow: 0 0 10px rgba(109, 255, 139, 0.58), inset 0 -2px 0 rgba(22, 96, 47, 0.26);
+}
+
+.training-hud h2,
+.training-hud p {
+  margin: 0;
+}
+
+.training-hud h2 {
+  color: #1d3544;
+  font-size: 14px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.training-hud p {
+  margin-top: 4px;
+  color: #3c5661;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.22;
+}
+
+.training-hud-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.training-hud .gazette-key {
+  min-width: 20px;
+  min-height: 19px;
+  padding: 2px 4px;
+  border-width: 1px;
+  font-size: 10px;
+}
+
+.training-bank-checks {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+}
+
+.training-bank-checks i {
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(44, 64, 77, 0.38);
+  border-radius: 3px;
+  color: #60747c;
+  background: rgba(57, 75, 89, 0.12);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.training-bank-checks .training-bank-complete {
+  color: #164c2a;
+  border-color: rgba(33, 122, 62, 0.68);
+  background: #6dff8b;
+  box-shadow: 0 0 6px rgba(109, 255, 139, 0.48);
+}
+
+.training-hud-skip {
+  width: 100%;
+  min-height: 23px;
+  padding: 4px 8px;
+  border: 0;
+  border-top: 1px solid rgba(30, 47, 62, 0.18);
+  border-radius: 0 0 6px 6px;
+  color: #485f69;
+  background: rgba(52, 73, 85, 0.1);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
+.training-hud-skip:hover,
+.training-hud-skip:focus-visible {
+  outline: none;
+  color: #1d3544;
+  background: rgba(255, 222, 88, 0.54);
+}
+
 .room-leaderboard {
   position: absolute;
   z-index: 22;
@@ -4788,6 +4951,18 @@ button {
     0 0 11px rgba(168, 85, 247, 0.54);
 }
 
+.map-fuel-dot-training {
+  width: 10px;
+  height: 10px;
+  background: #ffe35c;
+  border-color: rgba(116, 78, 9, 0.9);
+  box-shadow:
+    0 0 0 2px rgba(255, 216, 61, 0.25),
+    0 0 10px rgba(255, 225, 92, 0.92),
+    0 0 18px rgba(255, 179, 31, 0.68);
+  animation: trainingFuelDotPulse 900ms ease-in-out infinite;
+}
+
 .map-pointer-dot {
   position: absolute;
   width: 14px;
@@ -5355,6 +5530,7 @@ button {
 .scene-dark .help-toggle,
 .scene-dark .plane-selector,
 .scene-dark .score-panel,
+.scene-dark .training-hud,
 .scene-dark .room-leaderboard,
 .scene-dark .music-panel,
 .scene-dark .flight-deck-panel,
@@ -5363,6 +5539,37 @@ button {
 .scene-dark .start-card {
   border-color: rgba(255, 255, 255, 0.14);
   background: rgba(180, 190, 198, 0.42);
+}
+
+.scene-dark .training-hud {
+  border-color: rgba(255, 226, 101, 0.58);
+  background: rgba(61, 79, 97, 0.72);
+}
+
+.scene-dark .training-hud-header {
+  border-bottom-color: rgba(255, 255, 255, 0.14);
+  background: rgba(16, 29, 45, 0.28);
+}
+
+.scene-dark .training-hud-header span,
+.scene-dark .training-hud p,
+.scene-dark .training-hud-skip {
+  color: rgba(237, 247, 250, 0.82);
+}
+
+.scene-dark .training-hud h2 {
+  color: #f2f8ff;
+}
+
+.scene-dark .training-hud-skip {
+  border-top-color: rgba(255, 255, 255, 0.13);
+  background: rgba(17, 30, 46, 0.24);
+}
+
+.scene-dark .training-hud-skip:hover,
+.scene-dark .training-hud-skip:focus-visible {
+  color: #1c2730;
+  background: rgba(255, 222, 88, 0.82);
 }
 
 .scene-dark .frame-rate-badge span {
@@ -5750,6 +5957,50 @@ button {
   background:
     linear-gradient(135deg, transparent 0 45%, var(--ground-dark) 45% 55%, transparent 55%) 0 0 / 32px 18px,
     linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.18));
+}
+
+.training-fuel-marker {
+  position: absolute;
+  z-index: 12;
+  bottom: calc(100% + 66px);
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  width: 62px;
+  margin-left: -29px;
+  pointer-events: none;
+  animation: trainingFuelMarkerBob 1.05s ease-in-out infinite;
+}
+
+.training-fuel-marker span {
+  padding: 4px 5px;
+  border: 1px solid #75500d;
+  border-radius: 3px;
+  color: #3e2d09;
+  background: #ffe45c;
+  box-shadow: 0 0 11px rgba(255, 223, 87, 0.76), inset 0 -2px 0 rgba(143, 91, 9, 0.22);
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+}
+
+.training-fuel-marker i {
+  width: 0;
+  height: 0;
+  border-top: 9px solid #ffe45c;
+  border-right: 7px solid transparent;
+  border-left: 7px solid transparent;
+  filter: drop-shadow(0 2px 1px rgba(93, 56, 9, 0.4));
+}
+
+@keyframes trainingFuelDotPulse {
+  0%, 100% { transform: translate(-50%, 50%) scale(0.88); }
+  50% { transform: translate(-50%, 50%) scale(1.2); }
+}
+
+@keyframes trainingFuelMarkerBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
 }
 
 .hut {
@@ -7327,6 +7578,12 @@ button {
     left: 66px;
     top: 138px;
     width: 154px;
+  }
+
+  .training-hud {
+    left: 12px;
+    top: 192px;
+    width: min(224px, calc(100vw - 24px));
   }
 
   .room-leaderboard {
