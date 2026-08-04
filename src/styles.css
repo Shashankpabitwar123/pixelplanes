@@ -5009,6 +5009,18 @@ button {
   animation: trainingFuelDotPulse 850ms ease-in-out infinite;
 }
 
+.map-training-target-dot-moving {
+  border-color: rgba(13, 109, 130, 0.92);
+  background: #74ecff;
+  box-shadow: 0 0 0 2px rgba(116, 236, 255, 0.2), 0 0 11px rgba(116, 236, 255, 0.94);
+}
+
+.map-training-target-dot-rocket {
+  border-color: rgba(104, 36, 122, 0.92);
+  background: #db7aff;
+  box-shadow: 0 0 0 2px rgba(219, 122, 255, 0.2), 0 0 11px rgba(219, 122, 255, 0.94);
+}
+
 .map-training-checkpoint-dot {
   border: 1px solid rgba(117, 231, 255, 0.92);
   background: #68e8ff;
@@ -6129,6 +6141,23 @@ button {
 .training-practice-target-rocket > i {
   border-color: #73e9ff;
   box-shadow: 0 0 0 3px rgba(115, 233, 255, 0.2), 0 0 17px rgba(115, 233, 255, 0.9);
+}
+
+.training-practice-target-moving > span {
+  color: #073f51;
+  border-color: #12738f;
+  background: #8df2ff;
+  box-shadow: 0 0 10px rgba(114, 233, 255, 0.82), inset 0 -2px 0 rgba(5, 103, 133, 0.2);
+}
+
+.training-practice-target-moving > i {
+  border-color: #73e9ff;
+  box-shadow: 0 0 0 3px rgba(115, 233, 255, 0.2), 0 0 17px rgba(115, 233, 255, 0.9);
+}
+
+.training-practice-target-moving > i b {
+  background: #7cf3ff;
+  box-shadow: 0 0 7px rgba(115, 233, 255, 0.94);
 }
 
 .training-practice-target-rocket > i b {

@@ -115,17 +115,28 @@ const TRAINING_LEVEL_ANGLE = 12;
 const TRAINING_WEAPONS_LESSON_INDEX = 4;
 const TRAINING_WEATHER_LESSON_INDEX = 5;
 const TRAINING_FOG_CHECKPOINT_RADIUS = 5.4;
+const TRAINING_STATIC_TARGET_CLEAR_COUNT = 3;
+const TRAINING_MOVING_TARGET_CLEAR_COUNT = 2;
 const TRAINING_FUEL_STATION_INDEX = fuelTankPlacements.reduce(
   (closestIndex, x, index) => (x < START_X && (closestIndex < 0 || x > fuelTankPlacements[closestIndex]) ? index : closestIndex),
   -1,
 );
 const TRAINING_FUEL_STATION_X = fuelTankPlacements[TRAINING_FUEL_STATION_INDEX];
 const TRAINING_WEAPON_TARGETS = [
-  { id: 'training-bullet-target', weapon: 'bullet', label: 'BULLETS', x: START_X - 28, y: 14, angle: 16 },
-  { id: 'training-rocket-target', weapon: 'rocket', label: 'ROCKET', x: START_X - 44, y: 14, angle: 16 },
+  { id: 'training-static-target-1', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 28, y: 14, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-2', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 72, y: 20, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-3', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 118, y: 16, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-4', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 164, y: 23, angle: 16, radius: 2.3 },
+  { id: 'training-static-target-5', targetType: 'static', weapon: 'bullet', label: 'BULLETS', x: START_X - 210, y: 18, angle: 16, radius: 2.3 },
+  { id: 'training-moving-target-1', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 164, y: 28, angle: 16, radius: 2.45, motion: { x: 10, y: 2.5, speed: 0.00075, phase: 0.2 } },
+  { id: 'training-moving-target-2', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 208, y: 17, angle: 16, radius: 2.45, motion: { x: 8, y: 3.4, speed: 0.00062, phase: 2.1 } },
+  { id: 'training-moving-target-3', targetType: 'moving', weapon: 'bullet', label: 'MOVING', x: START_X - 252, y: 24, angle: 16, radius: 2.45, motion: { x: 11, y: 2.2, speed: 0.0007, phase: 4.35 } },
+  { id: 'training-rocket-target', targetType: 'rocket', weapon: 'rocket', label: 'ROCKET', x: START_X - 270, y: 23, angle: 16, radius: 2.8 },
 ];
 const createTrainingWeaponTargets = () => TRAINING_WEAPON_TARGETS.map((target) => ({
   ...target,
+  active: target.targetType === 'static',
+  hit: false,
   state: {
     x: target.x,
     y: target.y,
@@ -133,6 +144,13 @@ const createTrainingWeaponTargets = () => TRAINING_WEAPON_TARGETS.map((target) =
     crashed: false,
   },
 }));
+const createTrainingWeaponProgress = () => ({
+  staticHits: 0,
+  movingHits: 0,
+  movingUnlocked: false,
+  rocketUnlocked: false,
+  rocketHit: false,
+});
 const TRAINING_LESSONS = [
   {
     id: 'takeoff',
@@ -161,7 +179,7 @@ const TRAINING_LESSONS = [
   {
     id: 'weapons',
     title: 'Range practice',
-    objective: 'Hit the two practice targets: bullets first, then one guided rocket.',
+    objective: 'Clear three static circles, then two slow-moving circles. Finish with one guided rocket.',
     keys: ['SPACE', 'R'],
   },
   {
@@ -173,6 +191,7 @@ const TRAINING_LESSONS = [
 ];
 const GAME_FRAME_PRIORITY = {
   PLAYER: 0,
+  TRAINING_TARGETS: 0.05,
   ROOM_MAP_DOTS: 0.1,
   ROOM_REMOTE_PLANES: 0.2,
   ROOM_PROJECTILES: 0.3,
@@ -180,6 +199,7 @@ const GAME_FRAME_PRIORITY = {
 };
 const GAME_FRAME_PRIORITIES = [
   GAME_FRAME_PRIORITY.PLAYER,
+  GAME_FRAME_PRIORITY.TRAINING_TARGETS,
   GAME_FRAME_PRIORITY.ROOM_MAP_DOTS,
   GAME_FRAME_PRIORITY.ROOM_REMOTE_PLANES,
   GAME_FRAME_PRIORITY.ROOM_PROJECTILES,
@@ -243,7 +263,7 @@ function App() {
   const [gameMode, setGameMode] = useState('bots');
   const [trainingLessonIndex, setTrainingLessonIndex] = useState(0);
   const [trainingBanks, setTrainingBanks] = useState({ left: false, right: false });
-  const [trainingWeaponHits, setTrainingWeaponHits] = useState({ bullet: false, rocket: false });
+  const [trainingWeaponHits, setTrainingWeaponHits] = useState(createTrainingWeaponProgress);
   const [trainingWeatherProgress, setTrainingWeatherProgress] = useState({ light: false, checkpoint: false });
   const [trainingWeatherCheckpoint, setTrainingWeatherCheckpoint] = useState(null);
   const [trainingComplete, setTrainingComplete] = useState(false);
@@ -315,7 +335,10 @@ function App() {
     lessonIndex: 0,
     leftBanked: false,
     rightBanked: false,
-    bulletTargetHit: false,
+    staticTargetHits: 0,
+    movingTargetHits: 0,
+    movingTargetsUnlocked: false,
+    rocketTargetUnlocked: false,
     rocketTargetHit: false,
     fogLightOn: false,
     fogCheckpointCleared: false,
@@ -402,7 +425,10 @@ function App() {
       lessonIndex: 0,
       leftBanked: false,
       rightBanked: false,
-      bulletTargetHit: false,
+      staticTargetHits: 0,
+      movingTargetHits: 0,
+      movingTargetsUnlocked: false,
+      rocketTargetUnlocked: false,
       rocketTargetHit: false,
       fogLightOn: false,
       fogCheckpointCleared: false,
@@ -412,7 +438,7 @@ function App() {
     trainingWeatherCheckpointRef.current = null;
     setTrainingLessonIndex(0);
     setTrainingBanks({ left: false, right: false });
-    setTrainingWeaponHits({ bullet: false, rocket: false });
+    setTrainingWeaponHits(createTrainingWeaponProgress());
     setTrainingWeatherProgress({ light: false, checkpoint: false });
     setTrainingWeatherCheckpoint(null);
     setTrainingComplete(false);
@@ -427,7 +453,10 @@ function App() {
       lessonIndex: nextLessonIndex,
       leftBanked: false,
       rightBanked: false,
-      bulletTargetHit: false,
+      staticTargetHits: 0,
+      movingTargetHits: 0,
+      movingTargetsUnlocked: false,
+      rocketTargetUnlocked: false,
       rocketTargetHit: false,
       fogLightOn: false,
       fogCheckpointCleared: false,
@@ -445,7 +474,7 @@ function App() {
     }
     setTrainingLessonIndex(nextLessonIndex);
     setTrainingBanks({ left: false, right: false });
-    setTrainingWeaponHits({ bullet: false, rocket: false });
+    setTrainingWeaponHits(createTrainingWeaponProgress());
     setTrainingWeatherProgress({ light: false, checkpoint: false });
     setTrainingComplete(complete);
   }, []);
@@ -1662,15 +1691,68 @@ function App() {
     const progress = trainingProgressRef.current;
     if (progress.complete || progress.lessonIndex !== TRAINING_WEAPONS_LESSON_INDEX) return;
     const target = trainingTargetStatesRef.current.find((candidate) => candidate.id === targetId);
-    if (!target || target.weapon !== weapon || target.state.crashed) return;
+    if (!target || !target.active || target.weapon !== weapon || target.hit || target.state.crashed) return;
 
+    target.hit = true;
+    target.active = false;
     target.state = { ...target.state, crashed: true };
-    const bulletTargetHit = progress.bulletTargetHit || weapon === 'bullet';
-    const rocketTargetHit = progress.rocketTargetHit || weapon === 'rocket';
-    trainingProgressRef.current = { ...progress, bulletTargetHit, rocketTargetHit };
-    setTrainingWeaponHits({ bullet: bulletTargetHit, rocket: rocketTargetHit });
 
-    if (bulletTargetHit && rocketTargetHit) {
+    let staticTargetHits = progress.staticTargetHits;
+    let movingTargetHits = progress.movingTargetHits;
+    let movingTargetsUnlocked = progress.movingTargetsUnlocked;
+    let rocketTargetUnlocked = progress.rocketTargetUnlocked;
+    let rocketTargetHit = progress.rocketTargetHit;
+
+    if (target.targetType === 'static') {
+      staticTargetHits += 1;
+      if (!movingTargetsUnlocked && staticTargetHits >= TRAINING_STATIC_TARGET_CLEAR_COUNT) {
+        movingTargetsUnlocked = true;
+        trainingTargetStatesRef.current.forEach((candidate) => {
+          if (candidate.targetType === 'static' && !candidate.hit) candidate.active = false;
+          if (candidate.targetType === 'moving') {
+            candidate.active = true;
+            candidate.state = { ...candidate.state, crashed: false };
+          }
+        });
+      }
+    }
+
+    if (target.targetType === 'moving') {
+      movingTargetHits += 1;
+      if (!rocketTargetUnlocked && movingTargetHits >= TRAINING_MOVING_TARGET_CLEAR_COUNT) {
+        rocketTargetUnlocked = true;
+        const rocketTarget = trainingTargetStatesRef.current.find((candidate) => candidate.targetType === 'rocket');
+        if (rocketTarget) {
+          rocketTarget.active = true;
+          rocketTarget.state = { ...rocketTarget.state, crashed: false };
+        }
+      }
+    }
+
+    if (target.targetType === 'rocket') rocketTargetHit = true;
+
+    const nextProgress = {
+      ...progress,
+      staticTargetHits,
+      movingTargetHits,
+      movingTargetsUnlocked,
+      rocketTargetUnlocked,
+      rocketTargetHit,
+    };
+    trainingProgressRef.current = nextProgress;
+    setTrainingWeaponHits({
+      staticHits: staticTargetHits,
+      movingHits: movingTargetHits,
+      movingUnlocked: movingTargetsUnlocked,
+      rocketUnlocked: rocketTargetUnlocked,
+      rocketHit: rocketTargetHit,
+    });
+
+    if (
+      staticTargetHits >= TRAINING_STATIC_TARGET_CLEAR_COUNT &&
+      movingTargetHits >= TRAINING_MOVING_TARGET_CLEAR_COUNT &&
+      rocketTargetHit
+    ) {
       completeTrainingLesson(TRAINING_WEAPONS_LESSON_INDEX);
     }
   }, [completeTrainingLesson, gameMode, gameStarted]);
@@ -2742,16 +2824,13 @@ function App() {
             }}
           />
         ))}
-        {trainingWeaponsTargetActive && trainingTargetStatesRef.current.map((target) => !target.state.crashed && (
-          <span
-            key={target.id}
-            className="map-training-target-dot"
-            style={{
-              left: `${Math.max(3, Math.min(97, (target.state.x / WORLD_WIDTH) * 100))}%`,
-              top: `${Math.max(3, Math.min(97, 100 - ((target.state.y + 50) / WORLD_HEIGHT) * 100))}%`,
-            }}
-          />
-        ))}
+        <TrainingTargetMapDots
+          active={trainingWeaponsTargetActive}
+          targets={trainingTargetStatesRef.current}
+          targetsRef={trainingTargetStatesRef}
+          targetsVersion={trainingWeaponHits}
+          registerGameFrameCallback={registerGameFrameCallback}
+        />
         {trainingWeatherCheckpointActive && trainingWeatherCheckpoint && (
           <span
             className="map-training-checkpoint-dot"
@@ -2898,7 +2977,13 @@ function App() {
               <i />
             </div>
           )}
-          <TrainingPracticeTargets active={trainingWeaponsTargetActive} targets={trainingTargetStatesRef.current} />
+          <TrainingPracticeTargets
+            active={trainingWeaponsTargetActive}
+            targets={trainingTargetStatesRef.current}
+            targetsRef={trainingTargetStatesRef}
+            targetsVersion={trainingWeaponHits}
+            registerGameFrameCallback={registerGameFrameCallback}
+          />
           <TrainingFogCheckpoint active={trainingWeatherCheckpointActive} checkpoint={trainingWeatherCheckpoint} />
           {hayPlacements.map((hay, index) =>
             hay.type === 'bale' ? (
@@ -3020,15 +3105,78 @@ function App() {
   );
 }
 
-function TrainingPracticeTargets({ active, targets }) {
+function TrainingTargetMapDots({ active, targets, targetsRef, targetsVersion, registerGameFrameCallback }) {
+  const dotRefs = useRef(new Map());
+
+  useEffect(() => {
+    if (!active) return undefined;
+    const update = () => {
+      targetsRef.current.forEach((target) => {
+        const dot = dotRefs.current.get(target.id);
+        if (!dot) return;
+        const visible = target.active && !target.state.crashed;
+        dot.style.display = visible ? '' : 'none';
+        if (!visible) return;
+        dot.style.left = `${Math.max(3, Math.min(97, (target.state.x / WORLD_WIDTH) * 100))}%`;
+        dot.style.top = `${Math.max(3, Math.min(97, 100 - ((target.state.y + 50) / WORLD_HEIGHT) * 100))}%`;
+      });
+    };
+    update();
+    return registerGameFrameCallback(GAME_FRAME_PRIORITY.TRAINING_TARGETS, update);
+  }, [active, registerGameFrameCallback, targetsRef, targetsVersion]);
+
+  if (!active) return null;
+
+  return targets.filter((target) => target.active && !target.state.crashed).map((target) => (
+    <span
+      key={target.id}
+      ref={(node) => {
+        if (node) dotRefs.current.set(target.id, node);
+        else dotRefs.current.delete(target.id);
+      }}
+      className={`map-training-target-dot map-training-target-dot-${target.targetType}`}
+      style={{
+        left: `${Math.max(3, Math.min(97, (target.state.x / WORLD_WIDTH) * 100))}%`,
+        top: `${Math.max(3, Math.min(97, 100 - ((target.state.y + 50) / WORLD_HEIGHT) * 100))}%`,
+      }}
+      aria-hidden="true"
+    />
+  ));
+}
+
+function TrainingPracticeTargets({ active, targets, targetsRef, targetsVersion, registerGameFrameCallback }) {
+  const targetRefs = useRef(new Map());
+
+  useEffect(() => {
+    if (!active) return undefined;
+    const update = (now) => {
+      targetsRef.current.forEach((target) => {
+        if (!target.active || target.state.crashed || !target.motion) return;
+        const phase = now * target.motion.speed + target.motion.phase;
+        const x = target.x + Math.sin(phase) * target.motion.x;
+        const y = target.y + Math.cos(phase * 1.18) * target.motion.y;
+        target.state.x = x;
+        target.state.y = y;
+        const element = targetRefs.current.get(target.id);
+        if (element) element.style.transform = `translate(${x}vw, ${-y}vh)`;
+      });
+    };
+    update(performance.now());
+    return registerGameFrameCallback(GAME_FRAME_PRIORITY.TRAINING_TARGETS, update);
+  }, [active, registerGameFrameCallback, targetsRef, targetsVersion]);
+
   if (!active) return null;
 
   return (
     <div className="training-practice-target-layer" aria-hidden="true">
-      {targets.filter((target) => !target.state.crashed).map((target) => (
+      {targets.filter((target) => target.active && !target.state.crashed).map((target) => (
         <div
           key={target.id}
-          className={`training-practice-target training-practice-target-${target.weapon}`}
+          ref={(node) => {
+            if (node) targetRefs.current.set(target.id, node);
+            else targetRefs.current.delete(target.id);
+          }}
+          className={`training-practice-target training-practice-target-${target.weapon} training-practice-target-${target.targetType}`}
           style={{ transform: `translate(${target.state.x}vw, ${-target.state.y}vh)` }}
         >
           <span>{target.label}</span>
@@ -3080,9 +3228,10 @@ function TrainingFlightHud({ lessonIndex, banks, weaponHits, weatherProgress, co
                 </span>
               )}
               {lesson.id === 'weapons' && (
-                <span className="training-task-checks" aria-label={`${weaponHits.bullet ? 'Bullet target complete' : 'Bullet target remaining'}, ${weaponHits.rocket ? 'Rocket target complete' : 'Rocket target remaining'}`}>
-                  <i className={weaponHits.bullet ? 'training-task-complete' : ''}>BULLETS</i>
-                  <i className={weaponHits.rocket ? 'training-task-complete' : ''}>ROCKET</i>
+                <span className="training-task-checks training-range-checks" aria-label={`${weaponHits.staticHits} of ${TRAINING_STATIC_TARGET_CLEAR_COUNT} static targets hit, ${weaponHits.movingHits} of ${TRAINING_MOVING_TARGET_CLEAR_COUNT} moving targets hit, ${weaponHits.rocketHit ? 'rocket target complete' : 'rocket target remaining'}`}>
+                  <i className={weaponHits.staticHits >= TRAINING_STATIC_TARGET_CLEAR_COUNT ? 'training-task-complete' : ''}>STATIC {weaponHits.staticHits}/{TRAINING_STATIC_TARGET_CLEAR_COUNT}</i>
+                  <i className={weaponHits.movingHits >= TRAINING_MOVING_TARGET_CLEAR_COUNT ? 'training-task-complete' : ''}>MOVING {weaponHits.movingHits}/{TRAINING_MOVING_TARGET_CLEAR_COUNT}</i>
+                  <i className={weaponHits.rocketHit ? 'training-task-complete' : ''}>ROCKET</i>
                 </span>
               )}
               {lesson.id === 'weather' && (
@@ -4646,11 +4795,12 @@ function PlayablePlane({
 
     const getTrainingTargets = () =>
       (trainingTargetStatesRef?.current || [])
-        .filter((target) => target.state && !target.state.crashed)
+        .filter((target) => target.active && target.state && !target.state.crashed)
         .map((target) => ({
           type: 'training-target',
           id: target.id,
           weapon: target.weapon,
+          radius: target.radius,
           state: target.state,
         }));
 
@@ -4715,7 +4865,7 @@ function PlayablePlane({
       for (const projectile of projectilesRef.current) {
         const segment = getProjectileSegment(projectile, now);
         const target = trainingTargets.find((candidate) =>
-          candidate.weapon === 'bullet' && segmentHitsPlane(segment, candidate.state, projectile.radius ?? 1.05),
+          candidate.weapon === 'bullet' && segmentHitsPlane(segment, candidate.state, candidate.radius ?? projectile.radius ?? 1.05),
         );
         if (target) {
           removeProjectile(projectile.id);
@@ -4728,7 +4878,7 @@ function PlayablePlane({
         if (projectile.groundHit) continue;
         const segment = getRocketSegment(projectile);
         const target = trainingTargets.find((candidate) =>
-          candidate.weapon === 'rocket' && segmentHitsPlane(segment, candidate.state, projectile.radius ?? 2.25),
+          candidate.weapon === 'rocket' && segmentHitsPlane(segment, candidate.state, candidate.radius ?? projectile.radius ?? 2.25),
         );
         if (target) {
           removeRocketProjectile(projectile.id);
