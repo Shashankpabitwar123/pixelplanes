@@ -1545,47 +1545,45 @@ button {
   background: rgba(255, 191, 45, 0.82);
 }
 
-.flight-deck-rule-control {
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto 18px;
-  grid-template-areas:
-    'copy value'
-    'slider slider';
-  column-gap: 8px;
-  row-gap: 3px;
-  min-height: 56px;
+/* Game controls intentionally use the exact same one-row card pattern as
+   Sound & lights: label, slider, then value—never a slider between cards. */
+label.flight-deck-rule-control {
+  grid-template-columns: 116px minmax(0, 1fr) 84px;
+  grid-template-rows: 1fr;
+  grid-template-areas: none;
+  gap: 8px;
+  min-height: 44px;
 }
 
-.flight-deck-rule-control > span {
-  grid-area: copy;
+label.flight-deck-rule-control > span {
+  grid-area: auto;
   display: grid;
   gap: 2px;
   white-space: normal;
 }
 
-.flight-deck-rule-control > span b {
+label.flight-deck-rule-control > span b {
   font-size: 13px;
   line-height: 1;
 }
 
-.flight-deck-rule-control > span small {
+label.flight-deck-rule-control > span small {
   color: #48646d;
   font-size: 8px;
   font-weight: 750;
   line-height: 1.05;
 }
 
-.flight-deck-rule-control output {
-  grid-area: value;
-  min-width: 58px;
-  max-width: 84px;
-  align-self: center;
+label.flight-deck-rule-control output {
+  grid-area: auto;
+  min-width: 68px;
+  max-width: none;
   white-space: nowrap;
   font-size: 13px;
 }
 
-.flight-deck-rule-control input[type='range'] {
-  grid-area: slider;
+label.flight-deck-rule-control input[type='range'] {
+  grid-area: auto;
 }
 
 .flight-deck-rule-footer {
@@ -8186,13 +8184,13 @@ button {
     height: 20px;
   }
 
-  .flight-deck-rule-control {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto 18px;
+  label.flight-deck-rule-control {
+    grid-template-columns: 112px minmax(0, 1fr) 82px;
+    grid-template-rows: 1fr;
   }
 
-  .flight-deck-rule-control > span b,
-  .flight-deck-rule-control output {
+  label.flight-deck-rule-control > span b,
+  label.flight-deck-rule-control output {
     font-size: 13px;
   }
 
