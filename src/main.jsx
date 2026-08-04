@@ -2973,7 +2973,7 @@ function GuideCombatPage() {
       />
       <div className="gazette-top-hud-layout">
         <section className="gazette-top-hud-map">
-          <h4>Locator map</h4>
+          <div className="gazette-top-hud-map-heading"><h4>Locator map</h4><div className="gazette-top-hud-performance-cards" aria-label="FPS and ping readout illustration"><div><strong>60</strong><span>FPS</span></div><div><strong>--</strong><span>MS</span></div></div></div>
           <div className="gazette-map-demo gazette-top-hud-map-demo" aria-label="Top-right locator map illustration">
             <span className="gazette-map-grid-line gazette-map-grid-a" /><span className="gazette-map-grid-line gazette-map-grid-b" />
             <span className="gazette-map-edge gazette-map-edge-left" /><span className="gazette-map-edge gazette-map-edge-right" />
@@ -2991,7 +2991,7 @@ function GuideCombatPage() {
         <section className="gazette-top-hud-resources">
           <h4>Fuel, bullets, and rockets</h4>
           <div className="gazette-top-hud-instrument-art" aria-label="Fuel, bullet, and rocket meter illustration">
-            <div className="gazette-top-hud-fuel-art"><div className="gazette-fuel-gauge-demo" aria-hidden="true"><i /><i /><i /><i /><b /><em /></div><b>{FUEL_SECONDS} SEC FUEL</b></div>
+            <div className="gazette-top-hud-fuel-art"><div className="gazette-fuel-gauge-demo gazette-top-hud-fuel-gauge-live" aria-hidden="true"><i /><i /><i /><i /><b /><em /></div><b>{FUEL_SECONDS} SEC FUEL</b></div>
             <div className="gazette-top-hud-ammo-art"><div>{Array.from({ length: MAX_BULLETS }, (_, index) => <i key={index} className="guide-bullet-art" />)}</div><b>{MAX_BULLETS} BULLETS</b></div>
             <div className="gazette-top-hud-rocket-art"><div><span className="guide-rocket-art" /><span className="guide-rocket-art" /></div><b>{MAX_ROCKETS} ROCKETS</b></div>
           </div>
