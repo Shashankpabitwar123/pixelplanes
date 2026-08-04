@@ -119,6 +119,33 @@ const GUIDE_WEATHER_REPLAY_TREES = [
   { x: '31%', width: 48, height: 90 }, { x: '43%', width: 68, height: 124 }, { x: '56%', width: 46, height: 86 },
   { x: '67%', width: 64, height: 116 }, { x: '80%', width: 49, height: 94 }, { x: '92%', width: 62, height: 121 }, { x: '104%', width: 45, height: 82 },
 ];
+
+function getRoomConnectionMeta(status, pingMs) {
+  if (status === 'connected') {
+    if (!Number.isFinite(pingMs)) {
+      return { tone: 'pending', label: 'Room online', detail: 'Measuring connection' };
+    }
+    if (pingMs <= 100) {
+      return { tone: 'smooth', label: 'Smooth link', detail: `${pingMs} ms` };
+    }
+    if (pingMs <= 180) {
+      return { tone: 'steady', label: 'Stable link', detail: `${pingMs} ms` };
+    }
+    return { tone: 'distance', label: 'Long-distance link', detail: `${pingMs} ms` };
+  }
+
+  if (status === 'reconnecting') {
+    return { tone: 'recovering', label: 'Connection lost', detail: 'Reconnecting to your room…' };
+  }
+  if (status === 'restoring') {
+    return { tone: 'recovering', label: 'Restoring room', detail: 'Your pilot seat is being restored…' };
+  }
+  if (status === 'connecting') {
+    return { tone: 'pending', label: 'Connecting', detail: 'Finding the room server…' };
+  }
+
+  return { tone: 'offline', label: 'Room offline', detail: 'Return to the room lobby to join again.' };
+}
 const TRAINING_TAKEOFF_ALTITUDE = 9;
 const TRAINING_BANK_ANGLE = 26;
 const TRAINING_LEVEL_ANGLE = 12;
@@ -1641,7 +1668,8 @@ function App() {
     });
     playerApiRef.current?.applyAuthoritativeRoomState?.(snapshot.local);
   }, [replaceRemoteProjectiles, updateRemotePlayerState]);
-  const connectRoomSocket = useCallback((requestedUrl = '') => new Promise((resolve, reject) => {
+  const connectRoomSocket = useCallback((requestedUrl = '', options = {}) => new Promise((resolve, reject) => {
+    const restoringSession = Boolean(options.restoringSession);
     const endpoint = normalizeRoomWebSocketUrl(requestedUrl || MULTIPLAYER_WS_URL);
     if (!endpoint) {
       reject(new Error('Multiplayer server is not configured yet.'));
@@ -1654,7 +1682,7 @@ function App() {
       return;
     }
 
-    setRoomConnectionStatus('connecting');
+    setRoomConnectionStatus(restoringSession ? 'restoring' : 'connecting');
     const socket = new WebSocket(endpoint);
     roomSocketRef.current = socket;
     let settled = false;
@@ -1684,6 +1712,7 @@ function App() {
           localRoomPlayerIdRef.current = session.playerId;
           setLocalRoomPlayerId(session.playerId);
           roomReconnectAttemptsRef.current = 0;
+          setRoomConnectionStatus('connected');
           try {
             window.sessionStorage.setItem(ROOM_SESSION_STORAGE_KEY, JSON.stringify(session));
           } catch {
@@ -1710,6 +1739,7 @@ function App() {
       }
       if (message.type === 'room_resumed') {
         roomReconnectAttemptsRef.current = 0;
+        setRoomConnectionStatus('connected');
         applyServerRoomState(message.room, message.localPlayerId);
         if (message.room?.started) {
           setGameMode('room');
@@ -1928,7 +1958,9 @@ function App() {
 
     const followRoute = async () => {
       try {
-        const socket = await connectRoomSocket(request.wsUrl);
+        const socket = await connectRoomSocket(request.wsUrl, {
+          restoringSession: request.action.type === 'resume_room',
+        });
         if (cancelled || socket.readyState !== WebSocket.OPEN) return;
         socket.send(JSON.stringify(request.action));
       } catch {
@@ -1958,7 +1990,7 @@ function App() {
       roomReconnectAttemptsRef.current += 1;
       intentionalRoomDisconnectRef.current = false;
       try {
-        const socket = await connectRoomSocket(session.serverUrl || MULTIPLAYER_WS_URL);
+        const socket = await connectRoomSocket(session.serverUrl || MULTIPLAYER_WS_URL, { restoringSession: true });
         const action = {
           type: 'resume_room',
           code: session.roomCode,
@@ -2831,6 +2863,7 @@ function App() {
   const roomSlots = Array.from({ length: ROOM_MAX_PLAYERS }, (_, index) => roomPlayers[index] ?? null);
   const roomIsHost = roomLobby?.hostId ? roomLobby.hostId === localRoomPlayerId : roomPlayers[0]?.id === 'host';
   const isRoomGame = gameStarted && gameMode === 'room';
+  const roomConnectionMeta = getRoomConnectionMeta(roomConnectionStatus, roomPingMs);
   const isTrainingGame = gameStarted && gameMode === 'training';
   const trainingFuelLessonActive = isTrainingGame && !trainingComplete && trainingLessonIndex === 3;
   const trainingWeaponsTargetActive = isTrainingGame && !trainingComplete && trainingLessonIndex === TRAINING_WEAPONS_LESSON_INDEX;
@@ -2873,6 +2906,19 @@ function App() {
               {notification.message}
             </div>
           ))}
+        </div>
+      )}
+      {isRoomGame && roomConnectionStatus !== 'connected' && (
+        <div
+          className={`room-recovery-banner room-recovery-${roomConnectionMeta.tone}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="room-recovery-light" aria-hidden="true" />
+          <span>
+            <strong>{roomConnectionMeta.label}</strong>
+            <small>{roomConnectionMeta.detail}</small>
+          </span>
         </div>
       )}
 
@@ -3210,9 +3256,9 @@ function App() {
                     onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
                   />
                 </div>
-                {(roomError || roomConnectionStatus === 'connecting') && (
+                {(roomError || roomConnectionStatus === 'connecting' || roomConnectionStatus === 'reconnecting' || roomConnectionStatus === 'restoring') && (
                   <div className={`room-status-line${roomError ? ' room-status-error' : ''}`}>
-                    {roomError || 'Connecting...'}
+                    {roomError || roomConnectionMeta.detail}
                   </div>
                 )}
                 <div className="start-actions start-actions-single">
@@ -3259,9 +3305,9 @@ function App() {
                     Create
                   </button>
                 </div>
-                {(roomError || roomConnectionStatus === 'connecting') && (
+                {(roomError || roomConnectionStatus === 'connecting' || roomConnectionStatus === 'reconnecting' || roomConnectionStatus === 'restoring') && (
                   <div className={`room-status-line${roomError ? ' room-status-error' : ''}`}>
-                    {roomError || 'Connecting...'}
+                    {roomError || roomConnectionMeta.detail}
                   </div>
                 )}
                 <button className="start-back" type="button" onClick={() => setStartScreen('room')}>
@@ -3511,8 +3557,12 @@ function App() {
         <span>FPS</span>
       </div>
       <div
-        className="frame-rate-badge ping-badge"
-        aria-label={roomPingMs == null ? 'Room ping is not available' : `Room ping is ${roomPingMs} milliseconds`}
+        className={`frame-rate-badge ping-badge ping-quality-${roomConnectionMeta.tone}`}
+        aria-label={roomConnectionStatus !== 'connected'
+          ? roomConnectionMeta.detail
+          : roomPingMs == null
+            ? 'Room ping is being measured'
+            : `${roomConnectionMeta.label}: ${roomPingMs} milliseconds`}
       >
         <strong>{roomPingMs == null ? '--' : roomPingMs}</strong>
         <span>MS</span>

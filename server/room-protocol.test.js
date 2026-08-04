@@ -107,3 +107,25 @@ test('WebSocket room protocol accepts inputs and rejects client-owned state', as
   assert.equal(resumed.localPlayerId, session.playerId);
   assert.equal(resumed.room.started, true);
 });
+
+test('room lobby actions are throttled without disconnecting a player', async (t) => {
+  const server = await startTestServer();
+  const socket = new WebSocket(`ws://127.0.0.1:${TEST_PORT}/rooms`);
+  t.after(async () => {
+    socket.close();
+    await once(socket, 'close').catch(() => {});
+    server.kill('SIGTERM');
+    await once(server, 'exit').catch(() => {});
+  });
+
+  await once(socket, 'open');
+  const throttled = waitForMessage(socket, (message) =>
+    message.type === 'room_error' && /Please wait a moment before creating or joining/i.test(message.message),
+  );
+  for (let attempt = 0; attempt < 9; attempt += 1) {
+    socket.send(JSON.stringify({ type: 'join_room', code: 'NOTFOUND' }));
+  }
+
+  await throttled;
+  assert.equal(socket.readyState, WebSocket.OPEN);
+});

@@ -28,6 +28,8 @@ const MAX_VOLATILE_SOCKET_BUFFER_BYTES = 256 * 1024;
 const MAX_SOCKET_MESSAGE_BYTES = 16 * 1024;
 const MAX_SOCKET_MESSAGES_PER_SECOND = 90;
 const MAX_SOCKET_RATE_VIOLATIONS = 4;
+const LOBBY_ACTION_WINDOW_MS = 20_000;
+const MAX_LOBBY_ACTIONS_PER_WINDOW = 8;
 const ROOM_SPAWN_OFFSETS = [-84, -50, -17, 17, 50, 84];
 const DEFAULT_STUN_URLS = ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'];
 const VOLATILE_MESSAGE_TYPES = new Set(['weather_state', 'room_snapshot']);
@@ -790,6 +792,18 @@ function acceptSocketMessage(socket, raw) {
   return true;
 }
 
+function acceptLobbyAction(socket) {
+  const now = Date.now();
+  const rate = socket.lobbyActionRate || { startedAt: now, count: 0 };
+  if (now - rate.startedAt >= LOBBY_ACTION_WINDOW_MS) {
+    rate.startedAt = now;
+    rate.count = 0;
+  }
+  rate.count += 1;
+  socket.lobbyActionRate = rate;
+  return rate.count <= MAX_LOBBY_ACTIONS_PER_WINDOW;
+}
+
 async function handleSocketMessage(socket, raw) {
   if (!acceptSocketMessage(socket, raw)) {
     send(socket, { type: 'room_error', message: 'Message rate or size limit reached.' });
@@ -805,12 +819,24 @@ async function handleSocketMessage(socket, raw) {
 
   switch (message.type) {
     case 'create_room':
+      if (!acceptLobbyAction(socket)) {
+        send(socket, { type: 'room_error', message: 'Please wait a moment before creating or joining another room.' });
+        break;
+      }
       await createRoom(socket, message);
       break;
     case 'join_room':
+      if (!acceptLobbyAction(socket)) {
+        send(socket, { type: 'room_error', message: 'Please wait a moment before creating or joining another room.' });
+        break;
+      }
       await joinRoom(socket, message);
       break;
     case 'resume_room':
+      if (!acceptLobbyAction(socket)) {
+        send(socket, { type: 'room_error', message: 'Please wait a moment before reconnecting to that room.' });
+        break;
+      }
       await resumeRoom(socket, message);
       break;
     case 'leave_room':
@@ -920,6 +946,7 @@ server.on('upgrade', (request, socket, head) => {
 wss.on('connection', (socket) => {
   socket.isAlive = true;
   socket.messageRate = { startedAt: Date.now(), count: 0, violations: 0 };
+  socket.lobbyActionRate = { startedAt: Date.now(), count: 0 };
   socket._socket?.setNoDelay?.(true);
   socket.on('pong', () => {
     socket.isAlive = true;
