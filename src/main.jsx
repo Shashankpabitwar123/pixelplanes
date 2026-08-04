@@ -97,6 +97,18 @@ const REMOTE_DISPLAY_MAX_DT_SECONDS = 0.06;
 const RTC_STATE_CHANNEL_LABEL = 'pixelplanes-state';
 const RTC_STATE_CHANNEL_MAX_BUFFERED_BYTES = 64 * 1024;
 const FIELD_GUIDE_PAGE_COUNT = 6;
+const GUIDE_WEATHER_REPLAY_STAGE_MS = 6000;
+const GUIDE_WEATHER_REPLAY_STAGES = [
+  { id: 'night', label: 'CLEAR NIGHT', rain: false, fog: false, dark: true },
+  { id: 'rain', label: 'RAIN', rain: true, fog: false, dark: true },
+  { id: 'fog', label: 'FOG', rain: false, fog: true, dark: true },
+  { id: 'day', label: 'DAYLIGHT', rain: false, fog: false, dark: false },
+];
+const GUIDE_WEATHER_REPLAY_TREES = [
+  { x: '-3%', width: 52, height: 98 }, { x: '8%', width: 43, height: 80 }, { x: '18%', width: 62, height: 118 },
+  { x: '31%', width: 48, height: 90 }, { x: '43%', width: 68, height: 124 }, { x: '56%', width: 46, height: 86 },
+  { x: '67%', width: 64, height: 116 }, { x: '80%', width: 49, height: 94 }, { x: '92%', width: 62, height: 121 }, { x: '104%', width: 45, height: 82 },
+];
 const GAME_FRAME_PRIORITY = {
   PLAYER: 0,
   ROOM_MAP_DOTS: 0.1,
@@ -3032,39 +3044,9 @@ function GuideWeatherPage() {
       <GazetteHeader
         issue="WEATHER DESK"
         headline="Watch the sky change."
-        deck="This live Field Guide reel follows the world through rain, fog, clear air, night, and back to day — the same atmosphere that surrounds every flight."
+        deck="This is a real Bit Planes sky replay: clear night, rain, fog, then daylight. Press L or use the deck key to turn on the plane's real fog light."
       />
-      <section className="gazette-weather-live-preview" role="img" aria-label="Animated Field Guide weather preview cycling through rain, fog, clear air, night, and day">
-        <div className="gazette-weather-live-sky">
-          <span className="gazette-weather-live-sun" aria-hidden="true" />
-          <span className="gazette-weather-live-moon" aria-hidden="true" />
-          <span className="gazette-weather-live-stars" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></span>
-          <span className="gazette-weather-live-cloud gazette-weather-live-cloud-one" aria-hidden="true" />
-          <span className="gazette-weather-live-cloud gazette-weather-live-cloud-two" aria-hidden="true" />
-          <span className="gazette-weather-live-rain" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <i key={index} />)}</span>
-          <span className="gazette-weather-live-fog gazette-weather-live-fog-back" aria-hidden="true" />
-          <span className="gazette-weather-live-fog gazette-weather-live-fog-front" aria-hidden="true" />
-          <span className="gazette-weather-live-forest gazette-weather-live-forest-back" aria-hidden="true" />
-          <span className="gazette-weather-live-forest gazette-weather-live-forest-front" aria-hidden="true" />
-          <Hut className="gazette-weather-live-hut" variant="low" />
-          <span className="gazette-weather-live-ground" aria-hidden="true" />
-          <img src="/assets/exact-plane.png" alt="" draggable="false" />
-          <span className="gazette-weather-live-light-cone" aria-hidden="true" />
-          <span className="gazette-weather-live-beacon gazette-weather-live-beacon-front" aria-hidden="true" />
-          <span className="gazette-weather-live-beacon gazette-weather-live-beacon-back" aria-hidden="true" />
-          <div className="gazette-weather-live-readout" aria-hidden="true">
-            <span className="gazette-weather-live-state gazette-weather-live-state-rain">RAIN</span>
-            <span className="gazette-weather-live-state gazette-weather-live-state-fog">FOG</span>
-            <span className="gazette-weather-live-state gazette-weather-live-state-clear">CLEAR</span>
-            <span className="gazette-weather-live-state gazette-weather-live-state-night">NIGHT</span>
-            <span className="gazette-weather-live-state gazette-weather-live-state-day">DAY</span>
-          </div>
-        </div>
-        <div className="gazette-weather-live-caption">
-          <span>LIVE WEATHER PREVIEW</span>
-          <p>Rain → fog → clear → night → day. The final day scene gives the reel a calm reset before the next weather pass.</p>
-        </div>
-      </section>
+      <GuideWeatherReplay />
       <div className="gazette-weather-guide">
         <article>
           <span className="gazette-weather-guide-icon gazette-weather-guide-rain">///</span>
@@ -3084,6 +3066,82 @@ function GuideWeatherPage() {
         </article>
       </div>
     </>
+  );
+}
+
+function GuideWeatherReplay() {
+  const [stageIndex, setStageIndex] = useState(0);
+  const [fogLightOn, setFogLightOn] = useState(false);
+  const stage = GUIDE_WEATHER_REPLAY_STAGES[stageIndex];
+  const toggleFogLight = useCallback(() => setFogLightOn((active) => !active), []);
+  const replayFogBanks = fogBanks.filter((_, index) => index % 11 === 2);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setStageIndex((current) => (current + 1) % GUIDE_WEATHER_REPLAY_STAGES.length);
+    }, GUIDE_WEATHER_REPLAY_STAGE_MS);
+    return () => window.clearTimeout(timer);
+  }, [stageIndex]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const isEditableTarget = event.target?.closest?.('input, textarea, select, [contenteditable="true"]');
+      if (isEditableTarget || event.repeat || event.key.toLowerCase() !== 'l') return;
+      event.preventDefault();
+      toggleFogLight();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toggleFogLight]);
+
+  return (
+    <section className={`gazette-weather-replay${stage.dark ? ' scene-dark' : ''} gazette-weather-replay-${stage.id}`} aria-label={`Live Bit Planes weather replay: ${stage.label.toLowerCase()}`}>
+      <div className="gazette-weather-replay-sky">
+        <div className="stars gazette-weather-replay-stars" aria-hidden="true">
+          {stars.slice(0, 46).map((star) => (
+            <i key={star.id} style={{ left: `${(star.x / WORLD_WIDTH) * 100}%`, bottom: `${(star.y / WORLD_HEIGHT) * 100}%`, width: `${star.size}px`, height: `${star.size}px`, animationDelay: star.delay }} />
+          ))}
+        </div>
+        <div className="sun" aria-hidden="true" />
+        <div className="moon" aria-hidden="true" />
+        <div className="cloud-layer gazette-weather-replay-clouds" aria-hidden="true">
+          <span className="gazette-weather-replay-cloud-one"><Cloud {...clouds[5]} /></span>
+          <span className="gazette-weather-replay-cloud-two"><Cloud {...clouds[19]} /></span>
+        </div>
+        <div className={`fog-layer gazette-weather-replay-fog${stage.fog ? ' fog-layer-active' : ''}`} aria-hidden="true">
+          {replayFogBanks.map((fog, index) => (
+            <span key={index} className="fog-bank" style={{ left: `${(fog.x / WORLD_WIDTH) * 100}%`, bottom: `${(fog.y / WORLD_HEIGHT) * 100}%`, '--fog-scale': fog.s, '--fog-opacity': fog.opacity, '--fog-speed': `${fog.speed}s`, animationDelay: fog.delay }} />
+          ))}
+        </div>
+        <div className="gazette-weather-replay-trees gazette-weather-replay-trees-back" aria-hidden="true">
+          {GUIDE_WEATHER_REPLAY_TREES.map((tree, index) => <Pine key={index} index={index + 23} depth="back" style={{ left: tree.x, width: `${tree.width}px`, height: `${tree.height}px` }} />)}
+        </div>
+        <div className="gazette-weather-replay-trees gazette-weather-replay-trees-front" aria-hidden="true">
+          {GUIDE_WEATHER_REPLAY_TREES.map((tree, index) => <Pine key={index} index={index + 51} depth="front" style={{ left: tree.x, width: `${tree.width - 5}px`, height: `${Math.max(58, tree.height - 15)}px` }} />)}
+        </div>
+        <Hut className="gazette-weather-replay-hut" variant="low" />
+        <FuelTank className="gazette-weather-replay-fuel" active={false} />
+        <div className="ground-band gazette-weather-replay-ground" aria-hidden="true" />
+        <div className="gazette-weather-replay-plane" aria-hidden="true">
+          <BitPlane rocketsRemaining={2} planeColor="blue" planeLightCombo="classic" lightIntensity={1} searchLightActive={fogLightOn} searchLightFog={stage.fog} propellerActive />
+        </div>
+        <div className="gazette-weather-replay-readout" aria-live="polite"><span>LIVE SKY</span><strong>{stage.label}</strong></div>
+        <button className={`gazette-weather-replay-light-key${fogLightOn ? ' gazette-weather-replay-light-key-on' : ''}`} type="button" onClick={toggleFogLight} aria-pressed={fogLightOn} aria-label={fogLightOn ? 'Turn fog light off' : 'Turn fog light on'}>
+          <PixelKey>L</PixelKey><span>{fogLightOn ? 'FOG LIGHT ON' : 'FOG LIGHT'}</span>
+        </button>
+      </div>
+      {stage.rain && (
+        <div className="rain-layer rain-layer-active gazette-weather-replay-rain" aria-hidden="true">
+          {rainDrops.slice(0, 54).map((drop) => (
+            <i key={drop.id} style={{ left: `${drop.left}%`, top: `${drop.top}%`, height: `${drop.length}px`, opacity: drop.opacity, '--rain-speed': `${drop.duration}ms`, animationDelay: drop.delay }} />
+          ))}
+        </div>
+      )}
+      <div className="gazette-weather-replay-caption">
+        <span>REAL GAME REPLAY</span>
+        <p>Clear night → rain → fog → daylight. Press <PixelKey>L</PixelKey> or click the key above at any time to use the plane's fog light.</p>
+      </div>
+    </section>
   );
 }
 
@@ -5630,14 +5688,14 @@ function ForestLayer({ className, rows }) {
   );
 }
 
-function Pine({ index, depth }) {
+function Pine({ index, depth, style, className = '' }) {
   const left = (index * 0.72 + (index % 7) * 0.22 + (index % 3) * 0.16) % WORLD_WIDTH;
   const sizeNoise = ((index * 23) % 100) / 100;
   const height = depth === 'front' ? 94 + sizeNoise * 82 : 72 + sizeNoise * 60;
   const width = depth === 'front' ? 54 + sizeNoise * 26 : 44 + sizeNoise * 18;
 
   return (
-    <svg className="pine" style={{ left: `${left}vw`, width: `${width}px`, height: `${height}px` }} viewBox="0 0 70 160">
+    <svg className={`pine${className ? ` ${className}` : ''}`} style={{ left: `${left}vw`, width: `${width}px`, height: `${height}px`, ...style }} viewBox="0 0 70 160">
       <path d="M35 2 13 48h14L8 84h18L3 126h26v30h12v-30h26L44 84h18L43 48h14L35 2z" />
     </svg>
   );
@@ -5697,9 +5755,9 @@ function Hut({ className, variant, style }) {
   );
 }
 
-function FuelTank({ style, active }) {
+function FuelTank({ style, active, className = '' }) {
   return (
-    <div className={`fuel-station${active ? ' fuel-station-refill' : ''}`} style={style}>
+    <div className={`fuel-station${active ? ' fuel-station-refill' : ''}${className ? ` ${className}` : ''}`} style={style}>
       <span className="fuel-beacon" aria-hidden="true" />
       <svg className="fuel-tank" viewBox="0 0 118 166">
         <path className="fuel-shadow" d="M33 157h76v7H33z" />
