@@ -37,6 +37,9 @@ async function startTestServer() {
       NODE_ENV: 'test',
       CLIENT_ORIGIN: 'http://127.0.0.1:5173',
       DATABASE_URL: '',
+      LIVEKIT_URL: '',
+      LIVEKIT_API_KEY: '',
+      LIVEKIT_API_SECRET: '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -71,6 +74,9 @@ test('WebSocket room protocol accepts inputs and rejects client-owned state', as
   socket.send(JSON.stringify({ type: 'create_room', name: 'Test Pilot', theme: 'dark' }));
   const session = await waitForMessage(socket, (message) => message.type === 'room_session');
   assert.ok(session.resumeToken);
+  socket.send(JSON.stringify({ type: 'request_livekit_token' }));
+  const voiceUnavailable = await waitForMessage(socket, (message) => message.type === 'voice_unavailable');
+  assert.equal(voiceUnavailable.provider, 'livekit');
   socket.send(JSON.stringify({ type: 'start_room' }));
   await waitForMessage(socket, (message) => message.type === 'room_started');
 

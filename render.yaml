@@ -2,7 +2,7 @@ services:
   - type: web
     name: pixelplanes-realtime-eu
     runtime: node
-    plan: free
+    plan: starter
     region: frankfurt
     autoDeploy: true
     healthCheckPath: /health
@@ -29,3 +29,9 @@ services:
         sync: false
       - key: TURN_TTL_SECONDS
         value: "86400"
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false

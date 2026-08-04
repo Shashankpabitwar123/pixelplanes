@@ -72,17 +72,46 @@ TURN_USERNAME=your_static_turn_username
 TURN_CREDENTIAL=your_static_turn_password
 TURN_SHARED_SECRET=optional_turn_rest_shared_secret
 TURN_TTL_SECONDS=86400
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
 ```
 
-Rooms, gameplay sync, and voice signaling run through the Render WebSocket server.
-Production uses the Frankfurt Render service (`pixelplanes-realtime-eu`) to
-balance latency between US and India players.
-Voice audio uses direct browser WebRTC. The frontend fetches ICE servers from
-`/voice/ice-servers`, so TURN credentials stay on the backend. Use either
-`TURN_USERNAME` + `TURN_CREDENTIAL` for static TURN credentials or
-`TURN_SHARED_SECRET` for temporary coturn-style REST credentials. Do not put
-secret TURN credentials in `VITE_RTC_ICE_SERVERS`; that value is only a local
-fallback.
+Rooms and gameplay sync run through the Render WebSocket server. Voice uses
+[LiveKit Cloud](https://livekit.io/cloud) when all three `LIVEKIT_*` backend
+variables are set. The Node service issues a one-hour token only after the
+player has joined a PixelPlanes room; the browser receives that temporary token
+and the Cloud URL, never the API key or secret. Tokens are restricted to one
+`pixelplanes-ROOMCODE` voice room, one player identity, microphone publishing,
+and audio subscription.
+
+Do **not** add a `VITE_LIVEKIT_API_SECRET`, `VITE_LIVEKIT_API_KEY`, or any
+other LiveKit secret to Vercel. Add the three `LIVEKIT_*` values only to the
+Render realtime service. The older direct WebRTC path remains an automatic
+local-development fallback only when LiveKit is not configured. It still gets
+ICE/TURN details from `/voice/ice-servers`; keep `TURN_*` configured only if
+that fallback is intentionally needed. Do not put secret TURN credentials in
+`VITE_RTC_ICE_SERVERS`.
+
+### LiveKit Cloud + always-on Render setup
+
+1. Create a LiveKit Cloud project and copy its secure WebSocket project URL,
+   API key, and API secret. Keep the secret private.
+2. In the **Render dashboard** for `pixelplanes-realtime-eu`, add
+   `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`. Do not add them
+   to Vercel. Deploy/restart the realtime service after saving them.
+3. Change that realtime service to an always-on paid instance. The repository
+   blueprint requests `starter` in `render.yaml`, but the active service's
+   dashboard plan and billing must be confirmed by the project owner.
+4. Deploy the frontend and test two different browsers in one room: allow each
+   microphone, confirm the speaker indicators react, mute/unmute each player,
+   then leave and rejoin.
+
+LiveKit Cloud carries voice through its managed global media network. The
+Frankfurt Render game service still remains the authority for all room physics,
+so a player far from Frankfurt will still have network latency in plane input
+and combat. LiveKit solves the group-voice/SFU side; a future multi-region game
+state service with shared room state is the separate next scaling step.
 
 ### Room simulation contract
 
@@ -109,19 +138,22 @@ inbound messages.
 ```bash
 npm run test:room
 npm run test:server
+npm run test:voice
 npm run build
 ```
 
 `test:room` verifies sequencing, fuel, weapons, collisions, and respawns.
 `test:server` starts a temporary WebSocket service and verifies input handling,
-rejection of a forged player-state message, and reconnect recovery.
+rejection of a forged player-state message, LiveKit being unavailable without
+credentials, and reconnect recovery. `test:voice` validates that issued
+LiveKit tokens are scoped to exactly one room and player.
 
 ### Production gaps to provision before a global launch
 
-The committed source improves match authority and recovery, but it does not by
-itself create multi-region capacity or an SFU voice service. The currently
-configured Render service is a single Frankfurt free-tier instance, and voice
-remains direct WebRTC mesh for rooms of up to six pilots.
+The committed source provides the LiveKit Cloud integration and requests an
+always-on Render plan, but it cannot create paid Cloud accounts, activate
+billing, or enter secrets for you. The realtime game server remains a single
+Frankfurt service until a later multi-region state upgrade is made.
 
 For a true global production launch, provision and configure all of the
 following outside this repository:
@@ -130,7 +162,5 @@ following outside this repository:
   region, with sticky/session-aware routing.
 - Redis (or an equivalent shared real-time state layer) so rooms survive an
   individual server restart and can span multiple instances.
-- A managed WebRTC SFU such as LiveKit or Daily for reliable group voice rather
-  than browser-to-browser mesh, plus TURN capacity in the regions you serve.
 - Monitoring, rate-limit alerts, structured logs, and load testing before
   raising the room or region limits.

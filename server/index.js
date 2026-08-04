@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import { Pool } from 'pg';
 import { WebSocket, WebSocketServer } from 'ws';
+import { createLiveKitVoiceToken, readLiveKitConfig } from './livekit-auth.js';
 import {
   ROOM_SERVER_SNAPSHOT_MS,
   ROOM_SERVER_TICK_MS,
@@ -588,6 +589,33 @@ function updateAudioSettings(socket, payload) {
   broadcastRoomState(current.room);
 }
 
+async function issueLiveKitVoiceToken(socket) {
+  const current = roomForSocket(socket);
+  const liveKitConfig = readLiveKitConfig();
+  if (!current || !liveKitConfig) {
+    send(socket, { type: 'voice_unavailable', provider: 'livekit' });
+    return;
+  }
+  const player = current.room.players.get(current.playerId);
+  if (!player || !player.connected || current.room.sockets.get(current.playerId) !== socket) {
+    send(socket, { type: 'voice_unavailable', provider: 'livekit' });
+    return;
+  }
+
+  try {
+    const issued = await createLiveKitVoiceToken({
+      config: liveKitConfig,
+      roomCode: current.room.code,
+      playerId: current.playerId,
+      playerName: player.name,
+    });
+    send(socket, { type: 'livekit_token', provider: 'livekit', ...issued });
+  } catch (error) {
+    console.warn('[livekit] token issuance failed:', error.message);
+    send(socket, { type: 'voice_unavailable', provider: 'livekit' });
+  }
+}
+
 function startRoom(socket) {
   const current = roomForSocket(socket);
   if (!current) return;
@@ -695,6 +723,9 @@ function handleSocketMessage(socket, raw) {
     case 'update_audio_settings':
       updateAudioSettings(socket, message);
       break;
+    case 'request_livekit_token':
+      issueLiveKitVoiceToken(socket);
+      break;
     case 'start_room':
       startRoom(socket);
       break;
@@ -735,7 +766,8 @@ const server = http.createServer(async (request, response) => {
       ok: true,
       rooms: rooms.size,
       db: Boolean(process.env.DATABASE_URL),
-      voice: 'webrtc',
+      voice: readLiveKitConfig() ? 'livekit' : 'webrtc-fallback',
+      livekit: Boolean(readLiveKitConfig()),
       turn: hasTurnServer(iceServers),
     });
     return;
