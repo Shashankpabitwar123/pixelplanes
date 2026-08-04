@@ -1981,6 +1981,146 @@ button {
   gap: 5px;
 }
 
+.gazette-flight-layout-rebuilt {
+  grid-template-columns: minmax(0, 1.16fr) minmax(270px, 0.84fr);
+}
+
+.gazette-keyboard-story-rebuilt {
+  padding: 14px 16px 12px;
+}
+
+.gazette-pilot-keyboard {
+  padding: 10px 12px 12px;
+  border: 2px solid #263442;
+  background:
+    linear-gradient(rgba(73, 105, 106, 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(73, 105, 106, 0.09) 1px, transparent 1px),
+    rgba(168, 194, 195, 0.46);
+  background-size: 8px 8px, 8px 8px, auto;
+}
+
+.gazette-pilot-keyboard-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+.gazette-pilot-keyboard-heading > span,
+.gazette-arrow-board > span {
+  color: #8e3828;
+  font-family: Arial, sans-serif;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.gazette-pilot-keyboard-heading p {
+  max-width: 266px;
+  margin: 0;
+  color: #42575c;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.22;
+  text-align: right;
+}
+
+.gazette-keyboard-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  width: min(100%, 440px);
+  margin: 0 auto;
+}
+
+.gazette-qwerty-board {
+  display: grid;
+  gap: 5px;
+}
+
+.gazette-qwerty-row {
+  display: grid;
+  grid-template-columns: repeat(10, 27px);
+  gap: 4px;
+}
+
+.gazette-qwerty-home-row {
+  grid-template-columns: repeat(9, 27px);
+  margin-left: 15px;
+}
+
+.gazette-qwerty-space-row {
+  display: flex;
+  padding-left: 42px;
+}
+
+.gazette-pilot-keyboard .gazette-key {
+  min-width: 27px;
+  height: 26px;
+  padding: 0 3px;
+  font-size: 9px;
+}
+
+.gazette-pilot-keyboard .gazette-key-space {
+  width: 196px;
+  min-width: 196px;
+}
+
+.gazette-key-active {
+  border-color: #8c4b20 !important;
+  color: #442b1d !important;
+  background: linear-gradient(180deg, #fff5a6 0%, #efbd48 100%) !important;
+  box-shadow: inset 0 -4px 0 rgba(129, 74, 24, 0.2), 0 2px 0 rgba(38, 52, 66, 0.24) !important;
+}
+
+.gazette-key-muted {
+  color: rgba(38, 52, 66, 0.44) !important;
+  border-color: rgba(38, 52, 66, 0.36) !important;
+  background: rgba(238, 239, 211, 0.58) !important;
+  box-shadow: inset 0 -3px 0 rgba(65, 80, 81, 0.1) !important;
+}
+
+.gazette-arrow-board {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+}
+
+.gazette-arrow-key-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 27px);
+  gap: 4px;
+}
+
+.gazette-arrow-key-grid .gazette-key {
+  min-width: 27px;
+  height: 26px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.gazette-key-arrow-up {
+  grid-column: 2;
+}
+
+.gazette-key-arrow-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.gazette-key-arrow-down {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.gazette-key-arrow-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
 .gazette-key {
   min-width: 32px;
   height: 29px;
@@ -2029,6 +2169,20 @@ button {
   font-size: 9px;
 }
 
+.gazette-control-list-rebuilt {
+  gap: 3px;
+  margin-top: 10px;
+}
+
+.gazette-control-list-rebuilt p {
+  padding: 3px 0;
+  border-top: 1px dotted rgba(38, 52, 66, 0.28);
+}
+
+.gazette-control-list-rebuilt p:first-child {
+  border-top: 0;
+}
+
 .gazette-flight-sketch {
   background: #a8cfda;
 }
@@ -2056,10 +2210,22 @@ button {
   background: currentColor;
 }
 
-.gazette-flight-vector-thrust { left: 15%; top: 32px; }
-.gazette-flight-vector-thrust::after { left: 43px; top: 5px; width: 88px; }
+.gazette-flight-vector-thrust { left: 12%; top: 32px; }
+.gazette-flight-vector-thrust::after { left: 79px; top: 5px; width: 58px; }
 .gazette-flight-vector-gravity { right: 13%; top: 102px; transform: rotate(90deg); }
 .gazette-flight-vector-gravity::after { left: 48px; top: 5px; width: 63px; }
+
+.gazette-flight-light-cone {
+  position: absolute;
+  z-index: 1;
+  left: 6%;
+  bottom: 72px;
+  width: 28%;
+  height: 78px;
+  clip-path: polygon(100% 41%, 0 0, 0 100%);
+  background: rgba(255, 240, 101, 0.26);
+  filter: blur(1px);
+}
 
 .gazette-dotted-aim {
   display: inline-flex;
@@ -2082,6 +2248,16 @@ button {
   left: 57%;
   top: 92px;
   transform: rotate(-18deg);
+}
+
+.gazette-flight-aim-label {
+  position: absolute;
+  z-index: 3;
+  left: 48%;
+  top: 116px;
+  color: #8e3828;
+  font: 900 8px/1 Arial, sans-serif;
+  letter-spacing: 0.06em;
 }
 
 .gazette-flight-sketch p {
@@ -2112,6 +2288,35 @@ button {
   font-size: 11px;
   font-weight: 700;
   line-height: 1.25;
+}
+
+.gazette-screen-controls {
+  background: rgba(244, 225, 166, 0.28);
+}
+
+.gazette-screen-controls .gazette-key {
+  vertical-align: middle;
+}
+
+.gazette-flight-scene {
+  background: #1f3854;
+}
+
+.gazette-flight-scene::before {
+  z-index: 2;
+  border-color: rgba(236, 247, 255, 0.2);
+  pointer-events: none;
+}
+
+.gazette-flight-scene .gazette-flight-scene-image {
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transform: none;
 }
 
 .gazette-pause-demo,

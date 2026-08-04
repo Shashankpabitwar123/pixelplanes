@@ -2821,8 +2821,8 @@ function GazetteHeader({ issue, headline, deck }) {
   );
 }
 
-function PixelKey({ children, wide = false }) {
-  return <kbd className={`gazette-key${wide ? ' gazette-key-wide' : ''}`}>{children}</kbd>;
+function PixelKey({ children, wide = false, className = '' }) {
+  return <kbd className={`gazette-key${wide ? ' gazette-key-wide' : ''}${className ? ` ${className}` : ''}`}>{children}</kbd>;
 }
 
 function GuideWelcomePage() {
@@ -2857,40 +2857,56 @@ function GuideFlightPage() {
     <>
       <GazetteHeader
         issue="FLIGHT DESK"
-        headline="Every key has a job"
-        deck="The keyboard diagrams below match the plane controls. Hold thrust to build speed; turning is free and continuous."
+        headline="Pilot's keyboard"
+        deck="Every highlighted key below is live in the cockpit. WASD and the arrow keys mirror flight movement; the remaining keys handle weapons and light."
       />
-      <div className="gazette-flight-layout">
-        <section className="gazette-keyboard-story">
-          <div className="gazette-keyboard" aria-label="Flight controls keyboard illustration">
-            <div className="gazette-keyboard-row"><PixelKey>W</PixelKey><PixelKey wide>UP</PixelKey></div>
-            <div className="gazette-keyboard-row"><PixelKey>A</PixelKey><PixelKey>S</PixelKey><PixelKey>D</PixelKey><PixelKey>LEFT</PixelKey><PixelKey>DOWN</PixelKey><PixelKey>RIGHT</PixelKey></div>
-            <div className="gazette-keyboard-row"><PixelKey wide>SPACE</PixelKey><PixelKey>R</PixelKey><PixelKey>L</PixelKey></div>
+      <div className="gazette-flight-layout gazette-flight-layout-rebuilt">
+        <section className="gazette-keyboard-story gazette-keyboard-story-rebuilt">
+          <div className="gazette-pilot-keyboard" aria-label="Flight controls keyboard map. Highlighted keys are active controls.">
+            <div className="gazette-pilot-keyboard-heading">
+              <span>Keyboard map</span>
+              <p>Gold keys are flight controls. The arrow cluster is a full mirror of WASD movement.</p>
+            </div>
+            <div className="gazette-keyboard-board" aria-hidden="true">
+              <div className="gazette-qwerty-board">
+                <div className="gazette-qwerty-row">
+                  <PixelKey className="gazette-key-muted">Q</PixelKey><PixelKey className="gazette-key-active">W</PixelKey><PixelKey className="gazette-key-muted">E</PixelKey><PixelKey className="gazette-key-active">R</PixelKey><PixelKey className="gazette-key-muted">T</PixelKey><PixelKey className="gazette-key-muted">Y</PixelKey><PixelKey className="gazette-key-muted">U</PixelKey><PixelKey className="gazette-key-muted">I</PixelKey><PixelKey className="gazette-key-muted">O</PixelKey><PixelKey className="gazette-key-muted">P</PixelKey>
+                </div>
+                <div className="gazette-qwerty-row gazette-qwerty-home-row">
+                  <PixelKey className="gazette-key-active">A</PixelKey><PixelKey className="gazette-key-active">S</PixelKey><PixelKey className="gazette-key-active">D</PixelKey><PixelKey className="gazette-key-muted">F</PixelKey><PixelKey className="gazette-key-muted">G</PixelKey><PixelKey className="gazette-key-muted">H</PixelKey><PixelKey className="gazette-key-muted">J</PixelKey><PixelKey className="gazette-key-muted">K</PixelKey><PixelKey className="gazette-key-active">L</PixelKey>
+                </div>
+                <div className="gazette-qwerty-space-row"><PixelKey wide className="gazette-key-active gazette-key-space">SPACE</PixelKey></div>
+              </div>
+              <div className="gazette-arrow-board">
+                <span>Arrows</span>
+                <div className="gazette-arrow-key-grid"><PixelKey className="gazette-key-active gazette-key-arrow-up">↑</PixelKey><PixelKey className="gazette-key-active gazette-key-arrow-left">←</PixelKey><PixelKey className="gazette-key-active gazette-key-arrow-down">↓</PixelKey><PixelKey className="gazette-key-active gazette-key-arrow-right">→</PixelKey></div>
+              </div>
+            </div>
           </div>
-          <div className="gazette-control-list">
-            <p><PixelKey>W</PixelKey><PixelKey>UP</PixelKey><span><strong>Thrust.</strong> Hold to turn the propeller, build speed, and gain lift. Release it and thrust falls to zero.</span></p>
-            <p><PixelKey>A</PixelKey><PixelKey>LEFT</PixelKey><span><strong>Turn left.</strong> Rotates the whole plane without a fixed wheel pivot.</span></p>
-            <p><PixelKey>D</PixelKey><PixelKey>RIGHT</PixelKey><span><strong>Turn right.</strong> Combine it with thrust for full loops.</span></p>
-            <p><PixelKey>S</PixelKey><PixelKey>DOWN</PixelKey><span><strong>Slow / land.</strong> Reduces speed in the air; on the runway it reverses the plane.</span></p>
-            <p><PixelKey wide>SPACE</PixelKey><span><strong>Hold for burst fire.</strong> Bullets fire from the propeller shaft along the dotted aiming line.</span></p>
-            <p><PixelKey>R</PixelKey><span><strong>Rockets.</strong> Launches one of the two homing rockets.</span></p>
-            <p><PixelKey>L</PixelKey><span><strong>Fog light.</strong> Shows a cone ahead of your propeller.</span></p>
+          <div className="gazette-control-list gazette-control-list-rebuilt">
+            <p><PixelKey className="gazette-key-active">W</PixelKey><PixelKey className="gazette-key-active">↑</PixelKey><span><strong>Thrust.</strong> Hold to spin the propeller, build runway speed, and gain lift. From the ready prompt, it also starts your flight.</span></p>
+            <p><PixelKey className="gazette-key-active">A</PixelKey><PixelKey className="gazette-key-active">←</PixelKey><span><strong>Turn left.</strong> Hold for continuous left rotation; combine it with speed to change course or loop.</span></p>
+            <p><PixelKey className="gazette-key-active">D</PixelKey><PixelKey className="gazette-key-active">→</PixelKey><span><strong>Turn right.</strong> Hold for continuous right rotation; combine it with thrust to carve the sky.</span></p>
+            <p><PixelKey className="gazette-key-active">S</PixelKey><PixelKey className="gazette-key-active">↓</PixelKey><span><strong>Brake / reverse.</strong> It sheds speed in the air. On the runway, hold it without thrust to reverse.</span></p>
+            <p><PixelKey wide className="gazette-key-active">SPACE</PixelKey><span><strong>Burst fire.</strong> Hold to send straight bullets from the propeller shaft along the dotted aiming line.</span></p>
+            <p><PixelKey className="gazette-key-active">R</PixelKey><span><strong>Rocket.</strong> Press once to launch one of two rockets. It tracks a valid plane within 90 units for two seconds; otherwise it flies straight and expires after five.</span></p>
+            <p><PixelKey className="gazette-key-active">L</PixelKey><span><strong>Fog light.</strong> Press once to toggle the forward searchlight for dark or foggy air.</span></p>
           </div>
         </section>
-        <aside className="gazette-flight-sketch">
-          <img src="/assets/exact-plane.png" alt="Bit Plane with its flight path" draggable="false" />
-          <span className="gazette-flight-vector gazette-flight-vector-thrust">THRUST</span>
-          <span className="gazette-flight-vector gazette-flight-vector-gravity">GRAVITY</span>
-          <span className="gazette-dotted-aim"><i /><i /><i /><i /></span>
-          <span className="gazette-runway" />
-          <p><strong>Takeoff:</strong> build runway speed before lift. A soft wheel-first landing is safe; a steep or fast collision is not.</p>
+        <aside className="gazette-flight-sketch gazette-flight-scene">
+          <img
+            className="gazette-flight-scene-image"
+            src="/assets/guide-night-runway.png"
+            alt="Bit Plane on a night runway with its fog light shining ahead"
+            draggable="false"
+          />
         </aside>
       </div>
-      <div className="gazette-safety-strip">
+      <div className="gazette-safety-strip gazette-screen-controls">
         <div className="gazette-pause-demo"><i /><i /></div>
-        <p><strong>Pause:</strong> click the orange pause button. The center pause disc appears. Press <PixelKey wide>SPACE</PixelKey> or click the button again to resume.</p>
+        <p><strong>Pause — screen button.</strong> Click the orange pause control to stop the game. While paused, press <PixelKey wide className="gazette-key-active">SPACE</PixelKey> once or click it again to resume.</p>
         <div className="gazette-restart-demo" aria-hidden="true">↻</div>
-        <p><strong>Restart:</strong> the blue restart button resets your local flight, fuel, bullets, and rockets without deleting the room.</p>
+        <p><strong>Restart — screen button.</strong> Click the blue restart control to end the current run and return to the start screen. In a room, it leaves that room.</p>
       </div>
     </>
   );
