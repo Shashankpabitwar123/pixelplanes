@@ -58,7 +58,7 @@ export const planeModel = {
   ],
 };
 
-export function createInitialPlaneState(spawnX = START_X) {
+export function createInitialPlaneState(spawnX = START_X, fuelSeconds = FUEL_SECONDS) {
   return {
     x: spawnX,
     y: 0,
@@ -74,7 +74,7 @@ export function createInitialPlaneState(spawnX = START_X) {
     crashTime: 0,
     crashImpact: 1,
     damage: 0,
-    fuel: FUEL_SECONDS,
+    fuel: Math.max(1, Number(fuelSeconds) || FUEL_SECONDS),
     searchLightOn: false,
   };
 }
@@ -156,9 +156,9 @@ export function createInitialBotState(previousX = null, avoidXValues = []) {
   };
 }
 
-export function createInitialBotStates(previousStates = []) {
+export function createInitialBotStates(previousStates = [], count = BOT_COUNT) {
   const states = [];
-  for (let index = 0; index < BOT_COUNT; index += 1) {
+  for (let index = 0; index < count; index += 1) {
     states.push(createInitialBotState(previousStates[index]?.x, states.map((state) => state.x)));
   }
   return states;
@@ -259,7 +259,12 @@ export function getPlaneForwardVector(plane) {
   };
 }
 
-export function getBulletTrajectory(plane) {
+function getRulePace(rules, key) {
+  const value = Number(rules?.[key]);
+  return Number.isFinite(value) ? Math.max(0.35, Math.min(2, value / 100)) : 1;
+}
+
+export function getBulletTrajectory(plane, rules = null) {
   const forward = getPlaneForwardVector(plane);
   const muzzle = getRenderedPlanePoint(plane, BULLET_MUZZLE_POINT);
   const viewportWidth = window.innerWidth || 1440;
@@ -271,7 +276,10 @@ export function getBulletTrajectory(plane) {
   const inheritedDy = -(plane.vy ?? 0) * BULLET_FLIGHT_SECONDS;
   const fullDx = forwardDx + inheritedDx;
   const fullDy = forwardDy + inheritedDy;
-  const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, BULLET_LIFETIME_MS, 80);
+  // Bullet pace changes travel time, not range, so a slower practice setting
+  // remains predictable and reaches the same aiming-guide endpoint.
+  const bulletLifetimeMs = BULLET_LIFETIME_MS / getRulePace(rules, 'bulletPace');
+  const travel = getGroundClippedWorldProjectile(muzzle.y, fullDx, fullDy, bulletLifetimeMs, 80);
   const screenDx = travel.dx * viewportWidth;
   const screenDy = travel.dy * viewportHeight;
   return {
@@ -286,19 +294,20 @@ export function getBulletTrajectory(plane) {
   };
 }
 
-export function createBulletProjectile(plane, now, idPrefix = 'bullet', trajectory = getBulletTrajectory(plane)) {
+export function createBulletProjectile(plane, now, idPrefix = 'bullet', trajectory = null, rules = null) {
+  const resolvedTrajectory = trajectory || getBulletTrajectory(plane, rules);
   return {
     id: `${now}-${idPrefix}-${Math.random()}`,
-    x: trajectory.x,
-    y: trajectory.y,
-    renderX: trajectory.x,
-    renderY: trajectory.y,
-    dx: trajectory.dx,
-    dy: trajectory.dy,
-    groundHit: trajectory.groundHit,
-    life: trajectory.life,
+    x: resolvedTrajectory.x,
+    y: resolvedTrajectory.y,
+    renderX: resolvedTrajectory.x,
+    renderY: resolvedTrajectory.y,
+    dx: resolvedTrajectory.dx,
+    dy: resolvedTrajectory.dy,
+    groundHit: resolvedTrajectory.groundHit,
+    life: resolvedTrajectory.life,
     created: now,
-    angle: trajectory.angle,
+    angle: resolvedTrajectory.angle,
     unit: 'world',
     radius: 1.05,
   };
@@ -317,17 +326,19 @@ function getAngleToPoint(source, target) {
   return normalizeAngle((Math.atan2(target.y - source.y, -(target.x - source.x)) * 180) / Math.PI);
 }
 
-export function createRocketProjectile(plane, now, mountPoint, idPrefix = 'rocket') {
+export function createRocketProjectile(plane, now, mountPoint, idPrefix = 'rocket', rules = null) {
   const forward = getPlaneForwardVector(plane);
   const launchPoint = getPlanePoint(plane, mountPoint);
+  const speed = ROCKET_SPEED * getRulePace(rules, 'rocketPace');
   return {
     id: `${now}-${idPrefix}-${Math.random()}`,
     x: launchPoint.x,
     y: launchPoint.y,
     previousX: launchPoint.x,
     previousY: launchPoint.y,
-    vx: forward.x * ROCKET_SPEED,
-    vy: forward.y * ROCKET_SPEED,
+    vx: forward.x * speed,
+    vy: forward.y * speed,
+    speed,
     created: now,
     lastUpdate: now,
     guideUntil: now + ROCKET_HOMING_MS,
@@ -362,8 +373,9 @@ export function updateGuidedRocket(rocket, now, targets) {
     }
   }
   const rad = (nextAngle * Math.PI) / 180;
-  const vx = -Math.cos(rad) * ROCKET_SPEED;
-  const vy = Math.sin(rad) * ROCKET_SPEED;
+  const speed = rocket.speed ?? ROCKET_SPEED;
+  const vx = -Math.cos(rad) * speed;
+  const vy = Math.sin(rad) * speed;
   const nextX = rocket.x + vx * dt;
   const nextY = rocket.y + vy * dt;
   if (nextY <= 0 || nextX <= 0 || nextX >= WORLD_WIDTH) {

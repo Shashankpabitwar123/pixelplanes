@@ -6,6 +6,52 @@ export const START_X = 350;
 
 export const FUEL_SECONDS = 30;
 
+// Solo and Training rules deliberately live on the client. They must never be
+// sent to a room: room games keep the shared standard ruleset.
+export const BOT_COUNT = 4;
+
+export const MAX_SOLO_BOTS = 6;
+
+export const SOLO_GAME_RULE_DEFAULTS = Object.freeze({
+  botCount: BOT_COUNT,
+  botDifficulty: 3,
+  flightPace: 100,
+  turnPace: 100,
+  bulletPace: 100,
+  bulletCooldownMs: 60,
+  bulletReloadSeconds: 7,
+  rocketPace: 100,
+  fuelSeconds: FUEL_SECONDS,
+  weatherMode: 1,
+});
+
+const SOLO_GAME_RULE_LIMITS = Object.freeze({
+  botCount: [1, MAX_SOLO_BOTS],
+  botDifficulty: [1, 5],
+  flightPace: [70, 125],
+  turnPace: [65, 135],
+  bulletPace: [70, 140],
+  bulletCooldownMs: [45, 180],
+  bulletReloadSeconds: [3, 10],
+  rocketPace: [75, 125],
+  fuelSeconds: [20, 60],
+  weatherMode: [0, 3],
+});
+
+function clampSoloRule(value, [minimum, maximum], fallback, integer = true) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const safe = Math.min(maximum, Math.max(minimum, parsed));
+  return integer ? Math.round(safe) : safe;
+}
+
+export function createSoloGameRules(overrides = {}) {
+  return Object.entries(SOLO_GAME_RULE_DEFAULTS).reduce((rules, [key, fallback]) => ({
+    ...rules,
+    [key]: clampSoloRule(overrides[key], SOLO_GAME_RULE_LIMITS[key], fallback),
+  }), {});
+}
+
 export const FUEL_GAUGE_EMPTY_ANGLE = -180;
 
 export const FUEL_GAUGE_SWEEP = 180;
@@ -144,8 +190,6 @@ export const ROCKET_IMPACT_MS = 650;
 export const ROCKET_TURN_RATE = 340;
 
 export const PLANE_SPRITE_ASPECT = 935 / 1620;
-
-export const BOT_COUNT = 4;
 
 export const BOT_START_X = START_X + 118;
 

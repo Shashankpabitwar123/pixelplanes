@@ -1411,7 +1411,8 @@ button {
 }
 
 .flight-deck-panel {
-  width: min(504px, calc(100vw - 24px));
+  width: min(1040px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
   padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.48);
   border-radius: 12px;
@@ -1419,6 +1420,7 @@ button {
   background: rgba(255, 255, 255, 0.36);
   box-shadow: 0 16px 40px rgba(31, 65, 86, 0.12);
   backdrop-filter: blur(10px);
+  overflow: hidden;
 }
 
 .flight-deck-heading {
@@ -1481,6 +1483,123 @@ button {
 .flight-deck-controls {
   display: grid;
   gap: 12px;
+}
+
+.flight-deck-columns {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.flight-deck-section {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flight-deck-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 4px 2px;
+  color: #284636;
+}
+
+.flight-deck-section-heading > span {
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.flight-deck-section-heading small {
+  font-size: 10px;
+  font-weight: 800;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+.flight-deck-audio-controls .flight-deck-control {
+  min-height: 52px;
+}
+
+.flight-deck-rule-controls {
+  max-height: min(58dvh, 540px);
+  padding-right: 4px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(79, 170, 67, 0.72) rgba(10, 20, 38, 0.18);
+}
+
+.flight-deck-rule-controls::-webkit-scrollbar {
+  width: 7px;
+}
+
+.flight-deck-rule-controls::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(79, 170, 67, 0.72);
+}
+
+.flight-deck-rule-control {
+  grid-template-columns: 132px minmax(0, 1fr) 76px;
+  min-height: 54px;
+}
+
+.flight-deck-rule-control > span {
+  display: grid;
+  gap: 3px;
+  white-space: normal;
+}
+
+.flight-deck-rule-control > span b {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.flight-deck-rule-control > span small {
+  color: #48646d;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1.05;
+}
+
+.flight-deck-rule-control output {
+  font-size: 15px;
+}
+
+.flight-deck-rule-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 4px 0;
+}
+
+.flight-deck-rule-footer p {
+  margin: 0;
+  color: #48646d;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.flight-deck-reset-rules {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 6px 9px;
+  border: 1px solid rgba(41, 83, 64, 0.56);
+  border-radius: 6px;
+  color: #284636;
+  background: rgba(166, 227, 153, 0.48);
+  box-shadow: inset 0 -2px 0 rgba(33, 78, 51, 0.14);
+  font: 900 10px/1 Arial, sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
 }
 
 .flight-deck-control {
@@ -5790,6 +5909,18 @@ button {
   color: #eef8ff;
 }
 
+.scene-dark .flight-deck-section-heading,
+.scene-dark .flight-deck-rule-footer p,
+.scene-dark .flight-deck-rule-control > span small {
+  color: rgba(229, 243, 250, 0.72);
+}
+
+.scene-dark .flight-deck-reset-rules {
+  color: #dff9d6;
+  border-color: rgba(126, 242, 125, 0.42);
+  background: rgba(78, 170, 67, 0.22);
+}
+
 .scene-dark .flight-deck-control output {
   color: #a9e8a3;
 }
@@ -7987,8 +8118,9 @@ button {
   }
 
   .flight-deck-panel {
-    width: min(430px, calc(100vw - 24px));
+    width: min(600px, calc(100vw - 24px));
     padding: 12px;
+    overflow-y: auto;
   }
 
   .flight-deck-heading {
@@ -8011,6 +8143,17 @@ button {
     gap: 8px;
   }
 
+  .flight-deck-columns {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .flight-deck-rule-controls {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
   .flight-deck-control {
     grid-template-columns: 112px minmax(0, 1fr) 56px;
     gap: 8px;
@@ -8025,6 +8168,15 @@ button {
 
   .flight-deck-control input[type='range'] {
     height: 22px;
+  }
+
+  .flight-deck-rule-control {
+    grid-template-columns: 112px minmax(0, 1fr) 64px;
+  }
+
+  .flight-deck-rule-control > span b,
+  .flight-deck-rule-control output {
+    font-size: 14px;
   }
 
   .field-guide-overlay {

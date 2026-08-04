@@ -10,6 +10,8 @@ import {
   FUEL_GAUGE_SWEEP,
   FUEL_GAUGE_ZONE_SIZE,
   ACTIVE_GAMEPLAY_PACING,
+  MAX_SOLO_BOTS,
+  createSoloGameRules,
   MAX_BULLETS,
   BULLET_RELOAD_MS,
   BULLET_COOLDOWN_MS,
@@ -21,13 +23,11 @@ import {
   ROCKET_HOMING_MS,
   ROCKET_IMPACT_MS,
   ROCKET_LIFETIME_MS,
-  BOT_COUNT,
   BOT_WAKE_DISTANCE,
   BOT_FORGET_DISTANCE,
   BOT_AVOID_DISTANCE,
   BOT_MIN_FIRE_DISTANCE,
   BOT_BULLET_COOLDOWN_MS,
-  BOT_BULLET_RELOAD_MS,
   MUSIC_TRACKS,
   HIGH_SCORE_STORAGE_KEY,
   ROOM_MAX_PLAYERS,
@@ -78,6 +78,7 @@ import {
   segmentHitsPlane,
   updateDamageSmokeParticles,
   createRainAudio,
+  playFlightDeckTick,
   playPlaneBulletHitSound,
   playPlaneBlastSound,
   pointHitsHay,
@@ -202,7 +203,7 @@ const GAME_FRAME_PRIORITIES = [
   GAME_FRAME_PRIORITY.ROOM_MAP_DOTS,
   GAME_FRAME_PRIORITY.ROOM_REMOTE_PLANES,
   GAME_FRAME_PRIORITY.ROOM_PROJECTILES,
-  ...Array.from({ length: BOT_COUNT }, (_, index) => GAME_FRAME_PRIORITY.BOT_START + index),
+  ...Array.from({ length: MAX_SOLO_BOTS }, (_, index) => GAME_FRAME_PRIORITY.BOT_START + index),
 ];
 const COW_INSTANCES = cowOffsets.flatMap((offset) =>
   cows.slice(0, 2).map((cow, index) => ({
@@ -213,6 +214,94 @@ const COW_INSTANCES = cowOffsets.flatMap((offset) =>
     grazeAt: 28 + ((offset * 3 + index * 47) % (WORLD_WIDTH - 70)),
   })),
 );
+
+const BOT_DIFFICULTY_LABELS = ['Easy', 'Casual', 'Standard', 'Hard', 'Ace'];
+const WEATHER_MODE_LABELS = ['Clear', 'Normal', 'Harsh', 'Random'];
+const SOLO_GAME_CONTROL_DEFINITIONS = [
+  { key: 'botCount', label: 'Enemy bots', detail: 'Start mode', min: 1, max: MAX_SOLO_BOTS, format: (value) => `${value}` },
+  { key: 'botDifficulty', label: 'Bot skill', detail: 'Easy to ace', min: 1, max: 5, format: (value) => BOT_DIFFICULTY_LABELS[value - 1] || 'Standard' },
+  { key: 'flightPace', label: 'Flight pace', detail: 'Thrust + top speed', min: 70, max: 125, format: (value) => `${value}%` },
+  { key: 'turnPace', label: 'Turn speed', detail: 'Steering response', min: 65, max: 135, format: (value) => `${value}%` },
+  { key: 'bulletPace', label: 'Bullet pace', detail: 'Same aiming range', min: 70, max: 140, format: (value) => `${value}%` },
+  { key: 'bulletCooldownMs', label: 'Fire gap', detail: 'SPACE burst', min: 45, max: 180, format: (value) => `${value} ms` },
+  { key: 'bulletReloadSeconds', label: 'Ammo reload', detail: 'Full magazine', min: 3, max: 10, format: (value) => `${value} s` },
+  { key: 'rocketPace', label: 'Rocket pace', detail: '2 s track · 5 s life', min: 75, max: 125, format: (value) => `${value}%` },
+  { key: 'fuelSeconds', label: 'Fuel tank', detail: 'Full refill capacity', min: 20, max: 60, format: (value) => `${value} s` },
+  { key: 'weatherMode', label: 'Weather', detail: 'Solo bot sky', min: 0, max: 3, format: getWeatherModeLabel },
+];
+
+function getRulePace(rules, key) {
+  const value = Number(rules?.[key]);
+  return Number.isFinite(value) ? value / 100 : 1;
+}
+
+function getRuleFuelSeconds(rules) {
+  const value = Number(rules?.fuelSeconds);
+  return Number.isFinite(value) ? value : FUEL_SECONDS;
+}
+
+function getRuleBulletCooldownMs(rules) {
+  const value = Number(rules?.bulletCooldownMs);
+  return Number.isFinite(value) ? value : BULLET_COOLDOWN_MS;
+}
+
+function getRuleBulletReloadMs(rules) {
+  const seconds = Number(rules?.bulletReloadSeconds);
+  return Number.isFinite(seconds) ? seconds * 1000 : BULLET_RELOAD_MS;
+}
+
+function getWeatherModeLabel(value) {
+  return WEATHER_MODE_LABELS[clamp(Math.round(Number(value) || 0), 0, WEATHER_MODE_LABELS.length - 1)];
+}
+
+function getPlayerFlightTuning(rules) {
+  const flightPace = clamp(getRulePace(rules, 'flightPace'), 0.7, 1.25);
+  const turnPace = clamp(getRulePace(rules, 'turnPace'), 0.65, 1.35);
+  const accelerationPace = Math.pow(flightPace, 0.86);
+  const responsePace = 0.8 + flightPace * 0.2;
+  const base = ACTIVE_GAMEPLAY_PACING.player;
+  return {
+    ...base,
+    throttleRise: base.throttleRise * responsePace,
+    thrustResponse: base.thrustResponse * responsePace,
+    turnBaseRate: base.turnBaseRate * turnPace,
+    turnAuthorityRate: base.turnAuthorityRate * turnPace,
+    turnInputResponse: base.turnInputResponse * (0.82 + turnPace * 0.18),
+    runwayThrust: base.runwayThrust * accelerationPace,
+    flightThrust: base.flightThrust * accelerationPace,
+    takeoffSpeed: base.takeoffSpeed * Math.sqrt(flightPace),
+    maxLevelSpeed: base.maxLevelSpeed * flightPace,
+    maxClimbSpeed: base.maxClimbSpeed * flightPace,
+    maxDiveBaseSpeed: base.maxDiveBaseSpeed * flightPace,
+    maxDiveThrustBonus: base.maxDiveThrustBonus * flightPace,
+  };
+}
+
+function getBotFlightTuning(rules) {
+  const difficulty = clamp(Number(rules?.botDifficulty) || 3, 1, 5);
+  const difficultyOffset = (difficulty - 3) / 2;
+  const turnPace = 1 + difficultyOffset * 0.18;
+  const speedPace = 1 + difficultyOffset * 0.09;
+  const responsePace = 1 + difficultyOffset * 0.14;
+  const base = ACTIVE_GAMEPLAY_PACING.bot;
+  return {
+    ...base,
+    steeringGain: base.steeringGain * turnPace,
+    turnLimitBase: base.turnLimitBase * turnPace,
+    turnLimitSpeedBonus: base.turnLimitSpeedBonus * turnPace,
+    turnResponse: base.turnResponse * responsePace,
+    turnDamping: base.turnDamping * (1 - difficultyOffset * 0.1),
+    pursuitThrottleResponse: base.pursuitThrottleResponse * responsePace,
+    cruiseThrottleResponse: base.cruiseThrottleResponse * responsePace,
+    thrustResponse: base.thrustResponse * responsePace,
+    runwayThrust: base.runwayThrust * speedPace,
+    flightThrust: base.flightThrust * speedPace,
+    maxSpeed: base.maxSpeed * speedPace,
+    bulletCooldownMs: Math.round(BOT_BULLET_COOLDOWN_MS * (1 - difficultyOffset * 0.2)),
+    fireAimDot: 0.68 - difficultyOffset * 0.07,
+    fireAimError: 11 + difficultyOffset * 3,
+  };
+}
 
 function useMeasuredFrameRate() {
   const [frameRate, setFrameRate] = useState(0);
@@ -294,6 +383,7 @@ function App() {
   const [musicOpen, setMusicOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [soloGameRules, setSoloGameRules] = useState(() => createSoloGameRules());
   const [fieldGuideOpen, setFieldGuideOpen] = useState(false);
   const [fieldGuidePage, setFieldGuidePage] = useState(0);
   const [fieldGuideTurnDirection, setFieldGuideTurnDirection] = useState('next');
@@ -330,7 +420,7 @@ function App() {
   const mapDotRef = useRef(null);
   const mapBotDotRefs = useRef([]);
   const fuelGaugeRef = useRef(null);
-  const playerStateRef = useRef(createInitialPlaneState());
+  const playerStateRef = useRef(createInitialPlaneState(START_X, soloGameRules.fuelSeconds));
   const trainingProgressRef = useRef({
     lessonIndex: 0,
     leftBanked: false,
@@ -358,9 +448,10 @@ function App() {
   const localRoomPlayerIdRef = useRef('');
   const lastRoomStateSentRef = useRef(0);
   const roomStateSeqRef = useRef(0);
-  const botStateRefs = useRef(createInitialBotStates());
+  const botStateRefs = useRef(createInitialBotStates([], MAX_SOLO_BOTS));
   const playerApiRef = useRef(null);
-  const botApiRefs = useRef(Array.from({ length: BOT_COUNT }, () => ({ current: null })));
+  const botApiRefs = useRef(Array.from({ length: MAX_SOLO_BOTS }, () => ({ current: null })));
+  const soloWeatherProfileRef = useRef(1);
   const roomSocketRef = useRef(null);
   const pendingRoomPingSentAtRef = useRef(0);
   const rtcPeerConnectionsRef = useRef(new Map());
@@ -1902,8 +1993,8 @@ function App() {
     fuelGaugeRef.current?.classList.remove('fuel-gauge-refill-pulse');
     setAmmoStatus({ count: MAX_BULLETS, reloading: false });
     setRocketCount(MAX_ROCKETS);
-    playerStateRef.current = createInitialPlaneState();
-    botStateRefs.current = createInitialBotStates(botStateRefs.current);
+    playerStateRef.current = createInitialPlaneState(START_X, soloGameRules.fuelSeconds);
+    botStateRefs.current = createInitialBotStates(botStateRefs.current, MAX_SOLO_BOTS);
     botStateRefs.current.forEach((botState, index) => {
       const dot = mapBotDotRefs.current[index];
       if (!dot) return;
@@ -1914,7 +2005,7 @@ function App() {
     updateCamera({ x: getCameraX(START_X), y: getCameraY(0) });
     updateFuelGauge(1);
     setRestartSignal((signal) => signal + 1);
-  }, [clearRoomNotifications, disconnectRoomSocket, resetTrainingProgress, updateCamera, updateFuelGauge]);
+  }, [clearRoomNotifications, disconnectRoomSocket, resetTrainingProgress, soloGameRules.fuelSeconds, updateCamera, updateFuelGauge]);
   const updatePlayerState = useCallback((nextState) => {
     playerStateRef.current = nextState;
     updateTrainingFlight(nextState);
@@ -1973,11 +2064,24 @@ function App() {
   const updateSoundLevel = useCallback((kind, event) => {
     const nextLevel = Number(event.target.value) / 100;
     setSoundLevels((levels) => ({ ...levels, [kind]: nextLevel }));
-  }, []);
+    playFlightDeckTick(sfxMuted);
+  }, [sfxMuted]);
 
   const updatePlaneLightIntensity = useCallback((event) => {
     setPlaneLightIntensity(Number(event.target.value) / 100);
-  }, []);
+    playFlightDeckTick(sfxMuted);
+  }, [sfxMuted]);
+
+  const updateSoloGameRule = useCallback((key, event) => {
+    const value = Number(event.target.value);
+    setSoloGameRules((current) => createSoloGameRules({ ...current, [key]: value }));
+    playFlightDeckTick(sfxMuted);
+  }, [sfxMuted]);
+
+  const resetSoloGameRules = useCallback(() => {
+    setSoloGameRules(createSoloGameRules());
+    playFlightDeckTick(sfxMuted);
+  }, [sfxMuted]);
 
   const openFieldGuide = useCallback(() => {
     setFieldGuidePage(0);
@@ -2082,13 +2186,32 @@ function App() {
   }, [roomConnectionStatus, roomLobby?.weather?.seed, roomLobby?.weather?.startedAt]);
 
   useEffect(() => {
-    if (roomLobby?.weather || gameMode === 'training') {
-      if (gameMode === 'training') {
-        setFogActive(trainingWeatherLessonActive);
-        setFogAnimationsPaused(!trainingWeatherLessonActive);
-      }
+    const selectedMode = clamp(Math.round(Number(soloGameRules.weatherMode) || 0), 0, WEATHER_MODE_LABELS.length - 1);
+    // Random picks a fresh complete sky profile when a local flight is armed;
+    // room weather never reads this value.
+    soloWeatherProfileRef.current = selectedMode === 3
+      ? Math.floor(Math.random() * 3)
+      : selectedMode;
+  }, [gameMode, gameStarted, soloGameRules.weatherMode]);
+
+  useEffect(() => {
+    if (roomLobby?.weather) {
       return undefined;
     }
+    // The final Training lesson is deliberately authored as a fog run. Outside
+    // that one lesson, Training uses the player's local sky rule like Bot mode.
+    if (gameMode === 'training' && trainingWeatherLessonActive) {
+      setFogActive(true);
+      setFogAnimationsPaused(false);
+      return undefined;
+    }
+    const weatherMode = soloWeatherProfileRef.current;
+    if (weatherMode === 0) {
+      setFogActive(false);
+      setFogAnimationsPaused(true);
+      return undefined;
+    }
+    const harshWeather = weatherMode === 2;
     let stopped = false;
     let timer = 0;
 
@@ -2099,23 +2222,32 @@ function App() {
         timer = window.setTimeout(() => {
           if (stopped) return;
           setFogActive(false);
-          scheduleFog(22000 + Math.random() * 28000);
-        }, 13000 + Math.random() * 9000);
+          scheduleFog(harshWeather ? 5000 + Math.random() * 7000 : 22000 + Math.random() * 28000);
+        }, harshWeather ? 18000 + Math.random() * 9000 : 13000 + Math.random() * 9000);
       }, delay);
     };
 
-    scheduleFog(4500 + Math.random() * 6500);
+    scheduleFog(harshWeather ? 1100 + Math.random() * 1800 : 4500 + Math.random() * 6500);
     return () => {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [gameMode, roomLobby?.weather, trainingWeatherLessonActive]);
+  }, [gameMode, roomLobby?.weather, trainingWeatherLessonActive, soloGameRules.weatherMode, gameStarted]);
 
   useEffect(() => {
-    if (roomLobby?.weather || gameMode === 'training') {
-      if (gameMode === 'training') setRainActive(trainingWeatherLessonActive);
+    if (roomLobby?.weather) {
       return undefined;
     }
+    if (gameMode === 'training' && trainingWeatherLessonActive) {
+      setRainActive(true);
+      return undefined;
+    }
+    const weatherMode = soloWeatherProfileRef.current;
+    if (weatherMode === 0) {
+      setRainActive(false);
+      return undefined;
+    }
+    const harshWeather = weatherMode === 2;
     let stopped = false;
     let timer = 0;
 
@@ -2126,17 +2258,17 @@ function App() {
         timer = window.setTimeout(() => {
           if (stopped) return;
           setRainActive(false);
-          scheduleRain(36000 + Math.random() * 52000);
-        }, 14000 + Math.random() * 11000);
+          scheduleRain(harshWeather ? 7000 + Math.random() * 10000 : 36000 + Math.random() * 52000);
+        }, harshWeather ? 24000 + Math.random() * 12000 : 14000 + Math.random() * 11000);
       }, delay);
     };
 
-    scheduleRain(15000 + Math.random() * 17000);
+    scheduleRain(harshWeather ? 2200 + Math.random() * 3600 : 15000 + Math.random() * 17000);
     return () => {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [gameMode, roomLobby?.weather, trainingWeatherLessonActive]);
+  }, [gameMode, roomLobby?.weather, trainingWeatherLessonActive, soloGameRules.weatherMode, gameStarted]);
 
   useEffect(() => {
     window.clearTimeout(rainSoundStartTimerRef.current);
@@ -2789,45 +2921,84 @@ function App() {
             )}
           </div>
           {settingsOpen && startScreen === 'home' && (
-            <section className="start-utility-overlay flight-deck-overlay" aria-label="Flight deck sound settings">
+            <section className="start-utility-overlay flight-deck-overlay" aria-label="Flight deck settings">
               <div className="flight-deck-panel" role="dialog" aria-modal="true" aria-labelledby="flight-deck-title">
                 <div className="flight-deck-heading">
                   <h2 id="flight-deck-title">Flight deck</h2>
                   <button className="flight-deck-close" type="button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button>
                 </div>
-                <div className="flight-deck-controls">
-                  {[
-                    ['engine', 'Propeller'],
-                    ['ammo', 'Ammo'],
-                    ['rocket', 'Rockets'],
-                    ['explosion', 'Explosion'],
-                    ['rain', 'Rain'],
-                  ].map(([kind, label]) => (
-                    <label className="flight-deck-control" key={kind}>
-                      <span>{label}</span>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={Math.round(soundLevels[kind] * 100)}
-                        aria-label={`${label} volume`}
-                        onChange={(event) => updateSoundLevel(kind, event)}
-                      />
-                      <output>{Math.round(soundLevels[kind] * 100)}%</output>
-                    </label>
-                  ))}
-                  <label className="flight-deck-control flight-deck-lights">
-                    <span>Plane lights</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={Math.round(planeLightIntensity * 100)}
-                      aria-label="Plane blinking light intensity"
-                      onChange={updatePlaneLightIntensity}
-                    />
-                    <output>{Math.round(planeLightIntensity * 100)}%</output>
-                  </label>
+                <div className="flight-deck-columns">
+                  <section className="flight-deck-section" aria-labelledby="flight-deck-sound-title">
+                    <div className="flight-deck-section-heading">
+                      <span id="flight-deck-sound-title">Sound &amp; lights</span>
+                      <small>Personal mix</small>
+                    </div>
+                    <div className="flight-deck-controls flight-deck-audio-controls">
+                      {[
+                        ['engine', 'Propeller'],
+                        ['ammo', 'Ammo'],
+                        ['rocket', 'Rockets'],
+                        ['explosion', 'Explosion'],
+                        ['rain', 'Rain'],
+                      ].map(([kind, label]) => (
+                        <label className="flight-deck-control" key={kind}>
+                          <span>{label}</span>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={Math.round(soundLevels[kind] * 100)}
+                            aria-label={`${label} volume`}
+                            onChange={(event) => updateSoundLevel(kind, event)}
+                          />
+                          <output>{Math.round(soundLevels[kind] * 100)}%</output>
+                        </label>
+                      ))}
+                      <label className="flight-deck-control flight-deck-lights">
+                        <span>Plane lights</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={Math.round(planeLightIntensity * 100)}
+                          aria-label="Plane blinking light intensity"
+                          onChange={updatePlaneLightIntensity}
+                        />
+                        <output>{Math.round(planeLightIntensity * 100)}%</output>
+                      </label>
+                    </div>
+                  </section>
+                  <section className="flight-deck-section flight-deck-rules-section" aria-labelledby="flight-deck-rules-title">
+                    <div className="flight-deck-section-heading">
+                      <span id="flight-deck-rules-title">Game controls</span>
+                      <small>Solo + Training only</small>
+                    </div>
+                    <div className="flight-deck-controls flight-deck-rule-controls">
+                      {SOLO_GAME_CONTROL_DEFINITIONS.map((control) => {
+                        const value = soloGameRules[control.key];
+                        return (
+                          <label className="flight-deck-control flight-deck-rule-control" key={control.key}>
+                            <span><b>{control.label}</b><small>{control.detail}</small></span>
+                            <input
+                              type="range"
+                              min={control.min}
+                              max={control.max}
+                              step="1"
+                              value={value}
+                              aria-label={control.label}
+                              aria-valuetext={control.format(value)}
+                              onChange={(event) => updateSoloGameRule(control.key, event)}
+                            />
+                            <output>{control.format(value)}</output>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div className="flight-deck-rule-footer">
+                      <p>Rules apply to your next local flight. Training keeps its scripted Fog Run; rooms stay standard.</p>
+                      <button className="flight-deck-reset-rules" type="button" onClick={resetSoloGameRules}>Reset rules</button>
+                    </div>
+                  </section>
                 </div>
               </div>
             </section>
@@ -2905,7 +3076,7 @@ function App() {
             }}
           />
         )}
-        {gameMode === 'bots' && botStateRefs.current.map((botState, index) => (
+        {gameMode === 'bots' && botStateRefs.current.slice(0, soloGameRules.botCount).map((botState, index) => (
           <span
             key={index}
             ref={(node) => {
@@ -3078,6 +3249,7 @@ function App() {
             botStateRefs={botStateRefs}
             botApiRefs={botApiRefs}
             botTargetsActive={gameMode === 'bots'}
+            gameplayRules={gameMode === 'room' ? null : soloGameRules}
             controlsEnabled={gameStarted && !paused}
             paused={paused}
             spawnX={roomSpawnX}
@@ -3118,7 +3290,7 @@ function App() {
             <BotPlane
               key={index}
               botIndex={index}
-              active={gameStarted}
+              active={gameStarted && index < soloGameRules.botCount}
               paused={paused}
               restartSignal={restartSignal}
               playerStateRef={playerStateRef}
@@ -3128,6 +3300,7 @@ function App() {
               onBotMove={updateBotLocator}
               sfxMuted={sfxMuted}
               audioSettings={soundLevels}
+              gameplayRules={soloGameRules}
               fogActive={fogActive}
               registerGameFrameCallback={registerGameFrameCallback}
             />
@@ -3840,6 +4013,7 @@ function PlayablePlane({
   botStateRefs,
   botApiRefs,
   botTargetsActive,
+  gameplayRules,
   controlsEnabled,
   paused,
   spawnX = START_X,
@@ -3854,7 +4028,6 @@ function PlayablePlane({
   fogActive,
   registerGameFrameCallback,
 }) {
-  const playerFlightTuning = ACTIVE_GAMEPLAY_PACING.player;
   const keysRef = useRef(new Set());
   const planeRef = useRef(null);
   const aimGuideDotRefs = useRef([]);
@@ -3875,7 +4048,8 @@ function PlayablePlane({
   const damageSmokeParticlesRef = useRef([]);
   const damageSmokeLastEmitRef = useRef(0);
   const fuelRefillFeedbackRef = useRef({ stationIndex: -1, time: 0 });
-  const bulletTrajectoryRef = useRef(getBulletTrajectory(createInitialPlaneState(spawnX)));
+  const gameplayRulesRef = useRef(gameplayRules);
+  const bulletTrajectoryRef = useRef(getBulletTrajectory(createInitialPlaneState(spawnX, getRuleFuelSeconds(gameplayRules)), gameplayRules));
   const crashedRef = useRef(false);
   const ammoRef = useRef(MAX_BULLETS);
   const reloadingRef = useRef(false);
@@ -3891,7 +4065,7 @@ function PlayablePlane({
   const projectileElementRefs = useRef(new Map());
   const projectileTimeoutsRef = useRef([]);
   const rocketTimeoutsRef = useRef([]);
-  const stateRef = useRef(createInitialPlaneState(spawnX));
+  const stateRef = useRef(createInitialPlaneState(spawnX, getRuleFuelSeconds(gameplayRules)));
   const searchLightOnRef = useRef(false);
   const [projectiles, setProjectiles] = useState([]);
   const [rocketProjectiles, setRocketProjectiles] = useState([]);
@@ -3900,6 +4074,10 @@ function PlayablePlane({
   const [damageLevel, setDamageLevel] = useState(0);
   const [damageSmokeParticles, setDamageSmokeParticles] = useState([]);
   const [searchLightOn, setSearchLightOn] = useState(false);
+
+  useEffect(() => {
+    gameplayRulesRef.current = gameplayRules;
+  }, [gameplayRules]);
 
   useEffect(() => {
     if (restartSignal === 0) return;
@@ -3915,10 +4093,10 @@ function PlayablePlane({
     projectilesRef.current = [];
     rocketProjectilesRef.current = [];
     projectileElementRefs.current.clear();
-    const next = createInitialPlaneState(spawnX);
+    const next = createInitialPlaneState(spawnX, getRuleFuelSeconds(gameplayRulesRef.current));
     stateRef.current = next;
     searchLightOnRef.current = false;
-    bulletTrajectoryRef.current = getBulletTrajectory(next);
+    bulletTrajectoryRef.current = getBulletTrajectory(next, gameplayRulesRef.current);
     smokePreviousPlaneRef.current = null;
     damageLevelRef.current = 0;
     damageSmokeParticlesRef.current = [];
@@ -4122,7 +4300,7 @@ function PlayablePlane({
       reloadTimerRef.current = window.setTimeout(() => {
         reloadTimerRef.current = null;
         setAmmo(MAX_BULLETS, false);
-      }, BULLET_RELOAD_MS);
+      }, getRuleBulletReloadMs(gameplayRulesRef.current));
     };
 
     const playBulletSound = () => {
@@ -4312,11 +4490,12 @@ function PlayablePlane({
     };
 
     const fireBulletFromPlane = (planeState, now) => {
-      if (crashedRef.current || ammoRef.current <= 0 || now - lastShotRef.current < BULLET_COOLDOWN_MS) return;
+      const rules = gameplayRulesRef.current;
+      if (crashedRef.current || ammoRef.current <= 0 || now - lastShotRef.current < getRuleBulletCooldownMs(rules)) return;
       lastShotRef.current = now;
       playBulletSound();
 
-      const trajectory = getBulletTrajectory(planeState);
+      const trajectory = getBulletTrajectory(planeState, rules);
       bulletTrajectoryRef.current = trajectory;
       const projectile = createBulletProjectile(planeState, now, 'player-bullet', trajectory);
       onRoomProjectile?.('bullet', projectile);
@@ -4354,7 +4533,7 @@ function PlayablePlane({
       playRocketSound();
 
       const mountPoint = rocketsRef.current === 2 ? { x: 0.34, y: 0.8 } : { x: 0.52, y: 0.73 };
-      const rocket = createRocketProjectile(stateRef.current, now, mountPoint, 'player-rocket');
+      const rocket = createRocketProjectile(stateRef.current, now, mountPoint, 'player-rocket', gameplayRulesRef.current);
       onRoomProjectile?.('rocket', rocket);
 
       rocketProjectilesRef.current = [...rocketProjectilesRef.current, rocket];
@@ -4674,6 +4853,8 @@ function PlayablePlane({
 
     const simulate = (current, keys, dt, now) => {
       const next = { ...current };
+      const playerFlightTuning = getPlayerFlightTuning(gameplayRulesRef.current);
+      const fuelCapacity = getRuleFuelSeconds(gameplayRulesRef.current);
       const preStepGroundPoint = Math.min(...planeModel.groundPoints.map((point) => getPlanePoint(next, point).y));
       const onRunway = !next.hasLifted && (next.y <= 0.02 || preStepGroundPoint <= 0.18);
       const powerRequested = keys.has('power') && next.fuel > 0;
@@ -4814,10 +4995,10 @@ function PlayablePlane({
       );
       if (fuelStationIndex >= 0) {
         const hadDamage = (next.damage ?? 0) > 0;
-        const shouldRefill = next.fuel < FUEL_SECONDS - 0.05 || hadDamage;
+        const shouldRefill = next.fuel < fuelCapacity - 0.05 || hadDamage;
         const lastFeedback = fuelRefillFeedbackRef.current;
         const canPulse = lastFeedback.stationIndex !== fuelStationIndex || now - lastFeedback.time > 1200;
-        next.fuel = FUEL_SECONDS;
+        next.fuel = fuelCapacity;
         if (hadDamage) {
           next.damage = 0;
           damageLevelRef.current = 0;
@@ -5044,9 +5225,9 @@ function PlayablePlane({
         scanBotHits(now);
         scanRoomHits(now, next);
         if (now - next.crashTime > 1450) {
-          next = createInitialPlaneState(spawnX);
+          next = createInitialPlaneState(spawnX, getRuleFuelSeconds(gameplayRulesRef.current));
           searchLightOnRef.current = false;
-          bulletTrajectoryRef.current = getBulletTrajectory(next);
+          bulletTrajectoryRef.current = getBulletTrajectory(next, gameplayRulesRef.current);
           smokePreviousPlaneRef.current = null;
           damageLevelRef.current = 0;
           damageSmokeParticlesRef.current = [];
@@ -5066,7 +5247,7 @@ function PlayablePlane({
           onAmmoChange({ count: MAX_BULLETS, reloading: false });
           onRocketChange(MAX_ROCKETS);
           onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
-          onFuelChange(next.fuel / FUEL_SECONDS);
+          onFuelChange(next.fuel / getRuleFuelSeconds(gameplayRulesRef.current));
           onPlaneState(next);
           crashedRef.current = false;
           setDamageLevel(0);
@@ -5102,7 +5283,7 @@ function PlayablePlane({
       scanBotHits(now);
       scanRoomHits(now, next);
       onMove({ x: getCameraX(next.x), y: getCameraY(next.y) });
-      onFuelChange(next.fuel / FUEL_SECONDS);
+      onFuelChange(next.fuel / getRuleFuelSeconds(gameplayRulesRef.current));
       onPlaneState(next);
       if (next.crashed !== crashedRef.current) {
         if (next.crashed) {
@@ -5160,7 +5341,7 @@ function PlayablePlane({
             if (dot) dot.style.opacity = 0;
           });
         } else {
-          const bulletTrajectory = getBulletTrajectory(planeState);
+          const bulletTrajectory = getBulletTrajectory(planeState, gameplayRulesRef.current);
           bulletTrajectoryRef.current = bulletTrajectory;
           getBulletGuidePoints(bulletTrajectory).forEach((point, index) => {
             const dot = aimGuideDotRefs.current[index];
@@ -5708,8 +5889,7 @@ function RoomProjectilesLayer({
   );
 }
 
-function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, audioSettings, fogActive, registerGameFrameCallback }) {
-  const botFlightTuning = ACTIVE_GAMEPLAY_PACING.bot;
+function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, audioSettings, gameplayRules, fogActive, registerGameFrameCallback }) {
   const botRef = useRef(null);
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
@@ -5723,6 +5903,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   const botSmokeParticlesRef = useRef([]);
   const botSmokeLastEmitRef = useRef(0);
   const audioSettingsRef = useRef(audioSettings);
+  const gameplayRulesRef = useRef(gameplayRules);
   const [botBullets, setBotBullets] = useState([]);
   const [botDamage, setBotDamage] = useState(0);
   const [botSmokeParticles, setBotSmokeParticles] = useState([]);
@@ -5731,6 +5912,10 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   useEffect(() => {
     audioSettingsRef.current = audioSettings;
   }, [audioSettings]);
+
+  useEffect(() => {
+    gameplayRulesRef.current = gameplayRules;
+  }, [gameplayRules]);
 
   const crashBot = useCallback((impact = 1.2, options = {}) => {
     const current = stateRef.current;
@@ -5803,6 +5988,11 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     reloadingRef.current = false;
     lastShotRef.current = 0;
     const nextBot = createInitialBotState(stateRef.current?.x, otherBotSpawnXs);
+    if (!active) {
+      nextBot.crashed = true;
+      nextBot.crashTime = 0;
+      nextBot.engaged = false;
+    }
     stateRef.current = nextBot;
     smokePreviousBotRef.current = null;
     botDamageRef.current = 0;
@@ -5811,7 +6001,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     setBotBullets([]);
     setBotDamage(0);
     setBotSmokeParticles([]);
-    setBotCrashed(false);
+    setBotCrashed(!active);
     if (botRef.current) {
       botRef.current.style.transform = `translate(${nextBot.x}vw, ${-nextBot.y}vh) rotate(${nextBot.angle}deg)`;
       botRef.current.style.setProperty('--thrust', 0);
@@ -5843,17 +6033,19 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         ammoRef.current = MAX_BULLETS;
         reloadingRef.current = false;
         bulletTimeoutsRef.current = bulletTimeoutsRef.current.filter((timeout) => timeout !== timeoutId);
-      }, BOT_BULLET_RELOAD_MS);
+      }, getRuleBulletReloadMs(gameplayRulesRef.current));
       bulletTimeoutsRef.current.push(timeoutId);
     };
 
     const fireBotBullet = (bot, now) => {
-      if (ammoRef.current <= 0 || now - lastShotRef.current < BOT_BULLET_COOLDOWN_MS) return;
+      const rules = gameplayRulesRef.current;
+      const botFlightTuning = getBotFlightTuning(rules);
+      if (ammoRef.current <= 0 || now - lastShotRef.current < botFlightTuning.bulletCooldownMs) return;
       lastShotRef.current = now;
       ammoRef.current -= 1;
       startBulletReload();
       const projectile = {
-        ...createBulletProjectile(bot, now, 'bot-bullet'),
+        ...createBulletProjectile(bot, now, 'bot-bullet', null, rules),
         impact: 1.08,
       };
       bulletsRef.current = [...bulletsRef.current, projectile];
@@ -5963,6 +6155,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
 
     const simulateBot = (current, dt, now) => {
       const next = { ...current };
+      const botFlightTuning = getBotFlightTuning(gameplayRulesRef.current);
       const closestTarget = getClosestTarget(next);
       const liveTarget = Boolean(closestTarget);
       const distance = closestTarget?.distance ?? Infinity;
@@ -6090,7 +6283,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         const aimForwardY = Math.sin(aimRad);
         const targetLength = Math.max(1, Math.hypot(targetState.x - next.x, targetState.y - next.y));
         const targetDot = (aimForwardX * (targetState.x - next.x) + aimForwardY * (targetState.y - next.y)) / targetLength;
-        if (targetDot > 0.68 && aimError < 11 && distance > BOT_MIN_FIRE_DISTANCE && distance < 120) fireBotBullet(next, now);
+        if (targetDot > botFlightTuning.fireAimDot && aimError < botFlightTuning.fireAimError && distance > BOT_MIN_FIRE_DISTANCE && distance < 120) fireBotBullet(next, now);
       }
 
       return next;

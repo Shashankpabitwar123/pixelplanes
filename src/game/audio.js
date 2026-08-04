@@ -1,5 +1,49 @@
 import { clamp } from './mechanics.js';
 
+let flightDeckTickContext = null;
+let lastFlightDeckTickAt = 0;
+
+// A restrained, rate-limited detent sound for range controls. Slider input is
+// itself a user gesture, so the AudioContext can resume without adding any
+// loading or looping audio to the game.
+export function playFlightDeckTick(muted = false) {
+  if (muted || typeof window === 'undefined') return;
+  const now = performance.now();
+  if (now - lastFlightDeckTickAt < 34) return;
+  lastFlightDeckTickAt = now;
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  if (!flightDeckTickContext || flightDeckTickContext.state === 'closed') {
+    flightDeckTickContext = new AudioContextClass();
+  }
+  const context = flightDeckTickContext;
+  context.resume?.();
+
+  const t = context.currentTime;
+  const tone = context.createOscillator();
+  const gain = context.createGain();
+  const filter = context.createBiquadFilter();
+  tone.type = 'sine';
+  tone.frequency.setValueAtTime(138, t);
+  tone.frequency.exponentialRampToValueAtTime(106, t + 0.055);
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(540, t);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.05, t + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.065);
+  tone.connect(filter);
+  filter.connect(gain);
+  gain.connect(context.destination);
+  tone.start(t);
+  tone.stop(t + 0.075);
+  tone.addEventListener('ended', () => {
+    tone.disconnect();
+    filter.disconnect();
+    gain.disconnect();
+  }, { once: true });
+}
+
 export function createRainAudio() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return null;
