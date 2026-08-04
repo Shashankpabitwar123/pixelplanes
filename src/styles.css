@@ -3393,18 +3393,19 @@ button {
 
 .gazette-fuel-gauge-demo b {
   position: absolute;
-  left: 82px;
+  left: 50%;
   bottom: 0;
   width: 17px;
   height: 17px;
   border: 3px solid #263442;
   border-radius: 50%;
   background: #273039;
+  transform: translateX(-50%);
 }
 
 .gazette-fuel-gauge-demo em {
   position: absolute;
-  left: 91px;
+  left: 50%;
   bottom: 7px;
   width: 66px;
   height: 5px;
