@@ -203,6 +203,20 @@ export const BOT_FORGET_DISTANCE = 118;
 
 export const BOT_AVOID_DISTANCE = 42;
 
+// Bot-only safety envelope. These preserve the player physics while giving
+// autonomous planes enough time and altitude to recover from a dogfight.
+export const BOT_SEPARATION_DISTANCE = 66;
+
+export const BOT_SEPARATION_LOOK_AHEAD_SECONDS = 1.2;
+
+export const BOT_SEPARATION_MIN_CLEARANCE = 20;
+
+export const BOT_LOW_ALTITUDE = 34;
+
+export const BOT_GROUND_RECOVERY_CLEARANCE = 4.5;
+
+export const BOT_GROUND_RECOVERY_CLIMB_SPEED = 8;
+
 export const BOT_MIN_FIRE_DISTANCE = 34;
 
 export const BOT_BULLET_COOLDOWN_MS = ACTIVE_GAMEPLAY_PACING.botBulletCooldownMs;

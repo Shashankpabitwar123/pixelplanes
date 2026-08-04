@@ -26,6 +26,12 @@ import {
   BOT_WAKE_DISTANCE,
   BOT_FORGET_DISTANCE,
   BOT_AVOID_DISTANCE,
+  BOT_SEPARATION_DISTANCE,
+  BOT_SEPARATION_LOOK_AHEAD_SECONDS,
+  BOT_SEPARATION_MIN_CLEARANCE,
+  BOT_LOW_ALTITUDE,
+  BOT_GROUND_RECOVERY_CLEARANCE,
+  BOT_GROUND_RECOVERY_CLIMB_SPEED,
   BOT_MIN_FIRE_DISTANCE,
   BOT_BULLET_COOLDOWN_MS,
   MUSIC_TRACKS,
@@ -6091,8 +6097,51 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       return candidates;
     };
 
-    const getClosestTarget = (bot) =>
-      getTargetCandidates(bot).reduce((closest, target) => (!closest || target.distance < closest.distance ? target : closest), null);
+    const getPreferredTarget = (bot, candidates) => {
+      // Bot dogfights still happen if the player is gone, but a live player is
+      // the intended primary opponent. This stops nearby bots from constantly
+      // selecting each other over the pilot.
+      const player = candidates.find((target) => target.type === 'player');
+      if (player) return player;
+      return candidates.reduce((closest, target) => (!closest || target.distance < closest.distance ? target : closest), null);
+    };
+
+    const getSeparationThreat = (bot, candidates) => {
+      let threat = null;
+      candidates.forEach((candidate) => {
+        const dx = candidate.state.x - bot.x;
+        const dy = candidate.state.y - bot.y;
+        const distance = Math.max(0.1, Math.hypot(dx, dy));
+        const relativeVx = (candidate.state.vx ?? 0) - (bot.vx ?? 0);
+        const relativeVy = (candidate.state.vy ?? 0) - (bot.vy ?? 0);
+        const relativeSpeedSquared = relativeVx * relativeVx + relativeVy * relativeVy;
+        const closingSpeed = -((dx * relativeVx + dy * relativeVy) / distance);
+        const timeToClosest = relativeSpeedSquared > 0.001
+          ? clamp(-(dx * relativeVx + dy * relativeVy) / relativeSpeedSquared, 0, BOT_SEPARATION_LOOK_AHEAD_SECONDS)
+          : 0;
+        const predictedDx = dx + relativeVx * timeToClosest;
+        const predictedDy = dy + relativeVy * timeToClosest;
+        const predictedClearance = Math.hypot(predictedDx, predictedDy);
+        const isImmediateThreat = distance < Math.max(BOT_SEPARATION_DISTANCE, BOT_AVOID_DISTANCE);
+        const isPredictedThreat = closingSpeed > 0 && predictedClearance < BOT_SEPARATION_MIN_CLEARANCE;
+        if (!isImmediateThreat && !isPredictedThreat) return;
+        const urgency = Math.min(distance, predictedClearance) - Math.max(0, closingSpeed) * 0.35;
+        if (!threat || urgency < threat.urgency) {
+          threat = {
+            ...candidate,
+            dx,
+            dy,
+            distance,
+            closingSpeed,
+            predictedClearance,
+            urgency,
+          };
+        }
+      });
+      return threat;
+    };
+
+    const getBotGroundClearance = (bot) => Math.min(...planeModel.groundPoints.map((point) => getPlanePoint(bot, point).y));
 
     const damageTargetByBullet = (target) => {
       if (!target?.api) return;
@@ -6128,6 +6177,23 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     const scanHits = (now, bot) => {
       const collisionTarget = getTargetCandidates(bot).find((target) => planesCollide(bot, target.state));
       if (collisionTarget) {
+        if (collisionTarget.type === 'bot') {
+          // The steering layer should keep bots apart. This last-resort nudge
+          // handles a rare same-frame overlap without turning it into a kill.
+          const dx = bot.x - collisionTarget.state.x;
+          const dy = bot.y - collisionTarget.state.y;
+          const distance = Math.max(0.15, Math.hypot(dx, dy));
+          const awayX = dx / distance;
+          const awayY = dy / distance;
+          bot.x = clamp(bot.x + awayX * 5.5, 5, WORLD_WIDTH - 5);
+          bot.y = clamp(Math.max(bot.y + 6, bot.y + awayY * 5.5), BOT_GROUND_RECOVERY_CLEARANCE, WORLD_HEIGHT - 10);
+          bot.vx += awayX * 4;
+          bot.vy = Math.max(bot.vy, 5.5);
+          bot.throttle = Math.min(bot.throttle, 0.48);
+          bot.turnRate *= 0.35;
+          scanProjectileHits(now, bot);
+          return;
+        }
         crashBot(1.8);
         crashTarget(collisionTarget, 1.8);
         return;
@@ -6158,7 +6224,9 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     const simulateBot = (current, dt, now) => {
       const next = { ...current };
       const botFlightTuning = getBotFlightTuning(gameplayRulesRef.current);
-      const closestTarget = getClosestTarget(next);
+      const targetCandidates = getTargetCandidates(next);
+      const closestTarget = getPreferredTarget(next, targetCandidates);
+      const separationThreat = getSeparationThreat(next, targetCandidates);
       const liveTarget = Boolean(closestTarget);
       const distance = closestTarget?.distance ?? Infinity;
       if (liveTarget && !next.engaged && distance <= BOT_WAKE_DISTANCE) next.engaged = true;
@@ -6169,8 +6237,13 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       const targetDy = closestTarget?.dy ?? 0;
       const botToTargetX = targetDx / Math.max(1, distance);
       const botToTargetY = targetDy / Math.max(1, distance);
-      const closingSpeed = targetState ? (next.vx - targetState.vx) * botToTargetX + (next.vy - targetState.vy) * botToTargetY : 0;
-      const avoidingTarget = pursuing && distance < BOT_AVOID_DISTANCE;
+      const closingSpeed = separationThreat?.closingSpeed ?? (targetState ? (next.vx - targetState.vx) * botToTargetX + (next.vy - targetState.vy) * botToTargetY : 0);
+      const avoidingTarget = Boolean(separationThreat);
+      const groundClearance = getBotGroundClearance(next);
+      const predictedGroundClearance = groundClearance + Math.min(0, next.vy) * 1.1;
+      const recoveringFromGround = next.airborne && (
+        groundClearance < BOT_LOW_ALTITUDE || predictedGroundClearance < BOT_LOW_ALTITUDE
+      );
 
       const leadTime = pursuing ? clamp(distance / 46, 0.45, 2.15) : 1;
       const roamDirection = Math.abs(next.vx) > 1 ? Math.sign(next.vx) : next.x < WORLD_WIDTH / 2 ? 1 : -1;
@@ -6186,8 +6259,14 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
           };
 
       if (avoidingTarget) {
-        target.x = next.x - botToTargetX * 72;
-        target.y = clamp(next.y - botToTargetY * 46 + 20, 28, WORLD_HEIGHT - 65);
+        const threatDistance = Math.max(0.15, separationThreat.distance);
+        const awayX = -separationThreat.dx / threatDistance;
+        const awayY = -separationThreat.dy / threatDistance;
+        const side = ((botIndex + (separationThreat.index ?? 0)) % 2 === 0) ? 1 : -1;
+        const lateralX = -awayY * side;
+        const lateralY = awayX * side;
+        target.x = clamp(next.x + awayX * 82 + lateralX * 28, 28, WORLD_WIDTH - 28);
+        target.y = clamp(Math.max(next.y + 18, next.y + awayY * 56 + lateralY * 16, BOT_LOW_ALTITUDE + 12), 28, WORLD_HEIGHT - 65);
         if (target.x < 26) target.x = next.x + 72;
         if (target.x > WORLD_WIDTH - 26) target.x = next.x - 72;
       } else if (pursuing && distance < 28) {
@@ -6203,6 +6282,11 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       if (next.x > WORLD_WIDTH - 34) {
         target.x = WORLD_WIDTH - 105;
         target.y = Math.max(target.y, 38);
+      }
+      if (recoveringFromGround) {
+        const forwardDirection = Math.abs(next.vx) > 2 ? Math.sign(next.vx) : next.x < WORLD_WIDTH / 2 ? 1 : -1;
+        target.x = clamp(next.x + forwardDirection * 72, 34, WORLD_WIDTH - 34);
+        target.y = Math.max(target.y, BOT_LOW_ALTITUDE + 42);
       }
 
       const desiredAngle = angleToPoint(next, target);
@@ -6220,7 +6304,11 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       const normalX = -Math.sin(rad);
       const normalY = Math.cos(rad);
       const onRunway = !next.airborne && next.y <= 0.08;
-      const targetThrottle = pursuing ? (avoidingTarget && closingSpeed > 0 ? 0.34 : 1) : 0.56;
+      const targetThrottle = recoveringFromGround
+        ? 0.72
+        : pursuing
+          ? (avoidingTarget && closingSpeed > 0 ? 0.3 : 1)
+          : 0.56;
       next.throttle += (targetThrottle - next.throttle) * Math.min(1, dt * (pursuing ? botFlightTuning.pursuitThrottleResponse : botFlightTuning.cruiseThrottleResponse));
       next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * botFlightTuning.thrustResponse);
 
@@ -6269,7 +6357,14 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       if (next.y > 2 || (next.airborne && groundLowestPoint > 0.55)) next.hasLifted = true;
 
       const hitWorldEdge = shapePoints.some((point) => point.x <= 0 || point.x >= WORLD_WIDTH);
-      const hitGround = next.hasLifted && groundLowestPoint <= 0;
+      let groundRecoveryApplied = false;
+      if (next.hasLifted && groundLowestPoint < BOT_GROUND_RECOVERY_CLEARANCE && !hitWorldEdge) {
+        next.y += BOT_GROUND_RECOVERY_CLEARANCE - groundLowestPoint;
+        next.vy = Math.max(next.vy, BOT_GROUND_RECOVERY_CLIMB_SPEED);
+        next.throttle = Math.min(next.throttle, 0.72);
+        groundRecoveryApplied = true;
+      }
+      const hitGround = next.hasLifted && groundLowestPoint <= 0 && !groundRecoveryApplied;
       if (hitGround || hitWorldEdge) {
         if (groundLowestPoint < 0) next.y -= groundLowestPoint;
         return crashBotState(next, Math.max(1.05, Math.hypot(next.vx, next.vy) / 28), now);
