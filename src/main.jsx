@@ -2831,49 +2831,23 @@ function GuideWelcomePage() {
       <GazetteHeader
         issue="FRONT PAGE"
         headline="Welcome to Bit Planes"
-        deck="A complete visual report before your first takeoff. Choose a sky, tune your tools, then fly."
+        deck="Your first briefing before the runway rolls away beneath you."
       />
       <div className="gazette-layout gazette-layout-welcome">
         <article className="gazette-story-copy gazette-lead-story">
           <p className="gazette-dropcap">B</p>
-          <p><strong>Bit Planes is a flying dogfight over one long living map.</strong> Your plane has real momentum, gravity, fuel, landing gear, weapons, weather, music, and a full room mode. The farm stays behind the action: cows walk, grass grows, huts sit behind the runway, and fuel beacons mark safe stops.</p>
-          <p>The upper-left controls are always available on the start screen. Use the green gear for sound and beacon settings. Use the green information button to reopen this newspaper. The song note opens background music; the speaker controls game sound; the light bulb switches day and night; the plane button selects your body color and beacon pair.</p>
+          <p><strong>Bit Planes turns one little biplane and a wide living farm into an open sky of takeoffs, close calls, and clean landings.</strong> Every flight is shaped by momentum, gravity, fuel, and the choices you make after the wheels leave the runway.</p>
+          <p>Beyond the field are changing weather, a music-filled hangar, and skies made for calm practice or a proper dogfight. Learn the feel of your plane, follow the runway lights, and make every landing count.</p>
+          <p>This guide is your co-pilot, not a checklist. Turn the page when you are ready; each spread introduces one part of the cockpit, map, and sky.</p>
         </article>
         <aside className="gazette-hero-art" aria-label="Blue Bit Plane illustration">
           <img src="/assets/exact-plane.png" alt="Blue Bit Plane" draggable="false" />
           <span className="gazette-runway" />
-          <span className="gazette-hay-bale" />
           <span className="gazette-cloud-mark gazette-cloud-one" />
           <span className="gazette-cloud-mark gazette-cloud-two" />
         </aside>
       </div>
-      <div className="gazette-mode-strip">
-        <section>
-          <span className="gazette-mode-number">1</span>
-          <h4>Start</h4>
-          <p>Fight four roaming bots. Kills build your score until you crash.</p>
-        </section>
-        <section>
-          <span className="gazette-mode-number">2</span>
-          <h4>Training</h4>
-          <p>Fly alone. Practice landing, refueling, rockets, music, and weather.</p>
-        </section>
-        <section>
-          <span className="gazette-mode-number">3</span>
-          <h4>Room</h4>
-          <p>Create or join a six-pilot room with a name and code.</p>
-        </section>
-      </div>
-      <div className="gazette-utility-row" aria-label="Utility button illustrations">
-        <div><i className="gazette-utility-icon gazette-utility-settings" aria-hidden="true">*</i><span>Settings</span></div>
-        <div><i className="gazette-utility-icon gazette-utility-info" aria-hidden="true">i</i><span>Field guide</span></div>
-        <div><i className="gazette-utility-icon gazette-utility-note" aria-hidden="true">♪</i><span>Music</span></div>
-        <div><i className="gazette-utility-icon gazette-utility-speaker" aria-hidden="true">))</i><span>Game sound</span></div>
-        <div><i className="gazette-utility-icon gazette-utility-help" aria-hidden="true">?</i><span>Quick controls</span></div>
-        <div><i className="gazette-utility-icon gazette-utility-plane" aria-hidden="true">&gt;</i><span>Plane colors</span></div>
-        <div><i className="gazette-utility-icon gazette-utility-bulb" aria-hidden="true">!</i><span>Day / night</span></div>
-      </div>
-      <p className="gazette-caption">Start opens after a short launch prompt: hold the thrust key to wake the engine and enter the sky.</p>
+      <p className="gazette-welcome-signoff"><span>The runway awaits</span>Start gently, build speed, and let the sky teach you the rest.</p>
     </>
   );
 }
