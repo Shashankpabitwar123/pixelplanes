@@ -6,6 +6,7 @@ import {
   getBotAimPoint,
   getBotFlightTuning,
   getBotGroundThreat,
+  selectBotCombatTarget,
 } from './bot-ai.js';
 
 test('the five bot skill profiles scale combat ability in order', () => {
@@ -66,4 +67,65 @@ test('Ace aim has substantially less intentional wobble than Easy aim', () => {
   const expectedY = target.y + 1.1;
 
   assert.ok(Math.abs(easyAim.y - expectedY) > Math.abs(aceAim.y - expectedY) * 8);
+});
+
+test('five bots distribute opening targets instead of all focusing the player', () => {
+  const tuning = getBotFlightTuning({ botDifficulty: 3 });
+  const selectedKeys = [];
+
+  for (let botIndex = 0; botIndex < 5; botIndex += 1) {
+    const bot = { x: 50, y: 50, angle: 0 };
+    const candidates = [{
+      key: 'player',
+      type: 'player',
+      state: { x: 60, y: 50, damage: 0 },
+      distance: 10,
+    }];
+    for (let otherIndex = 0; otherIndex < 5; otherIndex += 1) {
+      if (otherIndex === botIndex) continue;
+      candidates.push({
+        key: `bot:${otherIndex}`,
+        type: 'bot',
+        index: otherIndex,
+        state: { x: 60, y: 50, damage: 0 },
+        distance: 10,
+      });
+    }
+
+    const selected = selectBotCombatTarget(
+      bot,
+      candidates,
+      { key: null, lockedUntil: 0 },
+      0,
+      botIndex,
+      tuning,
+    );
+    selectedKeys.push(selected.key);
+  }
+
+  assert.deepEqual(selectedKeys, ['bot:1', 'bot:2', 'bot:3', 'bot:4', 'player']);
+});
+
+test('a bot keeps a target lock and then retaliates against a recent attacker', () => {
+  const tuning = getBotFlightTuning({ botDifficulty: 3 });
+  const bot = { x: 40, y: 40, angle: 0 };
+  const candidates = [
+    { key: 'bot:1', type: 'bot', index: 1, state: { x: 55, y: 40 }, distance: 15 },
+    { key: 'bot:2', type: 'bot', index: 2, state: { x: 58, y: 40 }, distance: 18 },
+    { key: 'player', type: 'player', state: { x: 60, y: 40 }, distance: 20 },
+  ];
+  const targetState = {
+    key: 'bot:1',
+    lockedUntil: 5000,
+    retaliationKey: 'bot:2',
+    retaliationAt: 700,
+  };
+
+  const beforeReaction = selectBotCombatTarget(bot, candidates, targetState, 850, 0, tuning);
+  const afterReaction = selectBotCombatTarget(bot, candidates, targetState, 1000, 0, tuning);
+
+  assert.equal(beforeReaction.key, 'bot:1');
+  assert.equal(beforeReaction.reason, 'locked');
+  assert.equal(afterReaction.key, 'bot:2');
+  assert.equal(afterReaction.reason, 'retaliation');
 });

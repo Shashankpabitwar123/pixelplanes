@@ -35,6 +35,12 @@ export const BOT_SKILL_PROFILES = Object.freeze([
     combatWeavePeriodMs: 1800,
     evasionDurationMs: 280,
     evasionStrength: 8,
+    targetLockMs: 3400,
+    targetRotationMs: 6400,
+    targetJudgmentNoise: 0.25,
+    finishTargetBias: 0.04,
+    retaliationDelayMs: 520,
+    retaliationMemoryMs: 900,
     collisionLookAheadSeconds: 0.42,
     collisionClearance: 4.8,
     collisionSidestep: 15,
@@ -64,6 +70,12 @@ export const BOT_SKILL_PROFILES = Object.freeze([
     combatWeavePeriodMs: 1650,
     evasionDurationMs: 620,
     evasionStrength: 15,
+    targetLockMs: 2700,
+    targetRotationMs: 5600,
+    targetJudgmentNoise: 0.18,
+    finishTargetBias: 0.09,
+    retaliationDelayMs: 360,
+    retaliationMemoryMs: 1250,
     collisionLookAheadSeconds: 0.52,
     collisionClearance: 5,
     collisionSidestep: 18,
@@ -93,6 +105,12 @@ export const BOT_SKILL_PROFILES = Object.freeze([
     combatWeavePeriodMs: 1450,
     evasionDurationMs: 950,
     evasionStrength: 24,
+    targetLockMs: 2100,
+    targetRotationMs: 4800,
+    targetJudgmentNoise: 0.12,
+    finishTargetBias: 0.15,
+    retaliationDelayMs: 220,
+    retaliationMemoryMs: 1600,
     collisionLookAheadSeconds: 0.64,
     collisionClearance: 5.2,
     collisionSidestep: 21,
@@ -122,6 +140,12 @@ export const BOT_SKILL_PROFILES = Object.freeze([
     combatWeavePeriodMs: 1260,
     evasionDurationMs: 1380,
     evasionStrength: 34,
+    targetLockMs: 1500,
+    targetRotationMs: 4000,
+    targetJudgmentNoise: 0.07,
+    finishTargetBias: 0.22,
+    retaliationDelayMs: 120,
+    retaliationMemoryMs: 2100,
     collisionLookAheadSeconds: 0.78,
     collisionClearance: 5.4,
     collisionSidestep: 24,
@@ -151,6 +175,12 @@ export const BOT_SKILL_PROFILES = Object.freeze([
     combatWeavePeriodMs: 1080,
     evasionDurationMs: 1850,
     evasionStrength: 46,
+    targetLockMs: 950,
+    targetRotationMs: 3200,
+    targetJudgmentNoise: 0.025,
+    finishTargetBias: 0.28,
+    retaliationDelayMs: 55,
+    retaliationMemoryMs: 2800,
     collisionLookAheadSeconds: 0.92,
     collisionClearance: 5.6,
     collisionSidestep: 27,
@@ -184,6 +214,107 @@ export function getBotFlightTuning(rules) {
     maxSpeed: base.maxSpeed * profile.speedScale,
     bulletCooldownMs: Math.round(BOT_BULLET_COOLDOWN_MS * profile.bulletCooldownScale),
     fireAimDot: Math.cos(toRadians(profile.fireAimError + 3)),
+  };
+}
+
+const getCandidateKey = (candidate) => candidate.key
+  ?? (candidate.type === 'player' ? 'player' : `bot:${candidate.index}`);
+
+const getCandidateDistance = (bot, candidate) => candidate.distance
+  ?? Math.max(0.1, Math.hypot(candidate.state.x - bot.x, candidate.state.y - bot.y));
+
+const getFacingError = (bot, candidate) => {
+  const dx = candidate.state.x - bot.x;
+  const dy = candidate.state.y - bot.y;
+  const targetAngle = (Math.atan2(dy, -dx) * 180) / Math.PI;
+  const error = ((targetAngle - (bot.angle ?? 0) + 540) % 360) - 180;
+  return Math.abs(error) / 180;
+};
+
+const targetNoise = (botIndex, candidateKey, targetEpoch) => {
+  let hash = (botIndex + 1) * 101 + targetEpoch * 131;
+  for (let index = 0; index < candidateKey.length; index += 1) {
+    hash = (hash * 33 + candidateKey.charCodeAt(index)) % 104729;
+  }
+  return Math.sin(hash * 0.017) * 0.5 + 0.5;
+};
+
+// Free-for-all targeting: each bot evaluates the player and every other living
+// bot. A rotating preference distributes the opening fights, while distance,
+// firing angle, damage, retaliation, and skill decide when targets change.
+export function selectBotCombatTarget(bot, candidates, targetState, now, botIndex, tuning) {
+  const livingCandidates = candidates
+    .filter((candidate) => candidate?.state && !candidate.state.crashed)
+    .map((candidate) => ({
+      ...candidate,
+      key: getCandidateKey(candidate),
+      distance: getCandidateDistance(bot, candidate),
+    }));
+  const current = livingCandidates.find((candidate) => candidate.key === targetState?.key);
+  const retaliation = livingCandidates.find((candidate) => candidate.key === targetState?.retaliationKey);
+  const retaliationAge = now - (targetState?.retaliationAt ?? -Infinity);
+  const retaliationReady = retaliation
+    && retaliation.distance <= tuning.forgetDistance
+    && retaliationAge >= tuning.retaliationDelayMs
+    && retaliationAge <= tuning.retaliationMemoryMs;
+
+  if (retaliationReady && retaliation.key !== current?.key) {
+    return {
+      target: retaliation,
+      key: retaliation.key,
+      lockedUntil: now + tuning.targetLockMs,
+      reason: 'retaliation',
+    };
+  }
+
+  if (
+    current
+    && current.distance <= tuning.forgetDistance
+    && now < (targetState?.lockedUntil ?? 0)
+  ) {
+    return {
+      target: current,
+      key: current.key,
+      lockedUntil: targetState.lockedUntil,
+      reason: 'locked',
+    };
+  }
+
+  const visibleCandidates = livingCandidates.filter((candidate) => (
+    candidate.distance <= tuning.wakeDistance
+    || (candidate.key === current?.key && candidate.distance <= tuning.forgetDistance)
+  ));
+  if (visibleCandidates.length === 0) {
+    return { target: null, key: null, lockedUntil: 0, reason: 'roam' };
+  }
+
+  const orderedCandidates = [...visibleCandidates].sort((left, right) => left.key.localeCompare(right.key));
+  const targetEpoch = Math.floor(now / tuning.targetRotationMs);
+  const preferredIndex = (botIndex + targetEpoch) % orderedCandidates.length;
+  const scoredCandidates = orderedCandidates.map((candidate, index) => {
+    const distanceScore = clampValue(candidate.distance / tuning.wakeDistance, 0, 1) * 0.62;
+    const facingScore = getFacingError(bot, candidate) * 0.18;
+    const preferenceDistance = Math.min(
+      (index - preferredIndex + orderedCandidates.length) % orderedCandidates.length,
+      (preferredIndex - index + orderedCandidates.length) % orderedCandidates.length,
+    );
+    const distributionScore = orderedCandidates.length > 1
+      ? (preferenceDistance / (orderedCandidates.length - 1)) * 0.24
+      : 0;
+    const damagedScore = -clampValue((candidate.state.damage ?? 0) / 2, 0, 1) * tuning.finishTargetBias;
+    const judgmentError = targetNoise(botIndex, candidate.key, targetEpoch) * tuning.targetJudgmentNoise;
+    return {
+      candidate,
+      score: distanceScore + facingScore + distributionScore + damagedScore + judgmentError,
+    };
+  });
+  scoredCandidates.sort((left, right) => left.score - right.score || left.candidate.key.localeCompare(right.candidate.key));
+  const selected = scoredCandidates[0].candidate;
+  return {
+    target: selected,
+    key: selected.key,
+    lockedUntil: now + tuning.targetLockMs,
+    reason: current?.key === selected.key ? 'reacquired' : 'opportunity',
   };
 }
 

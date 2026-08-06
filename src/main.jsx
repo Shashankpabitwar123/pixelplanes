@@ -25,6 +25,7 @@ import {
   ROCKET_LIFETIME_MS,
   BOT_SKILL_LABELS,
   getBotFlightTuning,
+  selectBotCombatTarget,
   findBotCollisionThreat,
   getBotGroundThreat,
   getBotPursuitPoint,
@@ -6420,6 +6421,12 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   const lastShotRef = useRef(0);
   const lastHitAtRef = useRef(-Infinity);
   const botDecisionRef = useRef({ nextAt: 0, mode: '', point: null });
+  const botTargetRef = useRef({
+    key: null,
+    lockedUntil: 0,
+    retaliationKey: null,
+    retaliationAt: -Infinity,
+  });
   const smokePreviousBotRef = useRef(null);
   const botDamageRef = useRef(0);
   const botSmokeParticlesRef = useRef([]);
@@ -6469,7 +6476,13 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   const damageBotByBullet = useCallback((options = {}) => {
     const current = stateRef.current;
     if (current.crashed) return { killed: false };
-    lastHitAtRef.current = performance.now();
+    const hitAt = performance.now();
+    lastHitAtRef.current = hitAt;
+    const attackerKey = options.attackerKey ?? (options.source === 'player' ? 'player' : null);
+    if (attackerKey) {
+      botTargetRef.current.retaliationKey = attackerKey;
+      botTargetRef.current.retaliationAt = hitAt;
+    }
     const currentDamage = Math.max(botDamageRef.current, current.damage ?? 0);
     const nextDamage = currentDamage + 1;
     if (nextDamage >= 2) {
@@ -6512,6 +6525,12 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     lastShotRef.current = 0;
     lastHitAtRef.current = -Infinity;
     botDecisionRef.current = { nextAt: 0, mode: '', point: null };
+    botTargetRef.current = {
+      key: null,
+      lockedUntil: 0,
+      retaliationKey: null,
+      retaliationAt: -Infinity,
+    };
     const nextBot = createInitialBotState(stateRef.current?.x, otherBotSpawnXs);
     if (!active) {
       nextBot.crashed = true;
@@ -6589,6 +6608,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         const dx = player.x - bot.x;
         const dy = player.y - bot.y;
         candidates.push({
+          key: 'player',
           type: 'player',
           state: player,
           api: playerApiRef.current,
@@ -6602,6 +6622,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         const dx = otherBot.x - bot.x;
         const dy = otherBot.y - bot.y;
         candidates.push({
+          key: `bot:${index}`,
           type: 'bot',
           index,
           state: otherBot,
@@ -6614,15 +6635,6 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       return candidates;
     };
 
-    const getPreferredTarget = (bot, candidates) => {
-      // Bot dogfights still happen if the player is gone, but a live player is
-      // the intended primary opponent. This stops nearby bots from constantly
-      // selecting each other over the pilot.
-      const player = candidates.find((target) => target.type === 'player');
-      if (player) return player;
-      return candidates.reduce((closest, target) => (!closest || target.distance < closest.distance ? target : closest), null);
-    };
-
     const getBotGroundClearance = (bot) => Math.min(...planeModel.groundPoints.map((point) => getPlanePoint(bot, point).y));
 
     const damageTargetByBullet = (target) => {
@@ -6632,7 +6644,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         target.api.hitByBullet?.({ skipHitSound: true });
         return;
       }
-      target.api.hitByBullet?.();
+      target.api.hitByBullet?.({ source: 'bot', attackerKey: `bot:${botIndex}` });
     };
 
     const crashTarget = (target, impact) => {
@@ -6708,12 +6720,21 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       const next = { ...current };
       const botFlightTuning = getBotFlightTuning(gameplayRulesRef.current);
       const targetCandidates = getTargetCandidates(next);
-      const closestTarget = getPreferredTarget(next, targetCandidates);
+      const targetChoice = selectBotCombatTarget(
+        next,
+        targetCandidates,
+        botTargetRef.current,
+        now,
+        botIndex,
+        botFlightTuning,
+      );
+      botTargetRef.current.key = targetChoice.key;
+      botTargetRef.current.lockedUntil = targetChoice.lockedUntil;
+      const closestTarget = targetChoice.target;
       const liveTarget = Boolean(closestTarget);
       const distance = closestTarget?.distance ?? Infinity;
-      if (liveTarget && !next.engaged && distance <= botFlightTuning.wakeDistance) next.engaged = true;
-      if ((!liveTarget || distance >= botFlightTuning.forgetDistance) && next.engaged) next.engaged = false;
-      const pursuing = liveTarget && next.engaged;
+      next.engaged = liveTarget && distance < botFlightTuning.forgetDistance;
+      const pursuing = next.engaged;
       const targetState = closestTarget?.state;
       const collisionThreat = findBotCollisionThreat(next, targetCandidates, botFlightTuning);
       const avoidingCollision = Boolean(collisionThreat);
@@ -6944,6 +6965,12 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
           reloadingRef.current = false;
           lastHitAtRef.current = -Infinity;
           botDecisionRef.current = { nextAt: 0, mode: '', point: null };
+          botTargetRef.current = {
+            key: null,
+            lockedUntil: 0,
+            retaliationKey: null,
+            retaliationAt: -Infinity,
+          };
           setBotDamage(0);
           setBotSmokeParticles([]);
           setBotCrashed(false);
