@@ -8,20 +8,20 @@ export const FUEL_SECONDS = 30;
 
 // Solo and Training rules deliberately live on the client. They must never be
 // sent to a room: room games keep the shared standard ruleset.
-export const BOT_COUNT = 4;
+export const BOT_COUNT = 1;
 
 export const MAX_SOLO_BOTS = 6;
 
 export const SOLO_GAME_RULE_DEFAULTS = Object.freeze({
   botCount: BOT_COUNT,
-  botDifficulty: 3,
+  botDifficulty: 1,
   flightPace: 100,
   turnPace: 100,
   bulletPace: 100,
   bulletCooldownMs: 60,
   bulletReloadSeconds: 7,
   rocketPace: 100,
-  fuelSeconds: FUEL_SECONDS,
+  fuelSeconds: 60,
   weatherMode: 1,
 });
 
