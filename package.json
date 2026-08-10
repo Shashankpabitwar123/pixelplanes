@@ -1,5 +1,5 @@
 {
-  "name": "bitplanes-live-background",
+  "name": "pixelplanes",
   "version": "1.0.0",
   "description": "Real-time multiplayer browser flight game with server-authoritative combat, regional WebSocket rooms, LiveKit voice, and adaptive bot AI",
   "main": "index.js",
