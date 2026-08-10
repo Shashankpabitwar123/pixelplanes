@@ -2867,7 +2867,7 @@ function App() {
     : [];
 
   return (
-    <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}${isTrainingGame ? ' scene-training' : ''}`} aria-label="Animated Bitplanes background">
+    <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}${isTrainingGame ? ' scene-training' : ''}`} aria-label="PixelPlanes game world">
       <div className="sky-gradient" />
       {roomNotifications.length > 0 && (
         <div className="room-notification-stack" aria-live="polite" aria-atomic="false">
@@ -3132,7 +3132,7 @@ function App() {
           <div className={`start-card${startScreen === 'bot-ready' || startScreen === 'training-ready' ? ' start-card-slim' : ''}${startScreen === 'room-waiting' ? ' start-card-room-lobby' : ''}`}>
             {startScreen === 'home' && (
               <>
-                <div className="start-title">Bit Planes</div>
+                <div className="start-title">PixelPlanes</div>
                 <div className="start-actions start-actions-home">
                   <button className="start-option start-primary" type="button" onClick={armBotStart}>
                     Start
@@ -3161,7 +3161,7 @@ function App() {
                   <button
                     className={`start-utility-button${fieldGuideOpen ? ' start-utility-active' : ''}`}
                     type="button"
-                    aria-label="Open the Bit Planes field guide"
+                    aria-label="Open the PixelPlanes field guide"
                     aria-expanded={fieldGuideOpen}
                     title="Field guide"
                     onClick={() => {
@@ -3487,7 +3487,7 @@ function App() {
             </section>
           )}
           {fieldGuideOpen && startScreen === 'home' && (
-            <section className="start-utility-overlay field-guide-overlay" aria-label="Bit Planes field guide">
+            <section className="start-utility-overlay field-guide-overlay" aria-label="PixelPlanes field guide">
               <FieldGuide
                 page={fieldGuidePage}
                 turnDirection={fieldGuideTurnDirection}
@@ -4044,7 +4044,7 @@ function FieldGuide({ page, turnDirection, turnKey, onClose, onTurn }) {
       <header className="field-guide-masthead">
         <div className="field-guide-stamp">VOL. 01<br />SKY EDITION</div>
         <div>
-          <span className="field-guide-kicker">The Bit Planes Gazette</span>
+          <span className="field-guide-kicker">The PixelPlanes Gazette</span>
           <h2 id="field-guide-title">Pilot's Field Guide</h2>
           <p>Page {String(page + 1).padStart(2, '0')} - the complete picture guide to your plane, the sky, and every HUD control.</p>
         </div>
@@ -4088,18 +4088,18 @@ function GuideWelcomePage() {
     <>
       <GazetteHeader
         issue="FRONT PAGE"
-        headline="Welcome to Bit Planes"
+        headline="Welcome to PixelPlanes"
         deck="Your first briefing before the runway rolls away beneath you."
       />
       <div className="gazette-layout gazette-layout-welcome">
         <article className="gazette-story-copy gazette-lead-story">
-          <p className="gazette-dropcap">B</p>
-          <p><strong>Bit Planes turns one little biplane and a wide living farm into an open sky of takeoffs, close calls, and clean landings.</strong> Every flight is shaped by momentum, gravity, fuel, and the choices you make after the wheels leave the runway.</p>
+          <p className="gazette-dropcap">P</p>
+          <p><strong>PixelPlanes turns one little biplane and a wide living farm into an open sky of takeoffs, close calls, and clean landings.</strong> Every flight is shaped by momentum, gravity, fuel, and the choices you make after the wheels leave the runway.</p>
           <p>Beyond the field are changing weather, a music-filled hangar, and skies made for calm practice or a proper dogfight. Learn the feel of your plane, follow the runway lights, and make every landing count.</p>
           <p>This guide is your co-pilot, not a checklist. Turn the page when you are ready; each spread introduces one part of the cockpit, map, and sky.</p>
         </article>
-        <aside className="gazette-hero-art" aria-label="Blue Bit Plane illustration">
-          <img src="/assets/exact-plane.png" alt="Blue Bit Plane" draggable="false" />
+        <aside className="gazette-hero-art" aria-label="Blue PixelPlanes aircraft illustration">
+          <img src="/assets/exact-plane.png" alt="Blue PixelPlanes aircraft" draggable="false" />
           <span className="gazette-runway" />
           <span className="gazette-cloud-mark gazette-cloud-one" />
           <span className="gazette-cloud-mark gazette-cloud-two" />
@@ -4290,7 +4290,7 @@ function GuideWeatherPage() {
       <GazetteHeader
         issue="WEATHER DESK"
         headline="Watch the sky change."
-        deck="This is a real Bit Planes sky replay: clear night, rain, fog, then daylight. Press L or use the deck key to turn on the plane's real fog light."
+        deck="This is a real PixelPlanes sky replay: clear night, rain, fog, then daylight. Press L or use the deck key to turn on the plane's real fog light."
       />
       <GuideWeatherReplay />
       <div className="gazette-weather-guide">
@@ -4341,7 +4341,7 @@ function GuideWeatherReplay() {
   }, [toggleFogLight]);
 
   return (
-    <section className={`gazette-weather-replay${stage.dark ? ' scene-dark' : ''} gazette-weather-replay-${stage.id}`} aria-label={`Live Bit Planes weather replay: ${stage.label.toLowerCase()}`}>
+    <section className={`gazette-weather-replay${stage.dark ? ' scene-dark' : ''} gazette-weather-replay-${stage.id}`} aria-label={`Live PixelPlanes weather replay: ${stage.label.toLowerCase()}`}>
       <div className="gazette-weather-replay-sky">
         <div className="stars gazette-weather-replay-stars" aria-hidden="true">
           {stars.slice(0, 46).map((star) => (

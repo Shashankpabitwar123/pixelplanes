@@ -1,8 +1,39 @@
-# PixelPlanes
+<h1 align="center">PixelPlanes</h1>
 
-[Play PixelPlanes](https://pixelplanes.app/)
+<p align="center"><strong>A real-time multiplayer browser flight game with adaptive AI pilots, regional rooms, and live voice chat.</strong></p>
 
-PixelPlanes is a deployed real-time multiplayer browser flight game with server-authoritative combat, room-based voice chat, multi-region matchmaking, responsive client prediction, and adaptive bot opponents. It combines a React/Vite game client with a Node.js WebSocket simulation service and LiveKit voice infrastructure.
+<p align="center">
+  <a href="https://pixelplanes.app/"><strong>▶ PLAY PIXELPLANES LIVE</strong></a>
+  &nbsp;•&nbsp;
+  <a href="#gameplay-highlights">Features</a>
+  &nbsp;•&nbsp;
+  <a href="#system-architecture">Architecture</a>
+  &nbsp;•&nbsp;
+  <a href="#run-locally">Run locally</a>
+</p>
+
+<p align="center">
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white">
+  <img alt="Vite 8" src="https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white">
+  <img alt="Node.js" src="https://img.shields.io/badge/Node.js-Realtime_Server-339933?logo=nodedotjs&logoColor=white">
+  <img alt="WebSockets" src="https://img.shields.io/badge/WebSockets-Server_Authoritative-111827">
+  <img alt="LiveKit" src="https://img.shields.io/badge/LiveKit-Voice-0B1020">
+</p>
+
+<p align="center">
+  <a href="https://pixelplanes.app/">
+    <img src="docs/screenshots/pixelplanes-start.png" alt="PixelPlanes start screen with Solo, Training, and Room modes" width="100%">
+  </a>
+</p>
+
+PixelPlanes is a deployed full-stack game—not a static prototype. It combines a React/Vite game client with a Node.js WebSocket simulation service, Redis-backed regional room routing, and LiveKit voice infrastructure. Players can train, fight adaptive bots, or create private six-player rooms directly in the browser.
+
+## Product Tour
+
+| Guided pilot experience | Configurable solo gameplay |
+| --- | --- |
+| ![PixelPlanes six-page illustrated Pilot's Field Guide](docs/screenshots/pixelplanes-field-guide.png) | ![PixelPlanes Flight Deck controls for sound, speed, bots, weapons, and weather](docs/screenshots/pixelplanes-flight-deck.png) |
+| Six illustrated pages explain flight, navigation, combat, weather, and multiplayer. | The Flight Deck controls sound, game pace, bot skill, weapons, fuel, and weather without changing competitive room rules. |
 
 ## Gameplay Highlights
 
