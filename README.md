@@ -67,8 +67,8 @@ PostgreSQL room-event logging is implemented as an optional backend capability. 
 ## Run Locally
 
 ```bash
-git clone https://github.com/Shashankpabitwar123/bit-planes.git
-cd bit-planes
+git clone https://github.com/Shashankpabitwar123/pixelplanes.git
+cd pixelplanes
 npm install
 npm run dev
 ```
