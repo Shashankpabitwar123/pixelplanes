@@ -1,7 +1,7 @@
 {
   "name": "bitplanes-live-background",
   "version": "1.0.0",
-  "description": "Animated Bit Planes-style live background prototype",
+  "description": "Real-time multiplayer browser flight game with server-authoritative combat, regional WebSocket rooms, LiveKit voice, and adaptive bot AI",
   "main": "index.js",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -15,8 +15,22 @@
     "server:start": "node server/index.js",
     "server:dev": "node --watch server/index.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "browser-game",
+    "multiplayer",
+    "react",
+    "websocket",
+    "livekit",
+    "real-time",
+    "game-ai",
+    "server-authoritative"
+  ],
+  "homepage": "https://pixelplanes.app/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Shashankpabitwar123/bit-planes.git"
+  },
+  "author": "Shashank S. Pabitwar",
   "license": "ISC",
   "type": "module",
   "dependencies": {
