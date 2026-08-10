@@ -218,6 +218,7 @@ export const MUSIC_TRACKS = [
   src: `/assets/music/${file}`,
 }));
 
+// Keep the legacy storage key so the PixelPlanes rebrand does not erase existing high scores.
 export const HIGH_SCORE_STORAGE_KEY = 'bitplanes-high-score';
 
 export const ROOM_MAX_PLAYERS = 6;
