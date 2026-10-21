@@ -1,4 +1,4 @@
-import { applyFlightForces, flightTurnAuthority } from './flight.js';
+import { AIRBORNE_THRUST_SCALE, applyFlightForces, flightTurnAuthority } from './flight.js';
 import {
   ACTIVE_GAMEPLAY_PACING,
   BULLET_COOLDOWN_MS,
@@ -141,7 +141,7 @@ export function simulateRoomPlane(current, rawInput, dt = ROOM_TICK_SECONDS, now
     next.vx *= Math.exp(-dt * (input.down ? 4.2 : next.thrust > 0.08 ? 0.45 : 1.25));
     next.vy = takeoffReady ? Math.max(0, forwardY * (updatedSpeed * 0.26 + next.thrust * 3.4)) : 0;
   } else {
-    applyFlightForces(next, dt, { thrust: tuning.flightThrust * 0.2, cruiseSpeed: tuning.maxLevelSpeed, brake: input.down });
+    applyFlightForces(next, dt, { thrust: tuning.flightThrust * AIRBORNE_THRUST_SCALE, cruiseSpeed: tuning.maxLevelSpeed, brake: input.down });
   }
 
   next.x += next.vx * dt;

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyFlightForces, flightTurnAuthority, interpolateFlightState } from './flight.js';
+import { AIRBORNE_THRUST_SCALE, applyFlightForces, flightTurnAuthority, interpolateFlightState } from './flight.js';
+import { ACTIVE_GAMEPLAY_PACING } from './config.js';
 import { createInitialPlaneState, getPlanePoint } from './mechanics.js';
 import { simulateRoomPlane } from './room-simulation.js';
 const state = (overrides = {}) => ({ ...createInitialPlaneState(350, 60), y: 150, angle: 0, airborne: true, hasLifted: true, ...overrides });
@@ -60,4 +61,24 @@ test('normal held-power runway takeoff remains possible', () => {
   let p = createInitialPlaneState(350,60);
   for(let i=0;i<960;i++) p = simulateRoomPlane(p,{power:true},1/120,i*1000/120).state;
   assert.ok(!p.crashed && p.hasLifted && p.y > 20);
+});
+
+// These reproduce the reported loss of climb and sluggish cruise.
+test('full power sustains moderate, steep and vertical climbs at both pace limits', () => {
+  for (const pace of [0.7, 1]) for (const angle of [30, 60, 90]) {
+    const p = fly(state({ vx: -20, angle, thrust: 1 }), 8, 1 / 120, {
+      thrust: ACTIVE_GAMEPLAY_PACING.player.flightThrust * Math.pow(pace, 0.86) * AIRBORNE_THRUST_SCALE,
+      cruiseSpeed: ACTIVE_GAMEPLAY_PACING.player.maxLevelSpeed * pace,
+    });
+    assert.ok(p.vy > 8 && p.y > 180, `climb failed at angle ${angle}, pace ${pace}`);
+  }
+});
+test('default full-throttle cruise reaches a brisk continuous equilibrium', () => {
+  const p = fly(state({ vx: -20, thrust: 1 }), 10);
+  const speed = Math.hypot(p.vx, p.vy);
+  assert.ok(speed > 45 && speed < 52, `unexpected cruise speed ${speed}`);
+});
+test('vertical full throttle recovers from a descent', () => {
+  const p = fly(state({ vy: -12, angle: 90, thrust: 1 }), 4);
+  assert.ok(p.vy > 20 && p.y > 150);
 });

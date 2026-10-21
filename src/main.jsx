@@ -1,4 +1,4 @@
-import { applyFlightForces, flightTurnAuthority, interpolateFlightState } from './game/flight.js';
+import { AIRBORNE_THRUST_SCALE, applyFlightForces, flightTurnAuthority, interpolateFlightState } from './game/flight.js';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
@@ -5497,7 +5497,7 @@ function PlayablePlane({
         next.vx *= Math.exp(-dt * (keys.has('down') ? 4.2 : next.thrust > 0.08 ? 0.45 : 1.25));
         next.vy = takeoffReady ? Math.max(0, forwardY * (updatedSpeed * 0.26 + next.thrust * 3.4)) : 0;
       } else {
-        applyFlightForces(next, dt, { thrust: playerFlightTuning.flightThrust * 0.2, cruiseSpeed: playerFlightTuning.maxLevelSpeed, brake: keys.has('down') });
+        applyFlightForces(next, dt, { thrust: playerFlightTuning.flightThrust * AIRBORNE_THRUST_SCALE, cruiseSpeed: playerFlightTuning.maxLevelSpeed, brake: keys.has('down') });
       }
 
       next.x += next.vx * dt;
@@ -6789,7 +6789,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
 
       if (next.airborne) {
         const tuning = getPlayerFlightTuning(gameplayRulesRef.current);
-        applyFlightForces(next, dt, { thrust: tuning.flightThrust * 0.2, cruiseSpeed: tuning.maxLevelSpeed });
+        applyFlightForces(next, dt, { thrust: tuning.flightThrust * AIRBORNE_THRUST_SCALE, cruiseSpeed: tuning.maxLevelSpeed });
       }
 
       next.x += next.vx * dt;

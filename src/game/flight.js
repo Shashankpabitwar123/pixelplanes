@@ -1,13 +1,16 @@
 // World coordinates: x right, y up; angle zero faces left.
 // Arcade units, not aircraft engineering units. Lift is perpendicular to airspeed.
 export const FLIGHT_GRAVITY = 14.2;
+// Full power must exceed gravity even at the lowest flight-pace setting.
+// Keep drag continuous: extra power increases cruise speed without a hard cap.
+export const AIRBORNE_THRUST_SCALE = 0.5;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export function flightTurnAuthority(speed, thrust = 0) {
   return 0.12 + 0.88 * clamp(speed / 24, 0, 1) + 0.08 * thrust;
 }
 
-export function applyFlightForces(plane, dt, { thrust = 12, cruiseSpeed = 35, brake = false } = {}) {
+export function applyFlightForces(plane, dt, { thrust = 30, cruiseSpeed = 35, brake = false } = {}) {
   const rad = plane.angle * Math.PI / 180;
   const fx = -Math.cos(rad), fy = Math.sin(rad);
   const speed = Math.hypot(plane.vx, plane.vy);
