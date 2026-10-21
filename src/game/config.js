@@ -211,7 +211,12 @@ export const MUSIC_TRACKS = [
   'antipodeanwriter-chilliwave-hourglass-12179.mp3',
   'dariocoiro-lluvia-en-el-balcon-496768.mp3',
   'pink_sound-neon-nocturne-background-slap-house-music-for-video-short-version-562689.mp3',
-  'sunset-house-grooves-deep-house-sunset-538759-1.mp3',
+  'absolutesound-house-music-no-copyright-515832.mp3',
+  'cornist-deep-houserelax-487441.mp3',
+  'mondamusic-positive-house-491683.mp3',
+  'ronaldoreyz-deep-cognition-deep-house-for-study-amp-productivity-561227.mp3',
+  'openmindaudio-dance-organic-deep-house-music-moonroot-passage-524257.mp3',
+  'delosound-house-music-309375.mp3',
 ].map((file, index) => ({
   id: index + 1,
   file,

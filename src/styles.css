@@ -1151,11 +1151,13 @@ button {
 
 .music-track-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 
 .music-track-button {
+  min-width: 0;
+  padding: 0;
   height: 26px;
   border: 1px solid rgba(30, 47, 62, 0.24);
   border-radius: 5px;
