@@ -10,10 +10,10 @@ import {
 } from './bot-ai.js';
 import { createSoloGameRules, FUEL_SECONDS } from './config.js';
 
-test('personal-game defaults are one Easy bot and 60-second fuel without changing room fuel', () => {
+test('personal-game defaults are four Easy bots and 60-second fuel without changing room fuel', () => {
   const rules = createSoloGameRules();
 
-  assert.equal(rules.botCount, 1);
+  assert.equal(rules.botCount, 4);
   assert.equal(rules.botDifficulty, 1);
   assert.equal(rules.fuelSeconds, 60);
   assert.equal(FUEL_SECONDS, 30);

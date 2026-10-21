@@ -8,7 +8,7 @@ export const FUEL_SECONDS = 30;
 
 // Solo and Training rules deliberately live on the client. They must never be
 // sent to a room: room games keep the shared standard ruleset.
-export const BOT_COUNT = 1;
+export const BOT_COUNT = 4;
 
 export const MAX_SOLO_BOTS = 6;
 
