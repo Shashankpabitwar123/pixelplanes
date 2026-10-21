@@ -61,7 +61,6 @@ import {
   hayPlacements,
   fuelTankPlacements,
   fuelStationZones,
-  hayObstacles,
   planeModel,
   createInitialPlaneState,
   getSyncedRoomWeather,
@@ -87,7 +86,6 @@ import {
   playFlightDeckTick,
   playPlaneBulletHitSound,
   playPlaneBlastSound,
-  pointHitsHay,
   getCameraX,
   getCameraY,
   clamp,
@@ -5513,7 +5511,6 @@ function PlayablePlane({
       if (next.y > 2.0 || (next.airborne && lowestPoint > 0.55)) next.hasLifted = true;
 
       const shapePoints = planeModel.hitPoints.map((point) => getPlanePoint(next, point));
-      const hitHay = hayObstacles.some((hay) => shapePoints.some((point) => pointHitsHay(point, hay)));
       const hitWorldEdge = shapePoints.some((point) => point.x <= 0 || point.x >= WORLD_WIDTH);
       const fuelStationIndex = fuelStationZones.findIndex((station) =>
         shapePoints.some(
@@ -5568,7 +5565,7 @@ function PlayablePlane({
         next.hasLifted = false;
         next.angle = normalizeAngle(next.angle + normalizeAngle(14 - next.angle) * 0.3);
         onSafeLandingRef.current?.(next);
-      } else if (hitGround || hitHay || hitWorldEdge) {
+      } else if (hitGround || hitWorldEdge) {
         const crashLowestPoint = Math.min(...planeModel.groundPoints.map((point) => getPlanePoint(next, point).y));
         if (crashLowestPoint < 0) next.y -= crashLowestPoint;
         next.crashed = true;

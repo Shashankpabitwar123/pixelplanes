@@ -95,4 +95,4 @@ export const fuelTankPlacements = [52, 148, 286, 394, 520, 650];
 
 export const fuelStationZones = fuelTankPlacements.map((x) => ({ x: x - 0.4, width: 4.8, height: 9.2 }));
 
-export const hayObstacles = hayPlacements.map(({ x, type }) => ({ x, type }));
+// Hay placements are decorative scenery, like the houses.

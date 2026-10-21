@@ -504,16 +504,6 @@ function getGroundClippedWorldProjectile(startYVh, dxVw, dyVh, fullLifeMs, minLi
   };
 }
 
-export function pointHitsHay(point, hay) {
-  if (hay.type === 'roll') {
-    const dx = (point.x - (hay.x + 1.05)) / 0.84;
-    const dy = (point.y - 1.18) / 1.12;
-    return dx * dx + dy * dy <= 1;
-  }
-
-  return point.x >= hay.x + 0.16 && point.x <= hay.x + 1.92 && point.y >= 0.06 && point.y <= 1.62;
-}
-
 export function getCameraX(x) {
   return Math.max(0, Math.min(WORLD_WIDTH - 100, x - 50));
 }

@@ -25,11 +25,10 @@ import {
   getRocketSegment,
   normalizeAngle,
   planeModel,
-  pointHitsHay,
   segmentHitsPlane,
   updateGuidedRocket,
 } from './mechanics.js';
-import { fuelStationZones, hayObstacles } from './world.js';
+import { fuelStationZones } from './world.js';
 
 // Room simulation deliberately has no DOM, React, audio, or browser APIs. The
 // Node room server owns this same ruleset, while the client uses it only for
@@ -155,7 +154,6 @@ export function simulateRoomPlane(current, rawInput, dt = ROOM_TICK_SECONDS, now
   if (next.y > 2 || (next.airborne && lowestPoint > 0.55)) next.hasLifted = true;
 
   const shapePoints = planeModel.hitPoints.map((point) => getPlanePoint(next, point));
-  const hitHay = hayObstacles.some((hay) => shapePoints.some((point) => pointHitsHay(point, hay)));
   const hitWorldEdge = shapePoints.some((point) => point.x <= 0 || point.x >= WORLD_WIDTH);
   const fuelStationIndex = fuelStationZones.findIndex((station) =>
     shapePoints.some((point) => point.y > 0 && point.y < station.height && point.x > station.x && point.x < station.x + station.width),
@@ -191,8 +189,8 @@ export function simulateRoomPlane(current, rawInput, dt = ROOM_TICK_SECONDS, now
     next.hasLifted = false;
     next.angle = normalizeAngle(next.angle + normalizeAngle(14 - next.angle) * 0.3);
     events.push({ type: 'safe_landing' });
-  } else if (hitGround || hitHay || hitWorldEdge) {
-    events.push({ type: 'crashed', cause: hitHay ? 'hay' : hitWorldEdge ? 'edge' : 'ground' });
+  } else if (hitGround || hitWorldEdge) {
+    events.push({ type: 'crashed', cause: hitWorldEdge ? 'edge' : 'ground' });
     return { state: crashRoomPlane(next, now, landingSpeed / 28), events };
   }
 
