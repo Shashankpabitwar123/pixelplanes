@@ -4,6 +4,9 @@ export const DEFAULT_MUSIC_TRACK_ID = 15;
 export function createMusicPlayer({ createAudio = () => new Audio(), onChange = () => {} } = {}) {
   let audio = null;
   let volume = DEFAULT_MUSIC_VOLUME;
+  let duck = 1;
+  let duckTimer = null;
+  const applyVolume = () => { if (audio) audio.volume = volume * duck; };
   let chosen = false;
   let currentTrackId = null;
   let request = 0;
@@ -11,7 +14,7 @@ export function createMusicPlayer({ createAudio = () => new Audio(), onChange = 
   const play = (track, automatic = false) => {
     audio ??= createAudio();
     audio.loop = true;
-    audio.volume = volume;
+    audio.volume = volume * duck;
     if (currentTrackId !== track.id) audio.src = track.src;
     currentTrackId = track.id;
     const attempt = ++request;
@@ -44,9 +47,21 @@ export function createMusicPlayer({ createAudio = () => new Audio(), onChange = 
     },
     setVolume(value) {
       volume = Math.min(1, Math.max(0, value));
-      if (audio) audio.volume = volume;
+      if (audio) audio.volume = volume * duck;
+    },
+    setDucked(active, duration = active ? 180 : 600) {
+      clearInterval(duckTimer);
+      const target = active ? 0.3 : 1;
+      if (duration <= 0) { duck = target; applyVolume(); return; }
+      const start = duck, started = Date.now();
+      duckTimer = setInterval(() => {
+        const t = Math.min(1, (Date.now() - started) / duration);
+        duck = start + (target - start) * t; applyVolume();
+        if (t === 1) { clearInterval(duckTimer); duckTimer = null; }
+      }, 30);
     },
     dispose() {
+      clearInterval(duckTimer);
       ++request;
       audio?.pause();
       if (audio) audio.src = '';

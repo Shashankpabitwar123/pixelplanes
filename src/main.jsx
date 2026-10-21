@@ -1,3 +1,4 @@
+import { createGroundWarningTracker, createPullUpAudio } from './game/ground-warning.js';
 import { AIRBORNE_THRUST_SCALE, applyFlightForces, flightTurnAuthority, interpolateFlightState } from './game/flight.js';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -557,17 +558,39 @@ function App() {
   const roomVoiceEnabledRef = useRef(roomVoiceEnabled);
   const roomSpeakerEnabledRef = useRef(roomSpeakerEnabled);
   const roomMutedPlayersRef = useRef(roomMutedPlayers);
+  const [groundWarning, setGroundWarning] = useState(false);
+  const groundWarningTracker = useRef(createGroundWarningTracker());
+  const pullUpAudioRef = useRef(null);
+  if (!pullUpAudioRef.current) pullUpAudioRef.current = createPullUpAudio();
   const musicPlayerRef = useRef(null);
   if (!musicPlayerRef.current) {
     musicPlayerRef.current = createMusicPlayer({ onChange: setActiveTrackId });
   }
   const startDefaultMusic = useCallback(() => {
+    pullUpAudioRef.current.unlock();
     void musicPlayerRef.current.startDefault(MUSIC_TRACKS.find((track) => track.id === DEFAULT_MUSIC_TRACK_ID));
   }, []);
   useEffect(() => {
     const timer = window.setTimeout(() => setMusicHintActive(false), 8000);
     return () => window.clearTimeout(timer);
   }, []);
+  useEffect(() => {
+    const check = () => setGroundWarning(groundWarningTracker.current.update(
+      playerStateRef.current, performance.now(), gameStarted && !paused,
+    ));
+    check();
+    const timer = window.setInterval(check, 100);
+    return () => window.clearInterval(timer);
+  }, [gameStarted, paused, restartSignal]);
+  useEffect(() => {
+    const audible = groundWarning && gameStarted && !paused && !sfxMuted;
+    musicPlayerRef.current.setDucked(audible);
+    if (!audible) { pullUpAudioRef.current.stop(); return; }
+    pullUpAudioRef.current.play();
+    const timer = window.setInterval(() => pullUpAudioRef.current.play(), 2000);
+    return () => { window.clearInterval(timer); pullUpAudioRef.current.stop(); };
+  }, [groundWarning, gameStarted, paused, sfxMuted]);
+  useEffect(() => () => pullUpAudioRef.current.dispose(), []);
   const rainAudioRef = useRef(null);
   const rainSoundStartTimerRef = useRef(0);
   const fuelPulseTimersRef = useRef([]);
@@ -3538,7 +3561,7 @@ function App() {
         <strong>{roomPingMs == null ? '--' : roomPingMs}</strong>
         <span>MS</span>
       </div>
-      <div ref={mapPointerRef} className="map-pointer" aria-label="Map position">
+      <div ref={mapPointerRef} className={`map-pointer${groundWarning ? ' map-ground-warning' : ''}`} aria-label="Map position">
         {fuelTankPlacements.map((x, index) => (
           <span
             key={index}
@@ -3595,6 +3618,12 @@ function App() {
             top: `${Math.max(2, Math.min(98, 100 - (50 / WORLD_HEIGHT) * 100))}%`,
           }}
         />
+        {groundWarning && (
+          <div className="ground-warning-overlay" role="alert" aria-label="Terrain warning: pull up">
+            <span className="ground-warning-symbol" aria-hidden="true">⚠</span>
+            <strong>PULL UP!</strong>
+          </div>
+        )}
       </div>
       <div className="combat-hud">
         <div

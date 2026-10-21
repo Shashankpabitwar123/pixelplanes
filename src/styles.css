@@ -8454,3 +8454,31 @@ label.flight-deck-rule-control input[type='range'] {
     box-shadow: 0 0 12px rgba(255, 205, 45, 0.65);
   }
 }
+
+/* Keep the flight view clear; only the minimap yields to the terrain alert. */
+.map-ground-warning > :not(.ground-warning-overlay) {
+  filter: blur(3px);
+  opacity: 0.25;
+}
+.ground-warning-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #ffd34e;
+  background: rgba(21, 25, 34, 0.78);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  text-shadow: 0 2px 5px #000;
+}
+.ground-warning-symbol { font-size: 48px; line-height: 1; }
+.ground-warning-overlay strong { font-size: 18px; letter-spacing: 2px; }
+.ground-warning-overlay > * { animation: terrain-warning-pulse 1s ease-in-out infinite; }
+@keyframes terrain-warning-pulse { 50% { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) {
+  .ground-warning-overlay > * { animation: none; }
+}

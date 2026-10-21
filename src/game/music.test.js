@@ -55,3 +55,31 @@ test('late playback promises cannot overwrite a more recent selection', async ()
   await first;
   assert.deepEqual(changes, [10]);
 });
+test('ducking preserves chosen volume and track changes, then restores latest setting', async () => {
+  const { player, audio } = setup();
+  await player.startDefault(song(15));
+  player.setDucked(true, 0);
+  assert.equal(audio.volume, 0.06);
+  player.setVolume(0.5);
+  assert.equal(audio.volume, 0.15);
+  await player.toggle(song(14));
+  assert.equal(audio.volume, 0.15);
+  player.setDucked(false, 0);
+  assert.equal(audio.volume, 0.5);
+  player.toggle(song(14));
+  player.setDucked(true, 0);
+  player.setDucked(false, 0);
+  assert.equal(audio.paused, true);
+  player.dispose();
+});
+test('duck and restore ramps reach their target without changing selected volume', async () => {
+  const { player, audio } = setup();
+  await player.startDefault(song(15));
+  player.setDucked(true, 30);
+  await new Promise(resolve => setTimeout(resolve, 80));
+  assert.ok(Math.abs(audio.volume - 0.06) < 1e-10);
+  player.setDucked(false, 30);
+  await new Promise(resolve => setTimeout(resolve, 80));
+  assert.equal(audio.volume, 0.2);
+  player.dispose();
+});
