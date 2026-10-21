@@ -8469,7 +8469,7 @@ label.flight-deck-rule-control input[type='range'] {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  color: #ffd34e;
+  color: #ff4545;
   background: rgba(21, 25, 34, 0.78);
   backdrop-filter: blur(4px);
   pointer-events: none;
@@ -8478,7 +8478,10 @@ label.flight-deck-rule-control input[type='range'] {
 .ground-warning-symbol { font-size: 48px; line-height: 1; }
 .ground-warning-overlay strong { font-size: 18px; letter-spacing: 2px; }
 .ground-warning-overlay > * { animation: terrain-warning-pulse 1s ease-in-out infinite; }
-@keyframes terrain-warning-pulse { 50% { opacity: 0.5; } }
+@keyframes terrain-warning-pulse {
+  0%, 100% { opacity: 1; text-shadow: 0 0 8px #ff2020, 0 0 18px rgba(255, 32, 32, 0.8); }
+  50% { opacity: 0.5; text-shadow: 0 0 3px rgba(255, 32, 32, 0.4); }
+}
 @media (prefers-reduced-motion: reduce) {
   .ground-warning-overlay > * { animation: none; }
 }
