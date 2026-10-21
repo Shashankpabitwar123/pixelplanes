@@ -1,3 +1,4 @@
+import { applyFlightForces, flightTurnAuthority } from './flight.js';
 import {
   ACTIVE_GAMEPLAY_PACING,
   BULLET_COOLDOWN_MS,
@@ -108,20 +109,14 @@ export function simulateRoomPlane(current, rawInput, dt = ROOM_TICK_SECONDS, now
 
   const elevator = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   const speed = Math.hypot(next.vx, next.vy);
-  const speedAuthority = clamp(speed / 18, 0, 1);
-  const groundAuthority = onRunway ? clamp(Math.abs(next.vx) / 8 + next.thrust * 0.55, 0.28, 0.95) : 1;
-  const turnAuthority = clamp(0.35 + speedAuthority * 0.75 + next.thrust * 0.42, 0.38, 1.45) * groundAuthority;
-  const targetTurnRate = elevator * (tuning.turnBaseRate + turnAuthority * tuning.turnAuthorityRate);
-  next.turnRate += (targetTurnRate - next.turnRate) * Math.min(1, dt * (elevator ? tuning.turnInputResponse : 10));
-  next.turnRate *= Math.exp(-dt * (elevator ? tuning.turnHeldDamping : tuning.turnReleaseDamping));
+  const authority = flightTurnAuthority(speed, next.thrust);
+  const targetTurnRate = elevator * (tuning.turnBaseRate * 0.82) * authority;
+  next.turnRate += (targetTurnRate - next.turnRate) * (1 - Math.exp(-dt * (elevator ? 10 : 14)));
   next.angle = normalizeAngle(next.angle + next.turnRate * dt);
 
   const rad = (next.angle * Math.PI) / 180;
   const forwardX = -Math.cos(rad);
   const forwardY = Math.sin(rad);
-  const normalX = -Math.sin(rad);
-  const normalY = Math.cos(rad);
-  const diving = forwardY < -0.15;
   const climbing = forwardY > 0.15;
   const runwaySpeed = Math.abs(next.vx);
   const takeoffReady = runwaySpeed > tuning.takeoffSpeed && next.thrust > 0.58 && climbing;
@@ -139,56 +134,14 @@ export function simulateRoomPlane(current, rawInput, dt = ROOM_TICK_SECONDS, now
     }
   }
 
-  const thrustForce = onRunway ? tuning.runwayThrust : tuning.flightThrust;
-  const thrustBoost = diving ? tuning.diveBoost : climbing ? tuning.climbBoost : 1;
-  next.vx += forwardX * thrustForce * next.thrust * thrustBoost * dt;
-  if (!onRunway || takeoffReady) {
-    next.vy += forwardY * thrustForce * next.thrust * thrustBoost * dt;
-    if (diving) next.vy -= Math.abs(forwardY) * next.thrust * tuning.divePull * dt;
-  }
-
-  const updatedSpeed = Math.max(0.001, Math.hypot(next.vx, next.vy));
-  const velocityX = next.vx / updatedSpeed;
-  const velocityY = next.vy / updatedSpeed;
-  const alignment = clamp(velocityX * forwardX + velocityY * forwardY, -1, 1);
-  const slip = Math.abs(forwardX * velocityY - forwardY * velocityX);
-  const liftAuthority = clamp((alignment + 0.2) / 1.2, 0, 1);
-  const liftForce = Math.min(42, updatedSpeed * 0.34 * liftAuthority * Math.min(1, slip * 1.7));
-  const effectiveLiftForce = liftForce * (diving ? (next.thrust > 0.08 ? 0.16 : 0.45) : 1);
-  const propWashLift = diving ? 0 : next.thrust * Math.max(0, normalY) * 2.5;
-  if (!onRunway || takeoffReady) {
-    next.vx += normalX * effectiveLiftForce * dt;
-    next.vy += normalY * (effectiveLiftForce + propWashLift) * dt;
-  }
-
-  const gravity = diving ? 20 + next.thrust * 14 : 13.5 + (1 - next.thrust) * 13.5;
-  next.vy -= gravity * dt;
-  const poweredDive = diving && next.thrust > 0.05;
-  const dragBase = poweredDive ? 0.012 + updatedSpeed * 0.0022 : 0.018 + updatedSpeed * 0.0038;
-  const slipDrag = slip * slip * (poweredDive ? 0.18 : 0.38);
-  const drag = Math.exp(-(dragBase + slipDrag) * dt);
-  next.vx *= drag;
-  next.vy *= drag;
-  if (poweredDive && !onRunway) next.vy -= Math.abs(forwardY) * next.thrust * tuning.poweredDivePull * dt;
-  if (input.down) {
-    const brake = Math.exp(-dt * (onRunway ? 4.2 : 2.4));
-    next.vx *= brake;
-    next.vy *= brake;
-  }
-
-  const cappedSpeed = Math.hypot(next.vx, next.vy);
-  const maxSpeed = diving
-    ? tuning.maxDiveBaseSpeed + next.thrust * tuning.maxDiveThrustBonus
-    : climbing ? tuning.maxClimbSpeed : tuning.maxLevelSpeed;
-  if (cappedSpeed > maxSpeed) {
-    const cap = maxSpeed / cappedSpeed;
-    next.vx *= cap;
-    next.vy *= cap;
-  }
+  // Ground handling stays assisted; airborne forces use the shared flight model.
+  const updatedSpeed = Math.hypot(next.vx, next.vy);
   if (onRunway) {
-    next.vy = Math.max(0, next.vy);
-    next.vx *= Math.exp(-dt * (next.thrust > 0.08 ? 0.45 : 1.25));
-    if (takeoffReady) next.vy = Math.max(next.vy, forwardY * (updatedSpeed * 0.26 + next.thrust * 3.4));
+    next.vx += forwardX * tuning.runwayThrust * next.thrust * dt;
+    next.vx *= Math.exp(-dt * (input.down ? 4.2 : next.thrust > 0.08 ? 0.45 : 1.25));
+    next.vy = takeoffReady ? Math.max(0, forwardY * (updatedSpeed * 0.26 + next.thrust * 3.4)) : 0;
+  } else {
+    applyFlightForces(next, dt, { thrust: tuning.flightThrust * 0.2, cruiseSpeed: tuning.maxLevelSpeed, brake: input.down });
   }
 
   next.x += next.vx * dt;

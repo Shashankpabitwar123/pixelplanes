@@ -11,6 +11,7 @@
     "test:directory": "node --test server/room-directory.test.js",
     "test:voice": "node --test server/livekit-auth.test.js",
     "test:bot": "node --test src/game/bot-ai.test.js",
+    "test:flight": "node --test src/game/flight.test.js",
     "test:music": "node --test src/game/music.test.js",
     "preview": "vite preview --host 127.0.0.1",
     "server:start": "node server/index.js",

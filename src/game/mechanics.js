@@ -169,8 +169,8 @@ export function getPlanePoint(plane, point) {
   const localY = -(point.y + planeModel.visualOffsetY / 100) * planeModel.heightVh;
   const rad = (plane.angle * Math.PI) / 180;
   return {
-    x: plane.x + localX * Math.cos(rad) - localY * Math.sin(rad),
-    y: plane.y + localX * Math.sin(rad) + localY * Math.cos(rad),
+    x: plane.x + localX * Math.cos(rad) + localY * Math.sin(rad),
+    y: plane.y - localX * Math.sin(rad) + localY * Math.cos(rad),
   };
 }
 
