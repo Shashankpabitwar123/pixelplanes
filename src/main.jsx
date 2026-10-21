@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
+import { createMusicPlayer, DEFAULT_MUSIC_VOLUME, DEFAULT_MUSIC_TRACK_ID } from './game/music.js';
 import {
   WORLD_WIDTH,
   WORLD_HEIGHT,
@@ -460,6 +461,7 @@ function App() {
   const [highScore, setHighScore] = useState(readStoredHighScore);
   const [fuelStationPulses, setFuelStationPulses] = useState({});
   const [musicOpen, setMusicOpen] = useState(false);
+  const [musicHintActive, setMusicHintActive] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [soloGameRules, setSoloGameRules] = useState(() => createSoloGameRules());
@@ -471,10 +473,10 @@ function App() {
   const [planeColor, setPlaneColor] = useState('blue');
   const [planeLightCombo, setPlaneLightCombo] = useState('classic');
   const [activeTrackId, setActiveTrackId] = useState(null);
-  const [musicVolume, setMusicVolume] = useState(0.32);
+  const [musicVolume, setMusicVolume] = useState(DEFAULT_MUSIC_VOLUME);
   const [sfxMuted, setSfxMuted] = useState(false);
   const [soundLevels, setSoundLevels] = useState({
-    engine: 0.05,
+    engine: 0.09,
     ammo: 0.1,
     rocket: 0.1,
     explosion: 0.1,
@@ -556,7 +558,17 @@ function App() {
   const roomVoiceEnabledRef = useRef(roomVoiceEnabled);
   const roomSpeakerEnabledRef = useRef(roomSpeakerEnabled);
   const roomMutedPlayersRef = useRef(roomMutedPlayers);
-  const musicAudioRef = useRef(null);
+  const musicPlayerRef = useRef(null);
+  if (!musicPlayerRef.current) {
+    musicPlayerRef.current = createMusicPlayer({ onChange: setActiveTrackId });
+  }
+  const startDefaultMusic = useCallback(() => {
+    void musicPlayerRef.current.startDefault(MUSIC_TRACKS.find((track) => track.id === DEFAULT_MUSIC_TRACK_ID));
+  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setMusicHintActive(false), 8000);
+    return () => window.clearTimeout(timer);
+  }, []);
   const rainAudioRef = useRef(null);
   const rainSoundStartTimerRef = useRef(0);
   const fuelPulseTimersRef = useRef([]);
@@ -593,6 +605,7 @@ function App() {
     return () => window.cancelAnimationFrame(frame);
   }, []);
   const startGame = useCallback(() => {
+    startDefaultMusic();
     setGameStarted(true);
     setPaused(false);
     setStartScreen('home');
@@ -603,7 +616,7 @@ function App() {
     setFieldGuidePage(0);
     setPlaneMenuOpen(false);
     setKillCount(0);
-  }, []);
+  }, [startDefaultMusic]);
   const resetTrainingProgress = useCallback(() => {
     trainingProgressRef.current = {
       lessonIndex: 0,
@@ -1989,20 +2002,22 @@ function App() {
     setPaused((current) => !current);
   }, [gameStarted]);
   const armBotStart = useCallback(() => {
+    startDefaultMusic();
     setGameMode('bots');
     setStartScreen('bot-ready');
     setMusicOpen(false);
     setHelpOpen(false);
     setPlaneMenuOpen(false);
-  }, []);
+  }, [startDefaultMusic]);
   const armTrainingStart = useCallback(() => {
+    startDefaultMusic();
     resetTrainingProgress();
     setGameMode('training');
     setStartScreen('training-ready');
     setMusicOpen(false);
     setHelpOpen(false);
     setPlaneMenuOpen(false);
-  }, [resetTrainingProgress]);
+  }, [resetTrainingProgress, startDefaultMusic]);
   const createRoomLobby = useCallback(async () => {
     setRoomError('');
     setKillCount(0);
@@ -2512,26 +2527,13 @@ function App() {
   }, []);
 
   const playTrack = useCallback((track) => {
-    if (!musicAudioRef.current) {
-      musicAudioRef.current = new Audio();
-      musicAudioRef.current.loop = true;
-    }
-    const audio = musicAudioRef.current;
-    const currentSrc = new URL(audio.src || window.location.href, window.location.href).pathname;
-    if (activeTrackId === track.id && !audio.paused) {
-      audio.pause();
-      setActiveTrackId(null);
-      return;
-    }
-    if (currentSrc !== track.src) audio.src = track.src;
-    audio.volume = musicVolume;
-    audio.play().then(() => setActiveTrackId(track.id)).catch(() => setActiveTrackId(track.id));
-  }, [activeTrackId, musicVolume]);
+    void musicPlayerRef.current.toggle(track);
+  }, []);
 
   const updateMusicVolume = useCallback((event) => {
     const nextVolume = Number(event.target.value) / 100;
     setMusicVolume(nextVolume);
-    if (musicAudioRef.current) musicAudioRef.current.volume = nextVolume;
+    musicPlayerRef.current.setVolume(nextVolume);
   }, []);
 
   const updateSoundLevel = useCallback((kind, event) => {
@@ -2578,9 +2580,7 @@ function App() {
     window.clearTimeout(rainSoundStartTimerRef.current);
     rainAudioRef.current?.stop();
     rainAudioRef.current = null;
-    if (!musicAudioRef.current) return;
-    musicAudioRef.current.pause();
-    musicAudioRef.current.src = '';
+    musicPlayerRef.current.dispose();
   }, []);
 
   useEffect(() => {
@@ -2914,11 +2914,13 @@ function App() {
         <img src="/assets/restart-icon.png" alt="" draggable="false" aria-hidden="true" />
       </button>
       <button
-        className={`music-selector${musicOpen ? ' music-selector-open' : ''}`}
+        className={`music-selector${musicOpen ? ' music-selector-open' : ''}${musicHintActive ? ' music-selector-hint' : ''}`}
         type="button"
         aria-label="Select background music"
+        title="Choose a song, or click the playing song to stop it"
         aria-expanded={musicOpen}
         onClick={() => {
+          setMusicHintActive(false);
           setMusicOpen((open) => !open);
           setHelpOpen(false);
           setSettingsOpen(false);
