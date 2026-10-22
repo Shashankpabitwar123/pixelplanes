@@ -420,9 +420,10 @@ export function getRocketSegment(rocket) {
 }
 
 function distanceToSegment(point, start, end) {
-  const scaledPoint = { x: point.x * 1.35, y: point.y };
-  const scaledStart = { x: start.x * 1.35, y: start.y };
-  const scaledEnd = { x: end.x * 1.35, y: end.y };
+  const aspect = typeof window !== 'undefined' ? (window.innerWidth || 1440) / (window.innerHeight || 900) : 1.35;
+  const scaledPoint = { x: point.x * aspect, y: point.y };
+  const scaledStart = { x: start.x * aspect, y: start.y };
+  const scaledEnd = { x: end.x * aspect, y: end.y };
   const dx = scaledEnd.x - scaledStart.x;
   const dy = scaledEnd.y - scaledStart.y;
   const lengthSq = dx * dx + dy * dy;
@@ -435,7 +436,8 @@ function distanceToSegment(point, start, end) {
 
 export function segmentHitsPlane(segment, plane, radius = 0.9) {
   if (!plane || plane.crashed) return false;
-  return planeModel.hitPoints.some((hitPoint) => distanceToSegment(getPlanePoint(plane, hitPoint), segment.start, segment.end) <= radius);
+  const pointForHit = typeof window !== 'undefined' ? getRenderedPlanePoint : getPlanePoint;
+  return planeModel.hitPoints.some((hitPoint) => distanceToSegment(pointForHit(plane, hitPoint), segment.start, segment.end) <= radius);
 }
 
 function getDamageSmokeVector(plane, previousPlane = null) {

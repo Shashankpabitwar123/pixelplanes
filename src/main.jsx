@@ -1,3 +1,4 @@
+import { getBulletLead } from './game/bullet-lead.js';
 import { getPlayerFlightTuning } from './game/flight-tuning.js';
 import { createWeatherCycle } from './game/weather.js';
 import { FlightDeck } from './game/flight-deck.jsx';
@@ -3026,7 +3027,8 @@ function App() {
           <div className="help-rule help-note"><i className="help-fuel-dot" /><span>Purple dots are fuel stations</span></div>
           <div className="help-rule"><i className="help-enemy-dot" /><span>Red dots are enemy bots</span></div>
           <div className="help-rule help-note"><kbd>Fuel</kbd><span>{FUEL_SECONDS} seconds. Station refills and repairs.</span></div>
-          <div className="help-rule"><kbd>Ammo</kbd><span>Bullets refill every 7 seconds.</span></div>
+          <div className="help-rule"><kbd>Ammo</kbd><span>Bullets refill 4 seconds after your first shot.</span></div>
+          <div className="help-rule"><kbd>Aim</kbd><span>Gold circle: aim here to lead a nearby bot. Turns can make it miss.</span></div>
           <div className="help-rule"><kbd>Rocket</kbd><span>Tracks targets within {ROCKET_DETECTION_RANGE} units for {ROCKET_HOMING_MS / 1000} seconds; expires after {ROCKET_LIFETIME_MS / 1000} seconds.</span></div>
           <div className="help-rule"><kbd>Hit</kbd><span>First hit smokes, second hit blasts.</span></div>
           <div className="help-rule"><kbd>Score</kbd><span>Kills reset on death. High score stays.</span></div>
@@ -4397,6 +4399,10 @@ function PlayablePlane({
   const keysRef = useRef(new Set());
   const planeRef = useRef(null);
   const aimGuideDotRefs = useRef([]);
+  const bulletLeadRef = useRef(null);
+  const leadTargetRef = useRef(-1);
+  const leadFogRef = useRef(fogActive);
+  leadFogRef.current = fogActive;
   const blastRef = useRef(null);
   const engineAudioRef = useRef(null);
   const crashSoundRef = useRef(null);
@@ -5701,6 +5707,17 @@ function PlayablePlane({
           audio.filter.frequency.setTargetAtTime(520 + visibleThrust * 1350, t, 0.06);
         }
       }
+      if (bulletLeadRef.current) {
+        const lead = botTargetsActive && !pausedRef.current ? getBulletLead(planeState, botStateRefs.current, {
+          aspect: (window.innerWidth || 1440) / (window.innerHeight || 900),
+          pace: getRulePace(gameplayRulesRef.current, 'bulletPace'),
+          maxDistance: leadFogRef.current && gameplayRulesRef.current?.weatherMode === 2 ? 45 : 65,
+          preferredIndex: leadTargetRef.current,
+        }) : null;
+        leadTargetRef.current = lead?.index ?? -1;
+        bulletLeadRef.current.style.opacity = lead ? '1' : '0';
+        if (lead) setWorldTransformPosition(bulletLeadRef.current, lead.x, lead.y);
+      }
       if (aimGuideDotRefs.current.length > 0) {
         if (planeState.crashed) {
           aimGuideDotRefs.current.forEach((dot) => {
@@ -5746,6 +5763,7 @@ function PlayablePlane({
         />
       </div>
       <div className="bullet-aim-guide" aria-hidden="true">
+        <i ref={bulletLeadRef} className="bullet-lead-marker" />
         {Array.from({ length: AIM_GUIDE_DOT_COUNT }, (_, index) => (
           <i
             key={index}

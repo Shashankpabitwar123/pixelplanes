@@ -6,7 +6,7 @@ import {
   createRuntimePlayer,
   stepAuthoritativeRoom,
 } from './room-runtime.js';
-import { FUEL_SECONDS, MAX_BULLETS, MAX_ROCKETS } from '../src/game/config.js';
+import { BULLET_COOLDOWN_MS, FUEL_SECONDS, MAX_BULLETS, MAX_ROCKETS } from '../src/game/config.js';
 import { ROOM_RESPAWN_DELAY_MS } from '../src/game/room-simulation.js';
 
 function createTestRoom(players = []) {
@@ -51,7 +51,7 @@ test('server owns burst ammo, reload, and rocket inventory', () => {
   acceptRoomInput(player, { seq: 1, input: { fire: true, rocketPress: 1 } });
 
   for (let shot = 0; shot < MAX_BULLETS; shot += 1) {
-    stepAuthoritativeRoom(room, startAt + shot * 60);
+    stepAuthoritativeRoom(room, startAt + shot * BULLET_COOLDOWN_MS);
   }
 
   assert.equal(player.weapons.ammo, 0);

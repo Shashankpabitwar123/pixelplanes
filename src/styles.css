@@ -8567,3 +8567,11 @@ label.flight-deck-rule-control input[type='range'] {
   .pull-up-toggle { left: 120px; top: 84px; }
   .help-toggle { left: 228px; top: 12px; }
 }
+
+.bullet-lead-marker {
+  position: absolute; left: 0; bottom: calc(100% - 2px); width: 14px; height: 14px;
+  box-sizing: border-box; border: 2px solid #ffdb65; border-radius: 50%; opacity: 0;
+  transform: translate3d(var(--world-x, 0vw), var(--world-y, 0vh), 0) translate(-50%, 50%);
+  box-shadow: 0 0 0 1px rgba(16, 26, 42, .8); pointer-events: none;
+}
+.bullet-lead-marker::after { content: ''; position: absolute; inset: 4px; background: #ffdb65; border-radius: 50%; }

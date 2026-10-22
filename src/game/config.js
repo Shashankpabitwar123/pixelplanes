@@ -18,8 +18,8 @@ export const SOLO_GAME_RULE_DEFAULTS = Object.freeze({
   flightPace: 70,
   turnPace: 70,
   bulletPace: 100,
-  bulletCooldownMs: 60,
-  bulletReloadSeconds: 7,
+  bulletCooldownMs: 100,
+  bulletReloadSeconds: 4,
   rocketPace: 100,
   fuelSeconds: 60,
   weatherMode: 1,
@@ -134,7 +134,7 @@ export const GAMEPLAY_PACING_PRESETS = Object.freeze({
       flightThrust: 54,
       maxSpeed: 40,
     }),
-    bulletLifetimeMs: 1350,
+    bulletLifetimeMs: 1350 / 1.6,
     bulletInheritedFlightSeconds: 1.2,
     botBulletCooldownMs: 360,
     rocketSpeed: 640 / 12,
@@ -145,15 +145,15 @@ export const ACTIVE_GAMEPLAY_PACING = GAMEPLAY_PACING_PRESETS.smoothArcade;
 
 export const MAX_BULLETS = 7;
 
-export const BULLET_RELOAD_MS = 7000;
+export const BULLET_RELOAD_MS = 4000;
 
-export const BULLET_COOLDOWN_MS = 60;
+export const BULLET_COOLDOWN_MS = 100;
 
 export const BULLET_LIFETIME_MS = ACTIVE_GAMEPLAY_PACING.bulletLifetimeMs;
 
 export const BULLET_RANGE = 102;
 
-// Keep the original inherited-velocity distance while extending visual travel time.
+// Preserve inherited drift distance and range when tuning bullet travel time.
 export const BULLET_FLIGHT_SECONDS = ACTIVE_GAMEPLAY_PACING.bulletInheritedFlightSeconds;
 
 export const BULLET_MUZZLE_POINT = { x: 0.051, y: 0.505 };
