@@ -2888,7 +2888,7 @@ function App() {
       <button
         className={`help-toggle${helpOpen ? ' help-toggle-open' : ''}`}
         type="button"
-        aria-label="Show game rules"
+        aria-label="Show quick controls"
         aria-expanded={helpOpen}
         onClick={() => {
           setHelpOpen((open) => !open);
@@ -3018,25 +3018,18 @@ function App() {
         </div>
       )}
       {helpOpen && (
-        <div className="help-panel" aria-label="Game rules">
+        <div className="help-panel" aria-label="Quick controls">
+          <h2 className="help-title">QUICK CONTROLS</h2>
           <div className="help-rule"><kbd>W</kbd><span>Thrust</span></div>
-          <div className="help-rule"><kbd>A</kbd><span>Turn left</span></div>
-          <div className="help-rule"><kbd>D</kbd><span>Turn right</span></div>
-          <div className="help-rule"><kbd>S</kbd><span>Slow / land</span></div>
-          <div className="help-rule"><kbd>Space</kbd><span>Hold for burst fire</span></div>
-          <div className="help-rule"><kbd>R</kbd><span>Hold to aim; release to launch</span></div>
-          <div className="help-rule"><kbd>L</kbd><span>Front light for fog.</span></div>
-          <div className="help-rule help-note"><kbd>Start</kbd><span>Bots fight you and each other.</span></div>
-          <div className="help-rule"><kbd>Train</kbd><span>No bots. Practice flying.</span></div>
-          <div className="help-rule"><kbd>Land</kbd><span>Touch grass softly on wheels.</span></div>
-          <div className="help-rule help-note"><i className="help-fuel-dot" /><span>Purple dots are fuel stations</span></div>
-          <div className="help-rule"><i className="help-enemy-dot" /><span>Red dots are enemy bots</span></div>
-          <div className="help-rule help-note"><kbd>Fuel</kbd><span>{FUEL_SECONDS} seconds. Station refills and repairs.</span></div>
-          <div className="help-rule"><kbd>Ammo</kbd><span>Bullets refill 4 seconds after your first shot.</span></div>
-          <div className="help-rule"><kbd>Aim</kbd><span>Green aiming dots: your current shot is predicted to hit a nearby bot. Turns can make it miss.</span></div>
-          <div className="help-rule"><kbd>Rocket</kbd><span>Hold R to show target brackets; release to launch. Tracks for {ROCKET_HOMING_MS / 1000} seconds; expires after {ROCKET_LIFETIME_MS / 1000} seconds.</span></div>
-          <div className="help-rule"><kbd>Hit</kbd><span>First hit smokes, second hit blasts.</span></div>
-          <div className="help-rule"><kbd>Score</kbd><span>Kills reset on death. High score stays.</span></div>
+          <div className="help-rule"><kbd>A / D</kbd><span>Turn left / right</span></div>
+          <div className="help-rule"><kbd>S</kbd><span>Slow down / land</span></div>
+          <div className="help-rule"><kbd>Space</kbd><span>Hold to fire bullets</span></div>
+          <div className="help-rule"><kbd>R</kbd><span>Hold to aim rocket<br />Release to launch</span></div>
+          <div className="help-rule"><kbd>L</kbd><span>Toggle plane light</span></div>
+          <div className="help-tips">
+            <p>Green aiming dots = likely bullet hit.</p>
+            <p>Land at a fuel station to refill &amp; repair.</p>
+          </div>
         </div>
       )}
       {planeMenuOpen && (

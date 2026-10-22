@@ -8589,3 +8589,13 @@ label.flight-deck-rule-control input[type='range'] {
   pointer-events: none; filter: drop-shadow(0 1px 1px #172637);
 }
 .rocket-target-bracket span { position: absolute; right: -12px; top: -4px; color: #ffc85b; font: 700 10px monospace; }
+
+.help-panel { box-sizing: border-box; max-height: calc(100dvh - 216px); overflow-y: auto; }
+.help-title { margin: 2px 0 10px; color: #172c3b; font-size: 11px; letter-spacing: .08em; }
+.help-panel .help-rule { line-height: 1.3; }
+.help-tips { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.22); color: #253b4b; font-size: 11px; line-height: 1.4; }
+.help-tips p { margin: 0; }
+.help-tips p + p { margin-top: 5px; }
+.scene-dark .help-title { color: #ffda6b; }
+.scene-dark .help-tips { color: #e0e9f2; }
+@media (max-width: 780px) { .help-panel { max-height: calc(100dvh - 204px); } }
