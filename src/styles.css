@@ -8739,3 +8739,20 @@ label.flight-deck-rule-control input[type='range'] {
 
 .scene-light .potty-dropping { --dropping-body: #69432b; --dropping-shadow: #473020; --dropping-highlight: #90613e; }
 .scene-dark .potty-dropping { --dropping-body: #a47a54; --dropping-shadow: #735137; --dropping-highlight: #c39a6c; }
+
+/* Moonlit pasture: static lighting keeps the walking silhouettes legible. */
+.scene-dark .ground-band {
+  --ground-dark: #34444b;
+  background: linear-gradient(to bottom, #31572f 0 8px, #416f36 8px 12px, #35444c 12px 45%, #46545b 74%, #3a484f 100%);
+}
+.scene-dark .ground-band::before { background: radial-gradient(ellipse at 8px 5px, #45673b 0 4px, transparent 4px) 0 0 / 18px 8px repeat-x; }
+.scene-dark .ground-band::after { opacity: .18; }
+.scene-dark .cow { filter: brightness(.94) saturate(.78); }
+.scene-dark .cow :is(.cow-body,.cow-head) { fill: #dce4e6; stroke: #667983; }
+.scene-dark .cow .leg { stroke: #a4b3bb; }
+.scene-dark .cow .leg-b { stroke: #8599a4; }
+.scene-dark .cow .cow-tail { stroke: #94a6af; }
+.night-ground-lights { position: absolute; inset: 12px 0 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.night-ground-light { position: absolute; bottom: 0; height: 100%; transform: translateX(-30%); background: radial-gradient(ellipse at 50% 32%, #dfc08a30, #cbb78417 48%, transparent 73%); }
+.night-ground-light-house { width: clamp(100px, 12vw, 210px); }
+.night-ground-light-fuel { width: clamp(65px, 7vw, 120px); background: radial-gradient(ellipse at 50% 28%, #ecd29b38, #d8c18b1a 45%, transparent 72%); }

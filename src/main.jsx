@@ -3243,6 +3243,10 @@ function App() {
         <div className="map-edge-light map-edge-right" aria-hidden="true" />
 
         <div className="ground-band" aria-hidden="true">
+          {theme === 'dark' && <div className="night-ground-lights">
+            {hutPlacements.map((hut, index) => <span key={`house-${index}`} className="night-ground-light night-ground-light-house" style={{ left: `${hut.x}vw` }} />)}
+            {fuelTankPlacements.map((x, index) => <span key={`fuel-${index}`} className="night-ground-light night-ground-light-fuel" style={{ left: `${x}vw` }} />)}
+          </div>}
           {hutPlacements.map((hut, index) => (
             <Hut key={index} className={`hut hut-${hut.variant}`} variant={hut.variant} style={{ left: `${hut.x}vw` }} />
           ))}
