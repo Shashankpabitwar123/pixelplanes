@@ -36,7 +36,7 @@ export function createPullUpAudio() {
       if (!AudioContext) return;
       context ??= new AudioContext();
       void context.resume().catch(() => {});
-      loading ??= fetch('/assets/audio/pull-up.wav').then(r => {
+      loading ??= fetch('/assets/audio/pull-up-pulsing.wav').then(r => {
         if (!r.ok) throw new Error('Warning audio unavailable');
         return r.arrayBuffer();
       }).then(data => context.decodeAudioData(data)).then(decoded => { buffer = decoded; }).catch(() => {});
