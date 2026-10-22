@@ -1,3 +1,4 @@
+import { planBotAltitude } from './game/bot-altitude.js';
 import { useTraining } from './game/use-training.js';
 import { TrainingHud } from './game/training-hud.jsx';
 import { moveTrainingTargets } from './game/training.js';
@@ -6209,7 +6210,10 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       const liveTarget = Boolean(closestTarget);
       const distance = closestTarget?.distance ?? Infinity;
       next.engaged = liveTarget && distance < botFlightTuning.forgetDistance;
-      const pursuing = next.engaged;
+      const altitudePlan = planBotAltitude(next, botIndex, dt, next.engaged, now);
+      next.lowFlightSeconds = altitudePlan.lowFlightSeconds;
+      next.altitudeRecovery = altitudePlan.altitudeRecovery;
+      const pursuing = next.engaged && !altitudePlan.overridePursuit;
       const targetState = closestTarget?.state;
       const collisionThreat = findBotCollisionThreat(next, targetCandidates, botFlightTuning);
       const avoidingCollision = Boolean(collisionThreat);
@@ -6217,17 +6221,12 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       const groundThreat = getBotGroundThreat(next, groundClearance, botFlightTuning);
       const recoveringFromGround = Boolean(groundThreat);
 
-      const roamDirection = Math.abs(next.vx) > 1 ? Math.sign(next.vx) : next.x < WORLD_WIDTH / 2 ? 1 : -1;
-      const roamPhase = now / 1900 + next.x * 0.025;
       const rawTarget = pursuing
         ? (distance < botFlightTuning.fireMaxDistance
           ? getBotAimPoint(next, targetState, distance, now, botIndex, botFlightTuning, (window.innerWidth || 1440) / (window.innerHeight || 900), getRulePace(gameplayRulesRef.current, 'bulletPace'))
           : getBotPursuitPoint(targetState, distance, botFlightTuning))
-        : {
-            x: clamp(next.x + roamDirection * (74 + Math.sin(roamPhase) * 16), 34, WORLD_WIDTH - 34),
-            y: clamp(next.y + Math.sin(roamPhase) * 30 + 6, 30, WORLD_HEIGHT - 65),
-          };
-      const decisionMode = pursuing ? 'pursuit' : 'roam';
+        : altitudePlan.target;
+      const decisionMode = pursuing ? 'pursuit' : altitudePlan.overridePursuit ? 'climb' : 'roam';
       if (
         !botDecisionRef.current.point ||
         botDecisionRef.current.mode !== decisionMode ||
@@ -6306,7 +6305,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
         ? 0.92
         : pursuing
           ? (avoidingCollision ? 0.72 : 1)
-          : 0.56;
+          : altitudePlan.throttle;
       next.throttle += (targetThrottle - next.throttle) * Math.min(1, dt * (pursuing ? botFlightTuning.pursuitThrottleResponse : botFlightTuning.cruiseThrottleResponse));
       next.thrust += (next.throttle - next.thrust) * Math.min(1, dt * botFlightTuning.thrustResponse);
 
