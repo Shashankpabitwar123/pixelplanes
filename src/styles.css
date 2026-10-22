@@ -8709,3 +8709,30 @@ label.flight-deck-rule-control input[type='range'] {
 .scene-light .rocket-hint-title { color: #795100; }
 .scene-light .rocket-hint-release { color: #506575; }
 @media (prefers-reduced-motion: reduce) { .scene-light .map-bot-dot-active { animation: none; } }
+
+/* Daytime artwork: retain pixel silhouettes with softer material-colored edges. */
+.scene-light :is(.music-selector,.sfx-toggle,.theme-icon-toggle,.help-toggle,.plane-selector) > img {
+  filter: contrast(.7) brightness(1.12) sepia(.12);
+}
+.scene-light .pause-button-icon { border-color: #ad632a; background: radial-gradient(circle at 34% 24%, #ffe3a6 0 9%, transparent 10%), linear-gradient(135deg, #ffb953 0 34%, #f79634 35% 100%); box-shadow: inset -3px -4px 0 #c67b3433, inset 3px 3px 0 #ffe0a266; }
+.scene-light .pull-up-toggle svg path:first-child { stroke: #a34846; fill: #ed615b; }
+.scene-light .fuel-gauge-hub { background: #537183; border-color: #eaf5fa; }
+.scene-light .fuel-gauge-needle { background: #d84d4c; box-shadow: none; }
+.scene-light .ammo-slot { background: #977237; }
+.scene-light :is(.meter-rocket-body,.meter-rocket-nose,.meter-rocket-band,.meter-rocket-fin) { border-color: #658395; }
+.scene-light .meter-rocket-body { background: linear-gradient(180deg,#f6fcff 0 18%,#c5dce6 19% 72%,#8daebb 73%); }
+.scene-light .meter-rocket-nose { background: #e4f2f7; }
+.scene-light .meter-rocket-band { background: #668c9e; }
+.scene-light .meter-rocket-fin { background: #9cbdcc; }
+.scene-light :is(.fuel-dark,.fuel-panel-dark) { fill: #526d78; }
+.scene-light :is(.fuel-red,.fuel-base,.fuel-badge-ring,.fuel-drop,.fuel-nozzle,.fuel-glass,.fuel-meter,.fuel-needle,.fuel-hose) { stroke: #526d78; }
+.scene-light :is(.fuel-red,.fuel-nozzle,.fuel-badge-ring) { fill: #db7c76; }
+.scene-light .fuel-highlight { fill: #f4aaa0; }
+.scene-light .fuel-base { fill: #eee3ca; }
+.scene-light .fuel-base-light { fill: #fff5df; }
+.scene-light .fuel-glass { fill: #e8f6fa; }
+.scene-light .fuel-drop { fill: #62889b; }
+.scene-light :is(.fuel-stand,.fuel-shadow) { fill: #708b95; }
+.scene-light .fuel-pixel { fill: #ffd1b7; }
+.scene-light .fuel-beacon { background: #ecc452; box-shadow: none; }
+.scene-light .fuel-beacon::before { display: none; }
