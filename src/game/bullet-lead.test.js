@@ -1,33 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getBulletLead } from './bullet-lead.js';
+import { hasPredictedBulletHit } from './bullet-lead.js';
 import { getBulletTrajectory, getRenderedPlanePoint, segmentHitsPlane, planeModel } from './mechanics.js';
-import { BULLET_RANGE, BULLET_LIFETIME_MS, BULLET_FLIGHT_SECONDS, BULLET_MUZZLE_POINT, createSoloGameRules, MAX_BULLETS } from './config.js';
+import { createSoloGameRules, MAX_BULLETS } from './config.js';
 globalThis.window = {innerWidth:1440,innerHeight:900};
 const player = {x:100,y:100,vx:-40,vy:5,angle:0,hasLifted:true};
 const target = {x:65,y:105,vx:-25,vy:12,hasLifted:true};
-test('lead intercepts a moving target including inherited velocity across aspect ratios', () => {
-  for(const aspect of [0.6, 1.35, 16/9, 2.4]) {
-    globalThis.window = {innerWidth:900*aspect,innerHeight:900};
-    const lead = getBulletLead(player,[target],{aspect});
-    assert.ok(lead);
-    const muzzle = getRenderedPlanePoint(player,BULLET_MUZZLE_POINT);
-    const dx=lead.x-muzzle.x,dy=(lead.y-muzzle.y)/aspect,length=Math.hypot(dx,dy);
-    const life=BULLET_LIFETIME_MS/1000,speed=BULLET_RANGE/life,inherit=BULLET_FLIGHT_SECONDS/life;
-    const x=muzzle.x+(dx/length*speed+player.vx*inherit)*lead.time;
-    const y=muzzle.y+(dy/length*speed*aspect+player.vy*inherit)*lead.time;
-    assert.ok(Math.abs(x-target.x-target.vx*lead.time)<1e-8);
-    assert.ok(Math.abs(y-target.y-target.vy*lead.time)<1e-8);
+test('green feedback tests the current shot, accounting for target motion and screen proportions', () => {
+  for(const aspect of [0.6,1.35,16/9,2.4]) {
+    globalThis.window={innerWidth:900*aspect,innerHeight:900};
+    const shooter={...player,vy:0};
+    const trajectory=getBulletTrajectory(shooter);
+    const seconds=0.3, progress=seconds/(trajectory.life/1000);
+    const bot={...target,angle:0,vx:-10,vy:8,
+      x:trajectory.x+trajectory.dx*progress+10*seconds,
+      y:trajectory.y-trajectory.dy*progress-8*seconds};
+    assert.equal(hasPredictedBulletHit(shooter,[bot],trajectory),true);
+    assert.equal(hasPredictedBulletHit(shooter,[{...bot,y:bot.y+15}],trajectory),false);
+    assert.equal(hasPredictedBulletHit(shooter,[{...bot,vy:-40}],trajectory),false);
+    assert.equal(hasPredictedBulletHit(shooter,[{...bot,crashed:true}],trajectory),false);
+    assert.equal(hasPredictedBulletHit(shooter,[bot],trajectory,{maxDistance:5}),false);
+    assert.equal(hasPredictedBulletHit({...shooter,crashed:true},[bot],trajectory),false);
   }
 });
-test('marker excludes distant, behind, crashed and unreachable targets and keeps a valid lock', () => {
-  assert.equal(getBulletLead(player,[{...target,x:150}]),null);
-  assert.equal(getBulletLead(player,[{...target,x:0}]),null);
-  assert.equal(getBulletLead(player,[{...target,crashed:true}]),null);
-  assert.equal(getBulletLead(player,[{...target,vx:-1000}]),null);
-  assert.equal(getBulletLead(player,[{...target,x:50}],{maxDistance:45}),null);
-  assert.equal(getBulletLead({...player,crashed:true},[target]),null);
-  assert.equal(getBulletLead(player,[target,{...target,x:60}],{preferredIndex:1}).index,1);
+test('feedback cannot predict beyond bullet lifetime or ground-clipped path', () => {
+  globalThis.window={innerWidth:1440,innerHeight:900};
+  const shooter={...player,vx:0,vy:0};
+  const trajectory=getBulletTrajectory(shooter);
+  const bot={...target,angle:0,vx:0,vy:0,x:trajectory.x-30,y:trajectory.y};
+  assert.equal(hasPredictedBulletHit(shooter,[bot],trajectory),true);
+  assert.equal(hasPredictedBulletHit(shooter,[bot],{...trajectory,dx:-10,life:100,groundHit:true}),false);
+  assert.equal(hasPredictedBulletHit(shooter,[{...bot,x:130}],trajectory),false);
 });
 test('bullets retain range, gain speed, and swept collision catches a crossed plane', () => {
   const previousWindow=globalThis.window;
