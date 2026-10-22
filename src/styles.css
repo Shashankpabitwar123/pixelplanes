@@ -8639,3 +8639,12 @@ label.flight-deck-rule-control input[type='range'] {
 
 .start-option.start-room-unavailable { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; opacity: 1; filter: none; }
 .room-coming-soon { padding: 2px 7px; border-radius: 4px; color: #3c2d08; background: #ffda6b; font-size: 9px; font-weight: 800; line-height: 1.1; letter-spacing: .04em; text-transform: uppercase; }
+
+.rocket-discovery { animation: rocket-discovery-glow 1.6s ease-out 1; }
+.rocket-discovery-hint { position: absolute; top: calc(100% + 10px); right: 0; width: 176px; box-sizing: border-box; display: grid; gap: 5px; padding: 12px 14px; border: 1px solid #a28d50; border-top: 3px solid #ffca32; border-radius: 9px; background: #26374df5; color: #f2f6ff; box-shadow: 0 8px 20px #07132144; text-align: left; font-size: 14px; line-height: 1.3; pointer-events: none; animation: rocket-hint-lifetime 6s ease both; }
+.rocket-hint-title { color: #ffda6b; font-size: 10px; font-weight: 850; letter-spacing: .09em; }
+.rocket-discovery-hint kbd { padding: 1px 5px; border-radius: 4px; background: #ffca32; color: #252211; font: inherit; font-weight: 900; }
+.rocket-hint-release { color: #c4d0df; font-size: 12px; }
+@keyframes rocket-discovery-glow { 0%,100% { box-shadow: 0 8px 20px #1f41561f; } 40% { box-shadow: 0 0 17px #ffca3299; border-color: #ffca32; } }
+@keyframes rocket-hint-lifetime { 0% { opacity: 0; transform: translateY(-4px); } 5%,90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .rocket-discovery, .rocket-discovery-hint { animation: none; } }

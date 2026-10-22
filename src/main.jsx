@@ -1,3 +1,4 @@
+import { useRocketHint } from './game/use-rocket-hint.js';
 import { planBotAltitude } from './game/bot-altitude.js';
 import { useTraining } from './game/use-training.js';
 import { TrainingHud } from './game/training-hud.jsx';
@@ -404,6 +405,7 @@ function App() {
   const roomInputRef = useRef({ power: false, down: false, left: false, right: false, fire: false, light: false, rocketPress: 0 });
   const botStateRefs = useRef(createInitialBotStates([], MAX_SOLO_BOTS));
   const playerApiRef = useRef(null);
+  const rocketHint = useRocketHint(gameStarted, gameMode);
   const training = useTraining({setPaused,paused,playerStateRef});
   const trainingTargetStatesRef = training.targetsRef;
   const trainingWeaponHits = training.view;
@@ -2099,8 +2101,9 @@ function App() {
     if(gameMode === 'training') training.event('refuel');
   },[gameMode,training.event,triggerFuelRefillFeedback]);
   const handleTrainingWeaponFired = useCallback(weapon => {
+    if (weapon === 'rocket') rocketHint.learned();
     if(gameMode === 'training') training.event('shot',{weapon});
-  },[gameMode,training.event]);
+  },[gameMode,training.event,rocketHint.learned]);
   const handleTrainingTargetHit = useCallback((id,weapon) => {
     if(gameMode === 'training') training.hit(id,weapon);
   },[gameMode,training.hit]);
@@ -3162,7 +3165,7 @@ function App() {
         </div>
         <div className="combat-hud-weapons-column">
           <BulletMeter count={ammoStatus.count} reloading={ammoStatus.reloading} />
-          <RocketMeter rocketCount={rocketCount} />
+          <RocketMeter rocketCount={rocketCount} showHint={rocketHint.visible} />
         </div>
       </div>
 
@@ -3492,9 +3495,10 @@ function BulletMeter({ count, reloading }) {
   );
 }
 
-function RocketMeter({ rocketCount }) {
+function RocketMeter({ rocketCount, showHint }) {
   return (
-    <div className="rocket-meter" aria-label={`${rocketCount} rocket${rocketCount === 1 ? '' : 's'}`}>
+    <div className={`rocket-meter${showHint ? ' rocket-discovery' : ''}`} aria-label={`${rocketCount} rocket${rocketCount === 1 ? '' : 's'}`}>
+      {showHint && <div className="rocket-discovery-hint" role="status"><span className="rocket-hint-title">ROCKETS READY</span><span>Hold <kbd>R</kbd> to aim</span><span className="rocket-hint-release">Release to launch</span></div>}
       <div className="rocket-meter-row" aria-hidden="true">
         {Array.from({ length: MAX_ROCKETS }, (_, index) => (
           <span key={index} className={`meter-rocket${index < rocketCount ? ' meter-rocket-loaded' : ' meter-rocket-empty'}`}>
