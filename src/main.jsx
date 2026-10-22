@@ -6841,9 +6841,11 @@ function CowHerd({ syncSeed, syncStartedAt, serverTimeOffsetRef, onPotty }) {
                   active: Math.random() < 0.22,
                   x: 24 + Math.random() * (WORLD_WIDTH - 70),
                   start: pottyStart,
-                  end: pottyStart + 0.045,
+                  end: pottyStart + 2 / cow.duration,
                 };
               })();
+          // Plans use normalized cycle time; keep the pause at two real seconds.
+          pottyPlan.end = pottyPlan.start + 2 / cow.duration;
           pottyPlans.set(cow.id, pottyPlan);
         }
 
