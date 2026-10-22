@@ -8724,15 +8724,15 @@ label.flight-deck-rule-control input[type='range'] {
 .scene-light .meter-rocket-nose { background: #e4f2f7; }
 .scene-light .meter-rocket-band { background: #668c9e; }
 .scene-light .meter-rocket-fin { background: #9cbdcc; }
-.scene-light :is(.fuel-dark,.fuel-panel-dark) { fill: #526d78; }
-.scene-light :is(.fuel-red,.fuel-base,.fuel-badge-ring,.fuel-drop,.fuel-nozzle,.fuel-glass,.fuel-meter,.fuel-needle,.fuel-hose) { stroke: #526d78; }
-.scene-light :is(.fuel-red,.fuel-nozzle,.fuel-badge-ring) { fill: #db7c76; }
-.scene-light .fuel-highlight { fill: #f4aaa0; }
-.scene-light .fuel-base { fill: #eee3ca; }
-.scene-light .fuel-base-light { fill: #fff5df; }
+.scene-light :is(.fuel-dark,.fuel-panel-dark) { fill: #354f60; }
+.scene-light :is(.fuel-red,.fuel-base,.fuel-badge-ring,.fuel-drop,.fuel-nozzle,.fuel-glass,.fuel-meter,.fuel-needle,.fuel-hose) { stroke: #354f60; }
+.scene-light :is(.fuel-red,.fuel-nozzle,.fuel-badge-ring) { fill: #bf4e59; }
+.scene-light .fuel-highlight { fill: #e2777d; }
+.scene-light .fuel-base { fill: #dfd0b0; }
+.scene-light .fuel-base-light { fill: #f2e5c9; }
 .scene-light .fuel-glass { fill: #e8f6fa; }
-.scene-light .fuel-drop { fill: #62889b; }
-.scene-light :is(.fuel-stand,.fuel-shadow) { fill: #708b95; }
-.scene-light .fuel-pixel { fill: #ffd1b7; }
+.scene-light .fuel-drop { fill: #41677e; }
+.scene-light :is(.fuel-stand,.fuel-shadow) { fill: #506b79; }
+.scene-light .fuel-pixel { fill: #f09c8c; }
 .scene-light .fuel-beacon { background: #ecc452; box-shadow: none; }
 .scene-light .fuel-beacon::before { display: none; }
