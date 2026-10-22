@@ -8650,3 +8650,62 @@ label.flight-deck-rule-control input[type='range'] {
 @media (prefers-reduced-motion: reduce) { .rocket-discovery, .rocket-discovery-hint { animation: none; } }
 
 .deck-choices.deck-theme { margin-top: 20px; margin-bottom: 20px; }
+
+/* Daytime palette: opaque instruments and natural scenery; night rules stay intact. */
+.scene-light {
+  color-scheme: light;
+  --sky-top: #8fd3ed; --sky-bottom: #d6edf0;
+  --cloud: #f3fcff; --cloud-shadow: #b4d7df99;
+  --tree-back: #719f9d70; --tree-front: #356d5db3;
+  --ground-top: #73ad46; --ground-dark: #715039; --soil: #936c4b;
+}
+.daylight-sun { position: absolute; z-index: 1; left: 58%; top: 7vh; width: clamp(55px,6vw,92px); aspect-ratio: 1; border-radius: 50%; background: #fff0b3; box-shadow: 0 0 35px #fff2b84d; pointer-events: none; }
+.scene-light :is(.frame-rate-badge,.map-pointer,.fuel-gauge,.bullet-meter,.rocket-meter,.music-selector,.pause-toggle,.restart-toggle,.theme-icon-toggle,.sfx-toggle,.help-toggle,.pull-up-toggle,.plane-selector,.score-panel,.music-panel,.help-panel,.plane-color-panel,.start-card) {
+  background-color: #e7f0f4f5; border-color: #829caa; box-shadow: 0 4px 12px #284c6224;
+}
+.scene-light .score-row { background: #d0e0e7; box-shadow: none; }
+.scene-light .score-row span { color: #3b5361; text-shadow: none; }
+.scene-light .score-row strong { color: #795100; text-shadow: none; }
+.scene-light .score-high strong { color: #18703b; }
+.scene-light .frame-rate-badge strong { color: #254c61; text-shadow: none; }
+.scene-light .frame-rate-badge span { color: #415b6b; text-shadow: none; }
+.scene-light :is(.map-fuel-dot,.map-pointer-dot,.map-bot-dot) { box-shadow: 0 0 0 1px #ffffffb3; }
+.scene-light .map-bot-dot-active { animation: day-map-bot-pulse .82s ease-in-out infinite; }
+@keyframes day-map-bot-pulse { 0%,100% { box-shadow: 0 0 0 1px #ffffffb3; } 50% { box-shadow: 0 0 0 3px #b91e3633; } }
+.scene-light .ammo-bullet-loaded, .scene-light .meter-rocket-loaded { filter: none; }
+.scene-light .fuel-beacon { box-shadow: 0 0 3px #ffce4c66; }
+.scene-light .fuel-beacon::before { opacity: .2; }
+.scene-light .fuel-beacon::after { box-shadow: none; }
+.scene-light .hut-dark { fill: #55463b; }
+.scene-light :is(.hut-wall,.hut-roof,.hut-roof-blue,.hut-window) { stroke: #55463b; }
+.scene-light .hut-wall { fill: #d7a16b; }
+.scene-light .hut-roof { fill: #c57d52; }
+.scene-light .hut-roof-blue { fill: #63818b; }
+.scene-light .hut-window { fill: #a6d0d7; }
+.scene-light .hut-trim { stroke: #f1d5a0; }
+.scene-light .hut-plank { stroke: #aa774d; }
+.scene-light .hut-shadow { fill: #5a6c59; }
+.scene-light .deck-panel { --deck-bg: #e5eef3; --deck-card: #f5f9fb; --deck-text: #203a4b; --deck-muted: #506575; --deck-accent: #ffca32; border-color: #829caa; border-top-color: var(--deck-accent); box-shadow: 0 16px 45px #284c6240; }
+.scene-light .deck-section { border-color: #c0d1dc; }
+.scene-light .deck-stepper button { color: #203a4b; background: #e3edf3; }
+.scene-light .deck-stepper output { color: #805700; }
+.scene-light .deck-choices button { background: #e5eef3; border-color: #a6bbc8; }
+.scene-light .deck-choices button[aria-pressed='true'] { background: var(--deck-accent); border-color: #c18d18; }
+.scene-light .deck-toggle { border-color: #cbd9e1; }
+.scene-light .deck-details { background: #d8e5ed; border-color: #b0c4d0; }
+.scene-light .deck-footer { background: #d3e1e9; border-color: #b0c4d0; }
+.scene-light .deck-panel :focus-visible { outline-color: #1b607f; }
+.scene-light .academy-ui { --academy-ink: #203a4b; --academy-muted: #506575; }
+.scene-light .academy-card { background: #edf5f9fa; border-color: #829caa; border-top-color: #e9b629; box-shadow: 0 10px 30px #284c6233; }
+.scene-light .academy-card .academy-key { background: #d9e7ef; color: #654700; }
+.scene-light .academy-progress { color: #22653e; }
+.scene-light .academy-card button { background: #d7e5ed; border-color: #8da7b8; }
+.scene-light .academy-card button:hover { background: #c6dce8; }
+.scene-light .academy-card .academy-primary { background: #ffca32; color: #30280d; }
+.scene-light .academy-card button:focus-visible { outline-color: #1b607f; }
+.scene-light .academy-lessons button span { color: #506575; }
+.scene-light .academy-direction { color: #795100; }
+.scene-light .rocket-discovery-hint { color: #203a4b; background: #edf5f9fa; border-color: #ae944a; }
+.scene-light .rocket-hint-title { color: #795100; }
+.scene-light .rocket-hint-release { color: #506575; }
+@media (prefers-reduced-motion: reduce) { .scene-light .map-bot-dot-active { animation: none; } }

@@ -3170,6 +3170,7 @@ function App() {
         </div>
       </div>
 
+      {theme === 'light' && <div className="daylight-sun" aria-hidden="true" />}
       <div ref={worldRef} className="world" style={{ transform: `translate(${-getCameraX(START_X)}vw, 0vh)` }}>
         <div className="stars world-stars" aria-hidden="true">
           {stars.map((star) => (
@@ -3202,7 +3203,7 @@ function App() {
             />
           ))}
         </div>
-        <div className="sun" style={{ left: `${START_X + 36}vw` }} aria-hidden="true" />
+
         <div className="moon" style={{ left: `${START_X + 38}vw` }} aria-hidden="true" />
         <div className="cloud-layer" aria-hidden="true">
           {clouds.map((cloud, index) => (
