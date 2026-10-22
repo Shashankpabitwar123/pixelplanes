@@ -3170,7 +3170,6 @@ function App() {
         </div>
       </div>
 
-      {theme === 'light' && <div className="daylight-sun" aria-hidden="true" />}
       <div ref={worldRef} className="world" style={{ transform: `translate(${-getCameraX(START_X)}vw, 0vh)` }}>
         <div className="stars world-stars" aria-hidden="true">
           {stars.map((star) => (
@@ -3204,6 +3203,7 @@ function App() {
           ))}
         </div>
 
+        {theme === 'light' && <div className="daylight-sun" style={{ left: `${getCameraX(START_X) + 58}vw` }} aria-hidden="true" />}
         <div className="moon" style={{ left: `${START_X + 38}vw` }} aria-hidden="true" />
         <div className="cloud-layer" aria-hidden="true">
           {clouds.map((cloud, index) => (
@@ -3341,6 +3341,7 @@ function App() {
               audioSettings={effectiveSoundLevels}
               gameplayRules={soloGameRules}
               fogActive={fogActive}
+              theme={theme}
               registerGameFrameCallback={registerGameFrameCallback}
             />
           ))}
@@ -5888,7 +5889,7 @@ function RoomProjectilesLayer({
   );
 }
 
-function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, audioSettings, gameplayRules, fogActive, registerGameFrameCallback }) {
+function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, audioSettings, gameplayRules, fogActive, theme, registerGameFrameCallback }) {
   const botRef = useRef(null);
   const fogActiveRef = useRef(fogActive);
   fogActiveRef.current = fogActive;
@@ -6476,7 +6477,8 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
           rocketsRemaining={0}
           planeColor="purple"
           planeLightCombo="botYellow"
-          searchLightActive={fogActive && !botCrashed}
+          lightIntensity={theme === 'light' ? 0 : 1}
+          searchLightActive={theme !== 'light' && fogActive && !botCrashed}
           searchLightFog={fogActive}
         />
       </div>

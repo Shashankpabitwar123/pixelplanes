@@ -8659,7 +8659,7 @@ label.flight-deck-rule-control input[type='range'] {
   --tree-back: #719f9d70; --tree-front: #356d5db3;
   --ground-top: #73ad46; --ground-dark: #715039; --soil: #936c4b;
 }
-.daylight-sun { position: absolute; z-index: 1; left: 58%; top: 7vh; width: clamp(55px,6vw,92px); aspect-ratio: 1; border-radius: 50%; background: #fff0b3; box-shadow: 0 0 35px #fff2b84d; pointer-events: none; }
+.daylight-sun { position: absolute; z-index: 1; bottom: 83vh; width: clamp(55px,6vw,92px); aspect-ratio: 1; border-radius: 50%; background: #fff0b3; box-shadow: 0 0 35px #fff2b84d; pointer-events: none; }
 .scene-light :is(.frame-rate-badge,.map-pointer,.fuel-gauge,.bullet-meter,.rocket-meter,.music-selector,.pause-toggle,.restart-toggle,.theme-icon-toggle,.sfx-toggle,.help-toggle,.pull-up-toggle,.plane-selector,.score-panel,.music-panel,.help-panel,.plane-color-panel,.start-card) {
   background-color: #e7f0f4f5; border-color: #829caa; box-shadow: 0 4px 12px #284c6224;
 }
