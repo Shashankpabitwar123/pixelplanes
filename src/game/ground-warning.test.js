@@ -49,3 +49,21 @@ test('recorded warning never overlaps and can stop immediately', async () => {
     audio.dispose(); assert.equal(stops, 2);
   } finally { globalThis.window = oldWindow; globalThis.fetch = oldFetch; }
 });
+
+test('fast high-altitude dives stay quiet even with short time to impact', () => {
+  assert.equal(groundImpactDanger({ ...dive, y: 65, vy: -80 }), false);
+  assert.equal(groundImpactDanger({ ...dive, y: 29, vy: -40 }), true);
+  assert.equal(groundImpactDanger({ ...dive, y: 29, vy: -20 }), false);
+});
+test('recovery needs room to stop and cannot silence a last-second impact', () => {
+  assert.equal(groundImpactDanger(dive, 40), false);
+  assert.equal(groundImpactDanger(dive, 5), true);
+  assert.equal(groundImpactDanger({ ...dive, y: 8 }, 100), true);
+});
+test('tracker requires sustained recovery and warns again when recovery stops', () => {
+  const tracker = createGroundWarningTracker();
+  assert.equal(tracker.update(dive, 0), true);
+  for(let t=100;t<=700;t+=100) tracker.update({...dive, vy:-25+t/50}, t);
+  assert.equal(tracker.update({...dive, vy:-9},800),false);
+  assert.equal(tracker.update(dive,900),true);
+});

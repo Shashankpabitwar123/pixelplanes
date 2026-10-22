@@ -370,6 +370,7 @@ button {
 .theme-icon-toggle,
 .sfx-toggle,
 .help-toggle,
+.pull-up-toggle,
 .plane-selector {
   position: absolute;
   z-index: 22;
@@ -5911,6 +5912,7 @@ label.flight-deck-rule-control input[type='range'] {
 .scene-dark .theme-icon-toggle,
 .scene-dark .sfx-toggle,
 .scene-dark .help-toggle,
+.scene-dark .pull-up-toggle,
 .scene-dark .plane-selector,
 .scene-dark .score-panel,
 .scene-dark .training-hud,
@@ -8552,3 +8554,16 @@ label.flight-deck-rule-control input[type='range'] {
 .weather-normal .rain-layer-active { opacity: .65; }
 .weather-harsh .rain-layer-active { opacity: 1; }
 .scene-paused .rain-layer i, .scene-paused .fog-bank, .scene-paused .fog-layer::before { animation-play-state: paused; }
+
+/* Keep the warning sound within reach; Help sits beside Replay at song-button size. */
+.pull-up-toggle { left: 128px; top: 96px; }
+.pull-up-toggle svg { display: block; width: 80%; height: 80%; margin: 10%; }
+.pull-up-muted svg { opacity: 0.4; }
+.pull-up-mute-slash { position: absolute; left: 8px; top: 21px; width: 30px; height: 4px; background: #edf4ff; transform: rotate(-45deg); box-shadow: 0 0 0 1px #29384c; }
+.help-toggle { left: 236px; top: 20px; width: 26px; height: 26px; border-radius: 5px; }
+.help-toggle img { width: 22px; height: 22px; margin: 1px; }
+.pull-up-toggle:focus-visible, .help-toggle:focus-visible { outline: 2px solid #ffca32; outline-offset: 3px; }
+@media (max-width: 780px) {
+  .pull-up-toggle { left: 120px; top: 84px; }
+  .help-toggle { left: 228px; top: 12px; }
+}

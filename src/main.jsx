@@ -2869,6 +2869,17 @@ function App() {
         <img src="/assets/sfx-speaker-icon.svg" alt="" draggable="false" aria-hidden="true" />
       </button>
       <button
+        className={`pull-up-toggle${warningAudioEnabled ? '' : ' pull-up-muted'}`}
+        type="button"
+        aria-label="Pull-up warning sound"
+        aria-pressed={warningAudioEnabled}
+        title={warningAudioEnabled ? 'Pull-up sound on — click to mute' : 'Pull-up sound off — click to enable'}
+        onClick={() => setWarningAudioEnabled(enabled => !enabled)}
+      >
+        <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 5 45 42H3Z" fill="#ff4545" stroke="#251b26" strokeWidth="3" strokeLinejoin="round"/><path d="M24 16v12" stroke="#fff4dd" strokeWidth="5"/><path d="M24 33v4" stroke="#fff4dd" strokeWidth="5"/></svg>
+        {!warningAudioEnabled && <span className="pull-up-mute-slash" aria-hidden="true" />}
+      </button>
+      <button
         className={`help-toggle${helpOpen ? ' help-toggle-open' : ''}`}
         type="button"
         aria-label="Show game rules"
