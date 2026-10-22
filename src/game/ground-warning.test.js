@@ -27,13 +27,13 @@ test('recovery uses hysteresis, while pause and crash clear immediately', () => 
 test('recorded warning never overlaps and can stop immediately', async () => {
   const { createPullUpAudio } = await import('./ground-warning.js');
   const oldWindow = globalThis.window, oldFetch = globalThis.fetch;
-  let starts = 0, stops = 0;
+  let starts = 0, stops = 0, gain;
   globalThis.window = { AudioContext: class {
     state = 'running';
     resume() { return Promise.resolve(); }
     close() { return Promise.resolve(); }
     decodeAudioData() { return Promise.resolve({}); }
-    createGain() { return { gain: {}, connect() {}, disconnect() {} }; }
+    createGain() { gain = {}; return { gain, connect() {}, disconnect() {} }; }
     createBufferSource() { return { connect() {}, disconnect() {}, start() { starts++; }, stop() { stops++; } }; }
   } };
   globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) });
@@ -41,7 +41,8 @@ test('recorded warning never overlaps and can stop immediately', async () => {
     const audio = createPullUpAudio();
     audio.unlock();
     await new Promise(resolve => setImmediate(resolve));
-    audio.play(); audio.play();
+    audio.play(0.25); audio.play(0.25);
+    assert.equal(gain.value, 0.2);
     assert.equal(starts, 1);
     audio.stop(); assert.equal(stops, 1);
     audio.play(); assert.equal(starts, 2);

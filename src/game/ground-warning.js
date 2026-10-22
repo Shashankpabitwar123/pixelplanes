@@ -41,11 +41,11 @@ export function createPullUpAudio() {
         return r.arrayBuffer();
       }).then(data => context.decodeAudioData(data)).then(decoded => { buffer = decoded; }).catch(() => {});
     },
-    play() {
+    play(volume = 1) {
       if (!buffer || context?.state !== 'running' || source) return;
       source = context.createBufferSource();
       source.buffer = buffer;
-      const gain = context.createGain(); gain.gain.value = 0.8; outputGain = gain;
+      const gain = context.createGain(); gain.gain.value = 0.8 * Math.max(0, Math.min(1, volume)); outputGain = gain;
       source.connect(gain); gain.connect(context.destination);
       source.onended = () => { source = null; gain.disconnect(); outputGain = null; };
       source.start();

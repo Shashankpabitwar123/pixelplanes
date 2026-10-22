@@ -6,8 +6,8 @@ let lastFlightDeckTickAt = 0;
 // A restrained, rate-limited detent sound for range controls. Slider input is
 // itself a user gesture, so the AudioContext can resume without adding any
 // loading or looping audio to the game.
-export function playFlightDeckTick(muted = false) {
-  if (muted || typeof window === 'undefined') return;
+export function playFlightDeckTick(muted = false, volume = 1) {
+  if (muted || volume <= 0 || typeof window === 'undefined') return;
   const now = performance.now();
   if (now - lastFlightDeckTickAt < 34) return;
   lastFlightDeckTickAt = now;
@@ -30,7 +30,7 @@ export function playFlightDeckTick(muted = false) {
   filter.type = 'lowpass';
   filter.frequency.setValueAtTime(540, t);
   gain.gain.setValueAtTime(0.0001, t);
-  gain.gain.exponentialRampToValueAtTime(0.028, t + 0.006);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, 0.028 * clamp(volume, 0, 1)), t + 0.006);
   gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
   tone.connect(filter);
   filter.connect(gain);
@@ -109,8 +109,8 @@ export function createRainAudio() {
   };
 }
 
-export function playPlaneBulletHitSound(existingContext = null, muted = false) {
-  if (muted) return;
+export function playPlaneBulletHitSound(existingContext = null, muted = false, volume = 1) {
+  if (muted || volume <= 0) return;
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   const context = existingContext && existingContext.state !== 'closed' ? existingContext : AudioContextClass ? new AudioContextClass() : null;
   if (!context) return;
@@ -127,7 +127,7 @@ export function playPlaneBulletHitSound(existingContext = null, muted = false) {
 
   const master = context.createGain();
   master.gain.setValueAtTime(0.0001, t);
-  master.gain.exponentialRampToValueAtTime(1.45, t + 0.006);
+  master.gain.exponentialRampToValueAtTime(Math.max(0.0001, 1.45 * clamp(volume, 0, 1)), t + 0.006);
   master.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
   master.connect(limiter);
 

@@ -1,6 +1,7 @@
+import { FlightDeck } from './game/flight-deck.jsx';
 import { createGroundWarningTracker, createPullUpAudio } from './game/ground-warning.js';
 import { AIRBORNE_THRUST_SCALE, applyFlightForces, flightTurnAuthority, interpolateFlightState } from './game/flight.js';
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { createMusicPlayer, DEFAULT_MUSIC_VOLUME, DEFAULT_MUSIC_TRACK_ID } from './game/music.js';
@@ -318,15 +319,15 @@ const WEATHER_MODE_LABELS = ['Clear', 'Normal', 'Harsh', 'Random'];
 const SOLO_GAME_CONTROL_DEFINITIONS = [
   // Flight tuning is first because it is the most immediately felt local rule.
   // Every pace selector is deliberately capped at the stock 100% ceiling.
-  { key: 'flightPace', label: 'Flight pace', detail: 'Thrust + top speed', min: 70, max: 100, format: (value) => `${value}%` },
+  { key: 'flightPace', label: 'Flight speed', detail: 'Thrust + top speed', min: 70, max: 100, format: (value) => `${value}%` },
   { key: 'turnPace', label: 'Turn speed', detail: 'Steering response', min: 65, max: 100, format: (value) => `${value}%` },
-  { key: 'bulletPace', label: 'Bullet pace', detail: 'Same aiming range', min: 70, max: 100, format: (value) => `${value}%` },
-  { key: 'rocketPace', label: 'Rocket pace', detail: '2 s track · 5 s life', min: 75, max: 100, format: (value) => `${value}%` },
+  { key: 'bulletPace', label: 'Bullet speed', detail: 'Same aiming range', min: 70, max: 100, format: (value) => `${value}%` },
+  { key: 'rocketPace', label: 'Rocket speed', detail: '2 s track · 5 s life', min: 75, max: 100, format: (value) => `${value}%` },
   { key: 'botCount', label: 'Enemy bots', detail: 'Start mode', min: 1, max: MAX_SOLO_BOTS, format: (value) => `${value}` },
   { key: 'botDifficulty', label: 'Bot skill', detail: 'Easy to ace', min: 1, max: 5, format: (value) => BOT_SKILL_LABELS[value - 1] || 'Standard' },
-  { key: 'bulletCooldownMs', label: 'Fire gap', detail: 'SPACE burst', min: 45, max: 180, format: (value) => `${value} ms` },
-  { key: 'bulletReloadSeconds', label: 'Ammo reload', detail: 'Full magazine', min: 3, max: 10, format: (value) => `${value} s` },
-  { key: 'fuelSeconds', label: 'Fuel tank', detail: 'Full refill capacity', min: 20, max: 60, format: (value) => `${value} s` },
+  { key: 'bulletCooldownMs', label: 'Shot interval', detail: 'SPACE burst', min: 45, max: 180, format: (value) => `${value} ms` },
+  { key: 'bulletReloadSeconds', label: 'Reload time', detail: 'Full magazine', min: 3, max: 10, format: (value) => `${value} s` },
+  { key: 'fuelSeconds', label: 'Fuel capacity', detail: 'Full refill capacity', min: 20, max: 60, format: (value) => `${value} s` },
   { key: 'weatherMode', label: 'Weather', detail: 'Solo bot sky', min: 0, max: 3, format: getWeatherModeLabel },
 ];
 
@@ -475,6 +476,8 @@ function App() {
   const [activeTrackId, setActiveTrackId] = useState(null);
   const [musicVolume, setMusicVolume] = useState(DEFAULT_MUSIC_VOLUME);
   const [sfxMuted, setSfxMuted] = useState(false);
+  const [effectsVolume, setEffectsVolume] = useState(1);
+  const [warningAudioEnabled, setWarningAudioEnabled] = useState(true);
   const [soundLevels, setSoundLevels] = useState({
     engine: 0.09,
     ammo: 0.1,
@@ -482,6 +485,7 @@ function App() {
     explosion: 0.1,
     rain: 0.05,
   });
+  const effectiveSoundLevels = useMemo(() => ({ ...Object.fromEntries(Object.entries(soundLevels).map(([key, value]) => [key, value * effectsVolume])), master: effectsVolume }), [soundLevels, effectsVolume]);
   const [planeLightIntensity, setPlaneLightIntensity] = useState(1);
   const [shootingStars, setShootingStars] = useState([]);
   const [remoteProjectiles, setRemoteProjectiles] = useState([]);
@@ -583,13 +587,13 @@ function App() {
     return () => window.clearInterval(timer);
   }, [gameStarted, paused, restartSignal]);
   useEffect(() => {
-    const audible = groundWarning && gameStarted && !paused && !sfxMuted;
+    const audible = groundWarning && gameStarted && !paused && !sfxMuted && warningAudioEnabled && effectsVolume > 0;
     musicPlayerRef.current.setDucked(audible);
     if (!audible) { pullUpAudioRef.current.stop(); return; }
-    pullUpAudioRef.current.play();
-    const timer = window.setInterval(() => pullUpAudioRef.current.play(), 2000);
+    pullUpAudioRef.current.play(effectsVolume);
+    const timer = window.setInterval(() => pullUpAudioRef.current.play(effectsVolume), 2000);
     return () => { window.clearInterval(timer); pullUpAudioRef.current.stop(); };
-  }, [groundWarning, gameStarted, paused, sfxMuted]);
+  }, [groundWarning, gameStarted, paused, sfxMuted, warningAudioEnabled, effectsVolume]);
   useEffect(() => () => pullUpAudioRef.current.dispose(), []);
   const rainAudioRef = useRef(null);
   const rainSoundStartTimerRef = useRef(0);
@@ -2561,24 +2565,24 @@ function App() {
   const updateSoundLevel = useCallback((kind, event) => {
     const nextLevel = Number(event.target.value) / 100;
     setSoundLevels((levels) => ({ ...levels, [kind]: nextLevel }));
-    playFlightDeckTick(sfxMuted);
-  }, [sfxMuted]);
+    playFlightDeckTick(sfxMuted, effectsVolume);
+  }, [sfxMuted, effectsVolume]);
 
   const updatePlaneLightIntensity = useCallback((event) => {
     setPlaneLightIntensity(Number(event.target.value) / 100);
-    playFlightDeckTick(sfxMuted);
-  }, [sfxMuted]);
+    playFlightDeckTick(sfxMuted, effectsVolume);
+  }, [sfxMuted, effectsVolume]);
 
   const updateSoloGameRule = useCallback((key, event) => {
     const value = Number(event.target.value);
     setSoloGameRules((current) => createSoloGameRules({ ...current, [key]: value }));
-    playFlightDeckTick(sfxMuted);
-  }, [sfxMuted]);
+    playFlightDeckTick(sfxMuted, effectsVolume);
+  }, [sfxMuted, effectsVolume]);
 
   const resetSoloGameRules = useCallback(() => {
     setSoloGameRules(createSoloGameRules());
-    playFlightDeckTick(sfxMuted);
-  }, [sfxMuted]);
+    playFlightDeckTick(sfxMuted, effectsVolume);
+  }, [sfxMuted, effectsVolume]);
 
   const openFieldGuide = useCallback(() => {
     setFieldGuidePage(0);
@@ -2783,14 +2787,14 @@ function App() {
       rainAudio.context.resume?.();
       const t = rainAudio.context.currentTime;
       rainAudio.gain.cancelScheduledValues(t);
-      rainAudio.gain.setTargetAtTime(0.105 * soundLevels.rain, t, 0.38);
+      rainAudio.gain.setTargetAtTime(0.105 * effectiveSoundLevels.rain, t, 0.38);
     }, 850);
 
     return () => {
       window.clearTimeout(rainSoundStartTimerRef.current);
       rainSoundStartTimerRef.current = 0;
     };
-  }, [rainActive, sfxMuted, soundLevels.rain]);
+  }, [rainActive, sfxMuted, effectiveSoundLevels.rain]);
 
   useEffect(() => {
     const resumeFromPause = (event) => {
@@ -3428,87 +3432,20 @@ function App() {
             )}
           </div>
           {settingsOpen && startScreen === 'home' && (
-            <section className="start-utility-overlay flight-deck-overlay" aria-label="Flight deck settings">
-              <div className="flight-deck-panel" role="dialog" aria-modal="true" aria-labelledby="flight-deck-title">
-                <div className="flight-deck-heading">
-                  <h2 id="flight-deck-title">Flight deck</h2>
-                  <button className="flight-deck-close" type="button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button>
-                </div>
-                <div className="flight-deck-columns">
-                  <section className="flight-deck-section" aria-labelledby="flight-deck-sound-title">
-                    <div className="flight-deck-section-heading">
-                      <span id="flight-deck-sound-title">Sound &amp; lights</span>
-                      <small>Personal mix</small>
-                    </div>
-                    <div className="flight-deck-controls flight-deck-audio-controls">
-                      {[
-                        ['engine', 'Propeller'],
-                        ['ammo', 'Ammo'],
-                        ['rocket', 'Rockets'],
-                        ['explosion', 'Explosion'],
-                        ['rain', 'Rain'],
-                      ].map(([kind, label]) => (
-                        <label className="flight-deck-control" key={kind}>
-                          <span>{label}</span>
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={Math.round(soundLevels[kind] * 100)}
-                            aria-label={`${label} volume`}
-                            onChange={(event) => updateSoundLevel(kind, event)}
-                          />
-                          <output>{Math.round(soundLevels[kind] * 100)}%</output>
-                        </label>
-                      ))}
-                      <label className="flight-deck-control flight-deck-lights">
-                        <span>Plane lights</span>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={Math.round(planeLightIntensity * 100)}
-                          aria-label="Plane blinking light intensity"
-                          onChange={updatePlaneLightIntensity}
-                        />
-                        <output>{Math.round(planeLightIntensity * 100)}%</output>
-                      </label>
-                    </div>
-                  </section>
-                  <section className="flight-deck-section flight-deck-rules-section" aria-labelledby="flight-deck-rules-title">
-                    <div className="flight-deck-section-heading">
-                      <span id="flight-deck-rules-title">Game controls</span>
-                      <small>Solo + Training only</small>
-                    </div>
-                    <div className="flight-deck-controls flight-deck-rule-controls">
-                      {SOLO_GAME_CONTROL_DEFINITIONS.map((control) => {
-                        const value = soloGameRules[control.key];
-                        return (
-                          <label className="flight-deck-control flight-deck-rule-control" key={control.key}>
-                            <span><b>{control.label}</b><small>{control.detail}</small></span>
-                            <input
-                              type="range"
-                              min={control.min}
-                              max={control.max}
-                              step="1"
-                              value={value}
-                              aria-label={control.label}
-                              aria-valuetext={control.format(value)}
-                              onChange={(event) => updateSoloGameRule(control.key, event)}
-                            />
-                            <output>{control.format(value)}</output>
-                          </label>
-                        );
-                      })}
-                    </div>
-                    <div className="flight-deck-rule-footer">
-                      <p>Local rules only. Rooms stay standard.</p>
-                      <button className="flight-deck-reset-rules" type="button" onClick={resetSoloGameRules}>Reset rules</button>
-                    </div>
-                  </section>
-                </div>
-              </div>
-            </section>
+            <FlightDeck
+              rules={soloGameRules} onRule={updateSoloGameRule} definitions={SOLO_GAME_CONTROL_DEFINITIONS}
+              musicVolume={musicVolume} onMusic={updateMusicVolume}
+              effectsVolume={effectsVolume} onEffects={e => setEffectsVolume(Number(e.target.value) / 100)}
+              muted={sfxMuted} onMute={() => setSfxMuted(value => !value)}
+              warningEnabled={warningAudioEnabled} onWarning={() => setWarningAudioEnabled(value => !value)}
+              levels={soundLevels} onLevel={updateSoundLevel} light={planeLightIntensity} onLight={updatePlaneLightIntensity}
+              onClose={() => setSettingsOpen(false)}
+              onReset={() => {
+                resetSoloGameRules(); setSoundLevels({ engine: 0.09, ammo: 0.1, rocket: 0.1, explosion: 0.1, rain: 0.05 });
+                setEffectsVolume(1); setSfxMuted(false); setWarningAudioEnabled(true); setPlaneLightIntensity(1);
+                setMusicVolume(DEFAULT_MUSIC_VOLUME); musicPlayerRef.current.setVolume(DEFAULT_MUSIC_VOLUME);
+              }}
+            />
           )}
           {fieldGuideOpen && startScreen === 'home' && (
             <section className="start-utility-overlay field-guide-overlay" aria-label="PixelPlanes field guide">
@@ -3776,7 +3713,7 @@ function App() {
             planeColor={planeColor}
             planeLightCombo={planeLightCombo}
             sfxMuted={sfxMuted}
-            audioSettings={soundLevels}
+            audioSettings={effectiveSoundLevels}
             lightIntensity={planeLightIntensity}
             fogActive={fogActive}
             registerGameFrameCallback={registerGameFrameCallback}
@@ -3787,7 +3724,7 @@ function App() {
               player={player}
               statesRef={remotePlayerStatesRef}
               sfxMuted={sfxMuted}
-              audioSettings={soundLevels}
+              audioSettings={effectiveSoundLevels}
               fogActive={fogActive}
               registerGameFrameCallback={registerGameFrameCallback}
             />
@@ -3814,7 +3751,7 @@ function App() {
               botApiRefs={botApiRefs}
               onBotMove={updateBotLocator}
               sfxMuted={sfxMuted}
-              audioSettings={soundLevels}
+              audioSettings={effectiveSoundLevels}
               gameplayRules={soloGameRules}
               fogActive={fogActive}
               registerGameFrameCallback={registerGameFrameCallback}
@@ -4692,7 +4629,7 @@ function PlayablePlane({
 
     playerApiRef.current = {
       playHitSound: () => {
-        playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current);
+        playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current, audioSettingsRef.current?.master ?? 1);
       },
       hitByBullet: (options = {}) => {
         const current = stateRef.current;
@@ -4708,7 +4645,7 @@ function PlayablePlane({
         };
         stateRef.current = next;
         damageLevelRef.current = nextDamage;
-        if (!options.skipHitSound) playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current);
+        if (!options.skipHitSound) playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current, audioSettingsRef.current?.master ?? 1);
         setDamageLevel(nextDamage);
         onPlaneState(next);
       },
@@ -6463,7 +6400,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     };
     stateRef.current = next;
     botDamageRef.current = nextDamage;
-    playPlaneBulletHitSound(null, sfxMuted);
+    playPlaneBulletHitSound(null, sfxMuted, audioSettingsRef.current?.master ?? 1);
     setBotDamage(nextDamage);
     onBotMove(botIndex, next);
     return { killed: false };
