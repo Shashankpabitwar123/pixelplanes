@@ -7595,10 +7595,10 @@ label.flight-deck-rule-control input[type='range'] {
   width: 9px;
   height: 6px;
   border-radius: 50% 50% 45% 45%;
-  background: #cfd4d0;
+  background: var(--dropping-body, #765037);
   box-shadow:
-    5px 1px 0 #aeb6b0,
-    2px -3px 0 #e5e7e5;
+    5px 1px 0 var(--dropping-shadow, #513523),
+    2px -3px 0 var(--dropping-highlight, #9c714d);
   transform: translateX(-50%);
   animation: potty-fade 15s ease-out forwards;
 }
@@ -8081,15 +8081,15 @@ label.flight-deck-rule-control input[type='range'] {
 @keyframes potty-fade {
   0% {
     opacity: 1;
-    transform: scale(0.85);
+    transform: translateX(-50%) scale(0.85);
   }
   70% {
     opacity: 1;
-    transform: scale(1);
+    transform: translateX(-50%) scale(1);
   }
   100% {
     opacity: 0;
-    transform: scale(0.8);
+    transform: translateX(-50%) scale(0.8);
   }
 }
 
@@ -8736,3 +8736,6 @@ label.flight-deck-rule-control input[type='range'] {
 .scene-light .fuel-pixel { fill: #f09c8c; }
 .scene-light .fuel-beacon { background: #ecc452; box-shadow: none; }
 .scene-light .fuel-beacon::before { display: none; }
+
+.scene-light .potty-dropping { --dropping-body: #69432b; --dropping-shadow: #473020; --dropping-highlight: #90613e; }
+.scene-dark .potty-dropping { --dropping-body: #a47a54; --dropping-shadow: #735137; --dropping-highlight: #c39a6c; }

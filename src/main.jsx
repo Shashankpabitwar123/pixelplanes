@@ -3358,7 +3358,7 @@ function App() {
           />
           <div className="droppings">
             {droppings.map((dropping) => (
-              <span key={dropping.id} className="potty-dropping" style={{ left: `${dropping.x}%` }} />
+              <span key={dropping.id} className="potty-dropping" style={{ left: `${dropping.x}vw` }} />
             ))}
           </div>
         </div>
