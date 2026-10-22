@@ -183,7 +183,7 @@ export const ROCKET_SPEED = ACTIVE_GAMEPLAY_PACING.rocketSpeed;
 
 export const ROCKET_RANGE = ROCKET_SPEED * (ROCKET_LIFETIME_MS / 1000);
 
-export const ROCKET_HOMING_MS = 2500;
+export const ROCKET_HOMING_MS = 1300;
 
 export const ROCKET_DETECTION_RANGE = 90;
 

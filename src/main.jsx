@@ -4035,7 +4035,7 @@ function GuideFlightPage() {
             <p><PixelKey className="gazette-key-active">D</PixelKey><PixelKey className="gazette-key-active">→</PixelKey><span><strong>Turn right.</strong> Hold for continuous right rotation; combine it with thrust to carve the sky.</span></p>
             <p><PixelKey className="gazette-key-active">S</PixelKey><PixelKey className="gazette-key-active">↓</PixelKey><span><strong>Brake / reverse.</strong> It sheds speed in the air. On the runway, hold it without thrust to reverse.</span></p>
             <p><PixelKey wide className="gazette-key-active">SPACE</PixelKey><span><strong>Burst fire.</strong> Hold to send straight bullets from the propeller shaft along the dotted aiming line.</span></p>
-            <p><PixelKey className="gazette-key-active">R</PixelKey><span><strong>Rocket.</strong> Hold to show target brackets, then release to launch one of two rockets. Tap for a quick launch. It guides toward its target for 2.5 seconds and expires after five.</span></p>
+            <p><PixelKey className="gazette-key-active">R</PixelKey><span><strong>Rocket.</strong> Hold to show target brackets, then release to launch one of two rockets. Tap for a quick launch. It guides toward its target for {ROCKET_HOMING_MS / 1000} seconds and expires after five.</span></p>
             <p><PixelKey className="gazette-key-active">L</PixelKey><span><strong>Fog light.</strong> Press once to toggle the forward searchlight for dark or foggy air.</span></p>
           </div>
         </section>
