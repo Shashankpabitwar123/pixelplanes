@@ -6751,7 +6751,8 @@ function Hut({ className, variant, style }) {
 // Stable irregular spacing; decorations never enter the collision system.
 const STREET_LAMP_POSITIONS = hutPlacements
   .map((hut, index) => hut.x + 18 + (index * 7 % 9))
-  .filter(x => x < WORLD_WIDTH - 8 && fuelTankPlacements.every(fuel => Math.abs(x - fuel) > 8));
+  .filter(x => x < WORLD_WIDTH - 8 && fuelTankPlacements.every(fuel => Math.abs(x - fuel) > 8))
+  .filter((_, index) => index % 2 === 0);
 
 function StreetLamp({ x }) {
   return <div className="street-lamp" style={{ left: `${x}vw` }}>

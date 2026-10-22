@@ -8745,3 +8745,6 @@ label.flight-deck-rule-control input[type='range'] {
 .street-lamp svg { position: relative; display: block; width: 100%; height: 100%; }
 .street-lamp-halo { position: absolute; left: 78%; top: 35%; width: 110%; aspect-ratio: 1; transform: translate(-50%,-50%); background: radial-gradient(circle,#ffd27a40 0%,#ffc45c18 35%,transparent 70%); }
 .street-lamp-pool { position: absolute; left: 78%; top: 90%; width: 330%; height: 70%; transform: translateX(-50%); background: radial-gradient(ellipse at 50% 42%,#e7b96040 0%,#dba45324 30%,#c18c3d0c 55%,transparent 72%); }
+
+/* Slightly lift the night soil while retaining its warm brown tone. */
+.scene-dark { --soil: #44312b; }
