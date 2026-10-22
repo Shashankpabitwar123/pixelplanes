@@ -1,3 +1,4 @@
+import { getPlayerFlightTuning } from './game/flight-tuning.js';
 import { createWeatherCycle } from './game/weather.js';
 import { FlightDeck } from './game/flight-deck.jsx';
 import { createGroundWarningTracker, createPullUpAudio } from './game/ground-warning.js';
@@ -317,8 +318,8 @@ const COW_INSTANCES = cowOffsets.flatMap((offset) =>
 );
 
 const SOLO_GAME_CONTROL_DEFINITIONS = [
-  { key: 'flightPace', label: 'Flight speed', min: 70, max: 100 },
-  { key: 'turnPace', label: 'Turn response', min: 65, max: 100 },
+  { key: 'flightPace', label: 'Flight speed', min: 0, max: 100 },
+  { key: 'turnPace', label: 'Turn response', min: 0, max: 100 },
   { key: 'fuelSeconds', label: 'Fuel capacity', min: 20, max: 60 },
 ];
 
@@ -343,28 +344,6 @@ function getRuleBulletReloadMs(rules) {
 }
 
 
-function getPlayerFlightTuning(rules) {
-  const flightPace = clamp(getRulePace(rules, 'flightPace'), 0.7, 1);
-  const turnPace = clamp(getRulePace(rules, 'turnPace'), 0.65, 1);
-  const accelerationPace = Math.pow(flightPace, 0.86);
-  const responsePace = 0.8 + flightPace * 0.2;
-  const base = ACTIVE_GAMEPLAY_PACING.player;
-  return {
-    ...base,
-    throttleRise: base.throttleRise * responsePace,
-    thrustResponse: base.thrustResponse * responsePace,
-    turnBaseRate: base.turnBaseRate * turnPace,
-    turnAuthorityRate: base.turnAuthorityRate * turnPace,
-    turnInputResponse: base.turnInputResponse * (0.82 + turnPace * 0.18),
-    runwayThrust: base.runwayThrust * accelerationPace,
-    flightThrust: base.flightThrust * accelerationPace,
-    takeoffSpeed: base.takeoffSpeed * Math.sqrt(flightPace),
-    maxLevelSpeed: base.maxLevelSpeed * flightPace,
-    maxClimbSpeed: base.maxClimbSpeed * flightPace,
-    maxDiveBaseSpeed: base.maxDiveBaseSpeed * flightPace,
-    maxDiveThrustBonus: base.maxDiveThrustBonus * flightPace,
-  };
-}
 
 function useMeasuredFrameRate() {
   const [frameRate, setFrameRate] = useState(0);
@@ -6679,7 +6658,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       }
 
       if (next.airborne) {
-        const tuning = getPlayerFlightTuning(gameplayRulesRef.current);
+        const tuning = ACTIVE_GAMEPLAY_PACING.player;
         applyFlightForces(next, dt, { thrust: tuning.flightThrust * AIRBORNE_THRUST_SCALE, cruiseSpeed: tuning.maxLevelSpeed });
       }
 

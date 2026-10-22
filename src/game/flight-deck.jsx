@@ -53,7 +53,7 @@ export function FlightDeck({ rules, onRule, definitions, musicVolume, onMusic, e
         </div>
         <details className="deck-details"><summary>Advanced gameplay <span>Handling &amp; fuel</span></summary><div className="deck-advanced">
           {definitions.filter(c => ['flightPace', 'turnPace', 'fuelSeconds'].includes(c.key)).map(c => <Slider key={c.key} label={c.label} min={c.min} max={c.max} value={rules[c.key]} suffix={c.key === 'bulletCooldownMs' ? ' ms' : ['fuelSeconds','bulletReloadSeconds'].includes(c.key) ? ' s' : '%'} onChange={e => onRule(c.key,e)} />)}
-          <p className="deck-note">Solo and training only. Weapons use the standard balanced settings.</p>
+          <p className="deck-note">70% is the default flight feel. Increase speed or turning to boost your plane; bots keep their normal handling. Solo and training only.</p>
         </div></details>
         <details className="deck-details"><summary>Sound mix &amp; appearance <span>Individual sounds &amp; lights</span></summary><div className="deck-advanced">
           {[['engine','Propeller'],['combat','Combat sounds'],['rain','Rain']].map(([key,label]) => <Slider key={key} label={`${label} volume`} value={Math.round((key === 'combat' ? levels.ammo : levels[key])*100)} onChange={e => onLevel(key,e)} />)}
