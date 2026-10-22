@@ -24,6 +24,6 @@ export function hasPredictedBulletHit(player, targets, trajectory, { maxDistance
         x: trajectory.x + trajectory.dx * fraction - target.vx * duration,
         y: trajectory.y - trajectory.dy * fraction - target.vy * duration,
       },
-    }, target);
+    }, target, target.hitRadius);
   });
 }
