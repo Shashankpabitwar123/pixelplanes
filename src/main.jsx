@@ -1,3 +1,4 @@
+import { createRocketTrigger } from './game/rocket-trigger.js';
 import { selectRocketTarget } from './game/rocket-guidance.js';
 import { hasPredictedBulletHit } from './game/bullet-lead.js';
 import { getPlayerFlightTuning } from './game/flight-tuning.js';
@@ -3020,7 +3021,7 @@ function App() {
           <div className="help-rule"><kbd>D</kbd><span>Turn right</span></div>
           <div className="help-rule"><kbd>S</kbd><span>Slow / land</span></div>
           <div className="help-rule"><kbd>Space</kbd><span>Hold for burst fire</span></div>
-          <div className="help-rule"><kbd>R</kbd><span>Rockets</span></div>
+          <div className="help-rule"><kbd>R</kbd><span>Hold to aim; release to launch</span></div>
           <div className="help-rule"><kbd>L</kbd><span>Front light for fog.</span></div>
           <div className="help-rule help-note"><kbd>Start</kbd><span>Bots fight you and each other.</span></div>
           <div className="help-rule"><kbd>Train</kbd><span>No bots. Practice flying.</span></div>
@@ -3030,7 +3031,7 @@ function App() {
           <div className="help-rule help-note"><kbd>Fuel</kbd><span>{FUEL_SECONDS} seconds. Station refills and repairs.</span></div>
           <div className="help-rule"><kbd>Ammo</kbd><span>Bullets refill 4 seconds after your first shot.</span></div>
           <div className="help-rule"><kbd>Aim</kbd><span>Green aiming dots: your current shot is predicted to hit a nearby bot. Turns can make it miss.</span></div>
-          <div className="help-rule"><kbd>Rocket</kbd><span>Brackets show your rocket target ahead. Tracks for {ROCKET_HOMING_MS / 1000} seconds; expires after {ROCKET_LIFETIME_MS / 1000} seconds.</span></div>
+          <div className="help-rule"><kbd>Rocket</kbd><span>Hold R to show target brackets; release to launch. Tracks for {ROCKET_HOMING_MS / 1000} seconds; expires after {ROCKET_LIFETIME_MS / 1000} seconds.</span></div>
           <div className="help-rule"><kbd>Hit</kbd><span>First hit smokes, second hit blasts.</span></div>
           <div className="help-rule"><kbd>Score</kbd><span>Kills reset on death. High score stays.</span></div>
         </div>
@@ -4031,7 +4032,7 @@ function GuideFlightPage() {
             <p><PixelKey className="gazette-key-active">D</PixelKey><PixelKey className="gazette-key-active">→</PixelKey><span><strong>Turn right.</strong> Hold for continuous right rotation; combine it with thrust to carve the sky.</span></p>
             <p><PixelKey className="gazette-key-active">S</PixelKey><PixelKey className="gazette-key-active">↓</PixelKey><span><strong>Brake / reverse.</strong> It sheds speed in the air. On the runway, hold it without thrust to reverse.</span></p>
             <p><PixelKey wide className="gazette-key-active">SPACE</PixelKey><span><strong>Burst fire.</strong> Hold to send straight bullets from the propeller shaft along the dotted aiming line.</span></p>
-            <p><PixelKey className="gazette-key-active">R</PixelKey><span><strong>Rocket.</strong> Press once to launch one of two rockets. It tracks a valid plane within 90 units for two seconds; otherwise it flies straight and expires after five.</span></p>
+            <p><PixelKey className="gazette-key-active">R</PixelKey><span><strong>Rocket.</strong> Hold to show target brackets, then release to launch one of two rockets. Tap for a quick launch. It guides toward its target for 2.5 seconds and expires after five.</span></p>
             <p><PixelKey className="gazette-key-active">L</PixelKey><span><strong>Fog light.</strong> Press once to toggle the forward searchlight for dark or foggy air.</span></p>
           </div>
         </section>
@@ -4140,7 +4141,7 @@ function GuideCombatPage() {
           <div className="gazette-top-hud-rules">
             <article><span>FUEL</span><p><strong>{FUEL_SECONDS} seconds.</strong> The needle begins horizontal in green, then crosses yellow, orange, and red. At empty, the engine has no thrust.</p></article>
             <article><span>AMMO</span><p><strong>{MAX_BULLETS} shots.</strong> Hold <PixelKey wide>SPACE</PixelKey> to fire every {BULLET_COOLDOWN_MS} ms. Once any are used, the whole magazine refills after {BULLET_RELOAD_MS / 1000} seconds.</p></article>
-            <article><span>ROCKETS</span><p><strong>{MAX_ROCKETS} ready.</strong> Press <PixelKey>R</PixelKey>; brackets show the selected target ahead within {ROCKET_DETECTION_RANGE} units. The rocket accelerates and intercepts that target for {ROCKET_HOMING_MS / 1000} seconds, then expires after {ROCKET_LIFETIME_MS / 1000} seconds.</p></article>
+            <article><span>ROCKETS</span><p><strong>{MAX_ROCKETS} ready.</strong> Hold <PixelKey>R</PixelKey> to aim, release to launch; brackets show the selected target ahead within {ROCKET_DETECTION_RANGE} units. The rocket accelerates and intercepts that target for {ROCKET_HOMING_MS / 1000} seconds, then expires after {ROCKET_LIFETIME_MS / 1000} seconds.</p></article>
           </div>
         </section>
       </div>
@@ -4401,6 +4402,7 @@ function PlayablePlane({
   const planeRef = useRef(null);
   const aimGuideDotRefs = useRef([]);
   const rocketTargetBracketRef = useRef(null);
+  const rocketTriggerRef = useRef(createRocketTrigger());
   const leadFogRef = useRef(fogActive);
   leadFogRef.current = fogActive;
   const blastRef = useRef(null);
@@ -4456,6 +4458,11 @@ function PlayablePlane({
   const [damageLevel, setDamageLevel] = useState(0);
   const [damageSmokeParticles, setDamageSmokeParticles] = useState([]);
   const [searchLightOn, setSearchLightOn] = useState(false);
+
+  useEffect(() => {
+    rocketTriggerRef.current.cancel();
+    if (rocketTargetBracketRef.current) rocketTargetBracketRef.current.style.opacity = '0';
+  }, [paused, controlsEnabled, crashed, restartSignal]);
 
   useEffect(() => {
     gameplayRulesRef.current = gameplayRules;
@@ -4993,7 +5000,7 @@ function PlayablePlane({
 
     const fireRocket = () => {
       const now = performance.now();
-      if (crashedRef.current || rocketsRef.current <= 0 || now - lastRocketRef.current < ROCKET_COOLDOWN_MS) return;
+      if (pausedRef.current || !controlsEnabledRef.current || crashedRef.current || rocketsRef.current <= 0 || now - lastRocketRef.current < ROCKET_COOLDOWN_MS) return;
       lastRocketRef.current = now;
       onRoomInputRef.current?.({ fireRocket: true });
       playRocketSound();
@@ -5244,7 +5251,11 @@ function PlayablePlane({
 
     const setKey = (event, pressed) => {
       const isEditableTarget = event.target?.closest?.('input, textarea, select, [contenteditable="true"]');
-      if (isEditableTarget) return;
+      if (isEditableTarget) {
+        rocketTriggerRef.current.cancel();
+        if (rocketTargetBracketRef.current) rocketTargetBracketRef.current.style.opacity = '0';
+        return;
+      }
       const action = event.code === 'Space' ? 'fire' : keyMap[event.key] || keyMap[event.key.toLowerCase?.()];
       if (!action) return;
       if (!controlsEnabledRef.current) {
@@ -5268,7 +5279,13 @@ function PlayablePlane({
         return;
       }
       if (action === 'rocket') {
-        if (pressed && !event.repeat) fireRocket();
+        const allowed = !pausedRef.current && !crashedRef.current && rocketsRef.current > 0;
+        if (pressed) rocketTriggerRef.current.press(allowed, event.repeat);
+        else {
+          const shouldFire = rocketTriggerRef.current.release(allowed);
+          if (rocketTargetBracketRef.current) rocketTargetBracketRef.current.style.opacity = '0';
+          if (shouldFire) fireRocket();
+        }
         return;
       }
       if (action === 'light') {
@@ -5296,15 +5313,25 @@ function PlayablePlane({
       publishRoomInput();
     };
 
+    const cancelRocketAim = () => {
+      rocketTriggerRef.current.cancel();
+      if (rocketTargetBracketRef.current) rocketTargetBracketRef.current.style.opacity = '0';
+    };
+    const handleVisibilityChange = () => { if (document.hidden) cancelRocketAim(); };
     const handleKeyDown = (event) => setKey(event, true);
     const handleKeyUp = (event) => setKey(event, false);
     onAmmoChange({ count: ammoRef.current, reloading: reloadingRef.current });
     onRocketChange(rocketsRef.current);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', cancelRocketAim);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', cancelRocketAim);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      cancelRocketAim();
       if (reloadTimerRef.current) {
         window.clearTimeout(reloadTimerRef.current);
         reloadTimerRef.current = null;
@@ -5717,7 +5744,7 @@ function PlayablePlane({
         }
       }
       if (rocketTargetBracketRef.current) {
-        const target = !planeState.crashed && planeState.hasLifted && !pausedRef.current && rocketsRef.current > 0
+        const target = rocketTriggerRef.current.held && !planeState.crashed && planeState.hasLifted && !pausedRef.current && rocketsRef.current > 0
           ? selectRocketTarget(planeState, rocketCandidates(planeState)) : null;
         rocketTargetBracketRef.current.style.opacity = target ? '1' : '0';
         if (target) setWorldTransformPosition(rocketTargetBracketRef.current, target.state.x, target.state.y);
