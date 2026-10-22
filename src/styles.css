@@ -8648,3 +8648,5 @@ label.flight-deck-rule-control input[type='range'] {
 @keyframes rocket-discovery-glow { 0%,100% { box-shadow: 0 8px 20px #1f41561f; } 40% { box-shadow: 0 0 17px #ffca3299; border-color: #ffca32; } }
 @keyframes rocket-hint-lifetime { 0% { opacity: 0; transform: translateY(-4px); } 5%,90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .rocket-discovery, .rocket-discovery-hint { animation: none; } }
+
+.deck-choices.deck-theme { margin-top: 0; margin-bottom: 20px; }

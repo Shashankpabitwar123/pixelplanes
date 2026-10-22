@@ -3021,6 +3021,7 @@ function App() {
           </div>
           {settingsOpen && startScreen === 'home' && (
             <FlightDeck
+              theme={theme} onTheme={setTheme}
               rules={soloGameRules} onRule={updateSoloGameRule} definitions={SOLO_GAME_CONTROL_DEFINITIONS}
               musicVolume={musicVolume} onMusic={updateMusicVolume}
               effectsVolume={effectsVolume} onEffects={e => setEffectsVolume(Number(e.target.value) / 100)}
@@ -3029,7 +3030,7 @@ function App() {
               levels={soundLevels} onLevel={updateSoundLevel} light={planeLightIntensity} onLight={updatePlaneLightIntensity}
               onClose={() => setSettingsOpen(false)}
               onReset={() => {
-                resetSoloGameRules(); setSoundLevels({ engine: 0.09, ammo: 0.1, rocket: 0.1, explosion: 0.1, rain: 0.05 });
+                resetSoloGameRules(); setTheme('dark'); setSoundLevels({ engine: 0.09, ammo: 0.1, rocket: 0.1, explosion: 0.1, rain: 0.05 });
                 setEffectsVolume(1); setSfxMuted(false); setWarningAudioEnabled(true); setPlaneLightIntensity(1);
                 setMusicVolume(DEFAULT_MUSIC_VOLUME); musicPlayerRef.current.setVolume(DEFAULT_MUSIC_VOLUME);
               }}

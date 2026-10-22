@@ -9,7 +9,7 @@ function Slider({ label, value, min = 0, max = 100, suffix = '%', onChange, disa
   </label>;
 }
 export function FlightDeck({ rules, onRule, definitions, musicVolume, onMusic, effectsVolume, onEffects,
-  muted, onMute, warningEnabled, onWarning, levels, onLevel, light, onLight, onReset, onClose }) {
+  muted, onMute, warningEnabled, onWarning, levels, onLevel, light, onLight, theme, onTheme, onReset, onClose }) {
   const panel = useRef(null);
   const close = useRef(onClose); close.current = onClose;
   useEffect(() => {
@@ -36,6 +36,10 @@ export function FlightDeck({ rules, onRule, definitions, musicVolume, onMusic, e
       <div className="deck-body">
         <div className="deck-main">
           <section className="deck-section"><h3>Your flight</h3>
+            <fieldset className="deck-choices deck-theme"><legend>World theme</legend><div>
+              <button type="button" aria-pressed={theme === 'light'} onClick={() => onTheme('light')}>☀ Light</button>
+              <button type="button" aria-pressed={theme === 'dark'} onClick={() => onTheme('dark')}>☾ Dark</button>
+            </div></fieldset>
             <div className="deck-bots"><div><strong>Enemy bots</strong><small>Choose your company in the sky</small></div>
               <div className="deck-stepper"><button aria-label="Fewer enemy bots" disabled={rules.botCount <= 1} onClick={() => choose('botCount', rules.botCount - 1)}>−</button><output aria-live="polite">{rules.botCount}</output><button aria-label="More enemy bots" disabled={rules.botCount >= MAX_SOLO_BOTS} onClick={() => choose('botCount', rules.botCount + 1)}>+</button></div>
             </div>
