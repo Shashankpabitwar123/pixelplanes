@@ -1,4 +1,4 @@
-import { segmentHitsPlane } from './mechanics.js';
+import { bulletSegmentHitsPlane } from './mechanics.js';
 
 // Test the actual, uncorrected bullet path against moving targets. Subtracting
 // target motion turns this into the same swept collision test used by bullets.
@@ -18,12 +18,12 @@ export function hasPredictedBulletHit(player, targets, trajectory, { maxDistance
     const duration = target.vy < 0 ? Math.min(life, Math.max(0, target.y / -target.vy)) : life;
     if (duration <= 0) return false;
     const fraction = duration / life;
-    return segmentHitsPlane({
+    return bulletSegmentHitsPlane({
       start: { x: trajectory.x, y: trajectory.y },
       end: {
         x: trajectory.x + trajectory.dx * fraction - target.vx * duration,
         y: trajectory.y - trajectory.dy * fraction - target.vy * duration,
       },
-    }, target, 1.05);
+    }, target);
   });
 }

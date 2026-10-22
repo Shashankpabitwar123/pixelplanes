@@ -153,6 +153,8 @@ export const BULLET_LIFETIME_MS = ACTIVE_GAMEPLAY_PACING.bulletLifetimeMs;
 
 export const BULLET_RANGE = 102;
 
+export const BULLET_HIT_RADIUS = 1.05 * 1.2;
+
 // Preserve inherited drift distance and range when tuning bullet travel time.
 export const BULLET_FLIGHT_SECONDS = ACTIVE_GAMEPLAY_PACING.bulletInheritedFlightSeconds;
 

@@ -11,6 +11,7 @@ import {
   BULLET_LIFETIME_MS,
   BULLET_MUZZLE_POINT,
   BULLET_RANGE,
+  BULLET_HIT_RADIUS,
   DAMAGE_SMOKE_INTERVAL_MS,
   DAMAGE_SMOKE_LIFETIME_MS,
   DAMAGE_SMOKE_MAX_PARTICLES,
@@ -309,7 +310,7 @@ export function createBulletProjectile(plane, now, idPrefix = 'bullet', trajecto
     created: now,
     angle: resolvedTrajectory.angle,
     unit: 'world',
-    radius: 1.05,
+    radius: BULLET_HIT_RADIUS,
   };
 }
 
@@ -439,6 +440,23 @@ export function segmentHitsPlane(segment, plane, radius = 0.9) {
   if (!plane || plane.crashed) return false;
   const pointForHit = typeof window !== 'undefined' ? getRenderedPlanePoint : getPlanePoint;
   return planeModel.hitPoints.some((hitPoint) => distanceToSegment(pointForHit(plane, hitPoint), segment.start, segment.end) <= radius);
+}
+
+// Connected capsules cover the fuselage and wings instead of isolated circles.
+// Rockets retain their existing collision shape and tolerance.
+export function bulletSegmentHitsPlane(segment, plane, radius = BULLET_HIT_RADIUS) {
+  if (!plane || plane.crashed) return false;
+  const pointForHit = typeof window !== 'undefined' ? getRenderedPlanePoint : getPlanePoint;
+  const points = planeModel.hitPoints.map(point => pointForHit(plane, point));
+  const links = [[0,2],[2,3],[3,4],[1,2],[2,5]];
+  const cross = (a,b,c) => (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+  return links.some(([i,j]) => {
+    const a=points[i],b=points[j],c=segment.start,d=segment.end;
+    const abC=cross(a,b,c),abD=cross(a,b,d),cdA=cross(c,d,a),cdB=cross(c,d,b);
+    const crosses = abC*abD < 0 && cdA*cdB < 0;
+    return crosses || Math.min(distanceToSegment(a,c,d),distanceToSegment(b,c,d),
+      distanceToSegment(c,a,b),distanceToSegment(d,a,b)) <= radius;
+  });
 }
 
 function getDamageSmokeVector(plane, previousPlane = null) {

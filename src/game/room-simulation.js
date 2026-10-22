@@ -6,6 +6,7 @@ import {
   BULLET_LIFETIME_MS,
   BULLET_MUZZLE_POINT,
   BULLET_RANGE,
+  BULLET_HIT_RADIUS,
   BULLET_RELOAD_MS,
   FUEL_SECONDS,
   MAX_BULLETS,
@@ -27,6 +28,7 @@ import {
   normalizeAngle,
   planeModel,
   segmentHitsPlane,
+  bulletSegmentHitsPlane,
   updateGuidedRocket,
 } from './mechanics.js';
 import { fuelStationZones } from './world.js';
@@ -226,7 +228,7 @@ export function createRoomBulletProjectile(ownerId, plane, now, id) {
     dy: travel.dy,
     life: travel.life,
     groundHit: travel.groundHit,
-    radius: 1.05,
+    radius: BULLET_HIT_RADIUS,
     created: now,
     lastUpdate: now,
     unit: 'world',
@@ -283,7 +285,8 @@ export function advanceRoomProjectile(projectile, now, targets = []) {
 }
 
 export function projectileHitsPlayer(segment, projectile, playerState) {
-  return Boolean(segment && playerState && !playerState.crashed && segmentHitsPlane(segment, playerState, projectile.radius ?? 1.05));
+  const hitTest = projectile.weapon === 'rocket' ? segmentHitsPlane : bulletSegmentHitsPlane;
+  return Boolean(segment && playerState && !playerState.crashed && hitTest(segment, playerState, projectile.radius ?? (projectile.weapon === 'rocket' ? 2.25 : BULLET_HIT_RADIUS)));
 }
 
 export const ROOM_WEAPON_RULES = Object.freeze({

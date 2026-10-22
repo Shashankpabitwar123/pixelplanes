@@ -1,3 +1,4 @@
+import { flashPlaneHit } from './game/hit-feedback.js';
 import { createRocketTrigger } from './game/rocket-trigger.js';
 import { selectRocketTarget } from './game/rocket-guidance.js';
 import { hasPredictedBulletHit } from './game/bullet-lead.js';
@@ -25,6 +26,7 @@ import {
   BULLET_RELOAD_MS,
   BULLET_COOLDOWN_MS,
   BULLET_LIFETIME_MS,
+  BULLET_HIT_RADIUS,
   AIM_GUIDE_DOT_COUNT,
   MAX_ROCKETS,
   ROCKET_COOLDOWN_MS,
@@ -88,6 +90,7 @@ import {
   updateGuidedRockets,
   getRocketSegment,
   segmentHitsPlane,
+  bulletSegmentHitsPlane,
   updateDamageSmokeParticles,
   createRainAudio,
   playFlightDeckTick,
@@ -4570,6 +4573,7 @@ function PlayablePlane({
       hitByBullet: (options = {}) => {
         const current = stateRef.current;
         if (current.crashed) return;
+        flashPlaneHit(planeRef.current);
         const nextDamage = (current.damage ?? 0) + 1;
         if (nextDamage >= 2) {
           crashPlayer(1.18);
@@ -4617,6 +4621,7 @@ function PlayablePlane({
           stateRef.current = next;
           searchLightOnRef.current = Boolean(next.searchLightOn);
           crashedRef.current = false;
+          if ((next.damage ?? 0) > damageLevelRef.current) flashPlaneHit(planeRef.current);
           damageLevelRef.current = next.damage ?? 0;
           setCrashed(false);
           setDamageLevel(next.damage ?? 0);
@@ -5558,7 +5563,7 @@ function PlayablePlane({
       for (const projectile of projectilesRef.current) {
         const segment = getProjectileSegment(projectile, now);
         const target = trainingTargets.find((candidate) =>
-          candidate.weapon === 'bullet' && segmentHitsPlane(segment, candidate.state, candidate.radius ?? projectile.radius ?? 1.05),
+          candidate.weapon === 'bullet' && bulletSegmentHitsPlane(segment, candidate.state, candidate.radius ?? projectile.radius ?? BULLET_HIT_RADIUS),
         );
         if (target) {
           removeProjectile(projectile.id);
@@ -5586,7 +5591,7 @@ function PlayablePlane({
       let handledBulletHit = false;
       for (const projectile of projectilesRef.current) {
         const segment = getProjectileSegment(projectile, now);
-        const hitIndex = botStateRefs.current.findIndex((bot) => bot && !bot.crashed && segmentHitsPlane(segment, bot, projectile.radius ?? 1.05));
+        const hitIndex = botStateRefs.current.findIndex((bot) => bot && !bot.crashed && bulletSegmentHitsPlane(segment, bot, projectile.radius ?? BULLET_HIT_RADIUS));
         if (hitIndex >= 0) {
           handledBulletHit = true;
           removeProjectile(projectile.id);
@@ -6062,6 +6067,7 @@ function RemotePlane({ player, statesRef, sfxMuted, audioSettings, fogActive, re
       display.crashed = crashed;
       displayRef.current = display;
       const damaged = (plane.damage ?? 0) > 0 && !crashed;
+      if (damaged && !visualRef.current.damaged) flashPlaneHit(planeRef.current);
       const visibleThrust = Math.max(plane.thrust || 0, plane.throttle || 0);
       if (planeRef.current) {
         planeRef.current.style.display = '';
@@ -6201,7 +6207,7 @@ function RoomProjectilesLayer({
           continue;
         }
         const segment = getProjectileSegment(projectile, now);
-        if (playerState && !playerState.crashed && !projectile.groundHit && segmentHitsPlane(segment, playerState, projectile.radius ?? 1.05)) {
+        if (playerState && !playerState.crashed && !projectile.groundHit && bulletSegmentHitsPlane(segment, playerState, projectile.radius ?? BULLET_HIT_RADIUS)) {
           // The client never reports its own hit result to the server.
         }
         const point = getProjectilePoint(projectile, now);
@@ -6352,6 +6358,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
   const damageBotByBullet = useCallback((options = {}) => {
     const current = stateRef.current;
     if (current.crashed) return { killed: false };
+    flashPlaneHit(botRef.current);
     const hitAt = performance.now();
     lastHitAtRef.current = hitAt;
     const attackerKey = options.attackerKey ?? (options.source === 'player' ? 'player' : null);
@@ -6536,7 +6543,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     const scanProjectileHits = (now, bot) => {
       for (const projectile of bulletsRef.current) {
         const segment = getProjectileSegment(projectile, now);
-        const target = getTargetCandidates(bot).find((candidate) => segmentHitsPlane(segment, candidate.state, projectile.radius ?? 1.05));
+        const target = getTargetCandidates(bot).find((candidate) => bulletSegmentHitsPlane(segment, candidate.state, projectile.radius ?? BULLET_HIT_RADIUS));
         if (target) {
           removeBullet(projectile.id);
           damageTargetByBullet(target);
