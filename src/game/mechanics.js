@@ -1,3 +1,4 @@
+import { selectRocketTarget, rocketTargetKey, rocketInterceptPoint } from './rocket-guidance.js';
 import {
   AIM_GUIDE_DOT_COUNT,
   AIM_GUIDE_DOT_SPACING,
@@ -15,7 +16,6 @@ import {
   DAMAGE_SMOKE_MAX_PARTICLES,
   FUEL_SECONDS,
   PLANE_SPRITE_ASPECT,
-  ROCKET_DETECTION_RANGE,
   ROCKET_HOMING_MS,
   ROCKET_IMPACT_MS,
   ROCKET_LIFETIME_MS,
@@ -326,19 +326,23 @@ function getAngleToPoint(source, target) {
   return normalizeAngle((Math.atan2(target.y - source.y, -(target.x - source.x)) * 180) / Math.PI);
 }
 
-export function createRocketProjectile(plane, now, mountPoint, idPrefix = 'rocket', rules = null) {
+export function createRocketProjectile(plane, now, mountPoint, idPrefix = 'rocket', rules = null, targets = []) {
   const forward = getPlaneForwardVector(plane);
   const launchPoint = getPlanePoint(plane, mountPoint);
   const speed = ROCKET_SPEED * getRulePace(rules, 'rocketPace');
+  const target = selectRocketTarget(plane, targets);
   return {
     id: `${now}-${idPrefix}-${Math.random()}`,
     x: launchPoint.x,
     y: launchPoint.y,
     previousX: launchPoint.x,
     previousY: launchPoint.y,
-    vx: forward.x * speed,
-    vy: forward.y * speed,
+    vx: forward.x * speed * 0.55,
+    vy: forward.y * speed * 0.55,
     speed,
+    targetKey: target?.key ?? null,
+    acquired: true,
+    turnRate: 0,
     created: now,
     lastUpdate: now,
     guideUntil: now + ROCKET_HOMING_MS,
@@ -348,32 +352,27 @@ export function createRocketProjectile(plane, now, mountPoint, idPrefix = 'rocke
   };
 }
 
-function getNearestRocketTarget(rocket, targets) {
-  return targets.reduce((closest, target) => {
-    if (!target?.state || target.state.crashed) return closest;
-    const distance = Math.hypot(target.state.x - rocket.x, target.state.y - rocket.y);
-    if (distance > ROCKET_DETECTION_RANGE) return closest;
-    if (!closest || distance < closest.distance) return { ...target, distance };
-    return closest;
-  }, null);
-}
-
 export function updateGuidedRocket(rocket, now, targets) {
   if (rocket.groundHit) return rocket;
   const age = now - rocket.created;
   const dt = clamp((now - (rocket.lastUpdate ?? rocket.created)) / 1000, 0, 0.05);
   if (age >= ROCKET_LIFETIME_MS) return null;
-  let nextAngle = rocket.angle;
-  if (now <= rocket.guideUntil) {
-    const target = getNearestRocketTarget(rocket, targets);
-    if (target) {
-      const desiredAngle = getAngleToPoint(rocket, target.state);
-      const maxTurn = ROCKET_TURN_RATE * dt;
-      nextAngle = normalizeAngle(nextAngle + clamp(normalizeAngle(desiredAngle - nextAngle), -maxTurn, maxTurn));
-    }
-  }
+  const targetKey = rocket.acquired ? rocket.targetKey : selectRocketTarget(rocket, targets)?.key ?? null;
+  const target = !rocket.lockLost && targetKey ? targets.find(t => rocketTargetKey(t) === targetKey && t.state && !t.state.crashed && t.active !== false) : null;
+  const lockLost = rocket.lockLost || Boolean(targetKey && !target);
+  const boost = clamp(age / 200, 0, 1);
+  const speed = (rocket.speed ?? ROCKET_SPEED) * (0.55 + 0.45 * boost * boost * (3 - 2 * boost));
+  let nextAngle = rocket.angle, turnRate = rocket.turnRate ?? 0;
+  if (now <= rocket.guideUntil && target && !lockLost) {
+    const point = rocketInterceptPoint(rocket, target.state, rocket.speed ?? ROCKET_SPEED, Math.min(1.2, (rocket.guideUntil-now)/1000));
+    const error = normalizeAngle(getAngleToPoint(rocket, point) - rocket.angle);
+    const desiredRate = clamp(error * 6, -ROCKET_TURN_RATE, ROCKET_TURN_RATE);
+    turnRate += (desiredRate - turnRate) * (1 - Math.exp(-12 * dt));
+    const step = turnRate * dt;
+    nextAngle = normalizeAngle(nextAngle + (Math.sign(step) === Math.sign(error) ? Math.sign(step) * Math.min(Math.abs(step), Math.abs(error)) : step));
+  } else turnRate = 0;
+  const guidance = { targetKey, acquired: true, lockLost, turnRate };
   const rad = (nextAngle * Math.PI) / 180;
-  const speed = rocket.speed ?? ROCKET_SPEED;
   const vx = -Math.cos(rad) * speed;
   const vy = Math.sin(rad) * speed;
   const nextX = rocket.x + vx * dt;
@@ -381,6 +380,7 @@ export function updateGuidedRocket(rocket, now, targets) {
   if (nextY <= 0 || nextX <= 0 || nextX >= WORLD_WIDTH) {
     return {
       ...rocket,
+      ...guidance,
       x: clamp(nextX, 0, WORLD_WIDTH),
       y: Math.max(0, nextY),
       previousX: rocket.x,
@@ -395,6 +395,7 @@ export function updateGuidedRocket(rocket, now, targets) {
   }
   return {
     ...rocket,
+    ...guidance,
     x: nextX,
     y: nextY,
     previousX: rocket.x,

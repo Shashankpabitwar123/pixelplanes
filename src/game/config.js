@@ -137,7 +137,7 @@ export const GAMEPLAY_PACING_PRESETS = Object.freeze({
     bulletLifetimeMs: 1350 / 1.6,
     bulletInheritedFlightSeconds: 1.2,
     botBulletCooldownMs: 360,
-    rocketSpeed: 640 / 12,
+    rocketSpeed: 80,
   }),
 });
 
@@ -176,18 +176,18 @@ export const ROCKET_COOLDOWN_MS = 520;
 
 export const ROCKET_LIFETIME_MS = 5000;
 
-// Rocket homing and five-second expiry stay unchanged; this profile intentionally keeps rocket speed stable.
+// Rockets accelerate briefly, then pursue with a limited turn rate.
 export const ROCKET_SPEED = ACTIVE_GAMEPLAY_PACING.rocketSpeed;
 
 export const ROCKET_RANGE = ROCKET_SPEED * (ROCKET_LIFETIME_MS / 1000);
 
-export const ROCKET_HOMING_MS = 2000;
+export const ROCKET_HOMING_MS = 2500;
 
 export const ROCKET_DETECTION_RANGE = 90;
 
 export const ROCKET_IMPACT_MS = 650;
 
-export const ROCKET_TURN_RATE = 340;
+export const ROCKET_TURN_RATE = 180;
 
 export const PLANE_SPRITE_ASPECT = 935 / 1620;
 

@@ -1,3 +1,4 @@
+import { selectRocketTarget } from './game/rocket-guidance.js';
 import { hasPredictedBulletHit } from './game/bullet-lead.js';
 import { getPlayerFlightTuning } from './game/flight-tuning.js';
 import { createWeatherCycle } from './game/weather.js';
@@ -3029,7 +3030,7 @@ function App() {
           <div className="help-rule help-note"><kbd>Fuel</kbd><span>{FUEL_SECONDS} seconds. Station refills and repairs.</span></div>
           <div className="help-rule"><kbd>Ammo</kbd><span>Bullets refill 4 seconds after your first shot.</span></div>
           <div className="help-rule"><kbd>Aim</kbd><span>Green aiming dots: your current shot is predicted to hit a nearby bot. Turns can make it miss.</span></div>
-          <div className="help-rule"><kbd>Rocket</kbd><span>Tracks targets within {ROCKET_DETECTION_RANGE} units for {ROCKET_HOMING_MS / 1000} seconds; expires after {ROCKET_LIFETIME_MS / 1000} seconds.</span></div>
+          <div className="help-rule"><kbd>Rocket</kbd><span>Brackets show your rocket target ahead. Tracks for {ROCKET_HOMING_MS / 1000} seconds; expires after {ROCKET_LIFETIME_MS / 1000} seconds.</span></div>
           <div className="help-rule"><kbd>Hit</kbd><span>First hit smokes, second hit blasts.</span></div>
           <div className="help-rule"><kbd>Score</kbd><span>Kills reset on death. High score stays.</span></div>
         </div>
@@ -4139,7 +4140,7 @@ function GuideCombatPage() {
           <div className="gazette-top-hud-rules">
             <article><span>FUEL</span><p><strong>{FUEL_SECONDS} seconds.</strong> The needle begins horizontal in green, then crosses yellow, orange, and red. At empty, the engine has no thrust.</p></article>
             <article><span>AMMO</span><p><strong>{MAX_BULLETS} shots.</strong> Hold <PixelKey wide>SPACE</PixelKey> to fire every {BULLET_COOLDOWN_MS} ms. Once any are used, the whole magazine refills after {BULLET_RELOAD_MS / 1000} seconds.</p></article>
-            <article><span>ROCKETS</span><p><strong>{MAX_ROCKETS} ready.</strong> Press <PixelKey>R</PixelKey>; a rocket tracks a valid plane within {ROCKET_DETECTION_RANGE} units for {ROCKET_HOMING_MS / 1000} seconds, then expires after {ROCKET_LIFETIME_MS / 1000} seconds.</p></article>
+            <article><span>ROCKETS</span><p><strong>{MAX_ROCKETS} ready.</strong> Press <PixelKey>R</PixelKey>; brackets show the selected target ahead within {ROCKET_DETECTION_RANGE} units. The rocket accelerates and intercepts that target for {ROCKET_HOMING_MS / 1000} seconds, then expires after {ROCKET_LIFETIME_MS / 1000} seconds.</p></article>
           </div>
         </section>
       </div>
@@ -4399,6 +4400,7 @@ function PlayablePlane({
   const keysRef = useRef(new Set());
   const planeRef = useRef(null);
   const aimGuideDotRefs = useRef([]);
+  const rocketTargetBracketRef = useRef(null);
   const leadFogRef = useRef(fogActive);
   leadFogRef.current = fogActive;
   const blastRef = useRef(null);
@@ -4421,6 +4423,15 @@ function PlayablePlane({
   const fuelRefillFeedbackRef = useRef({ stationIndex: -1, time: 0 });
   const gameplayRulesRef = useRef(gameplayRules);
   const bulletTrajectoryRef = useRef(getBulletTrajectory(createInitialPlaneState(spawnX, getRuleFuelSeconds(gameplayRules)), gameplayRules));
+  const rocketCandidates = (source) => {
+    const candidates = [
+      ...(botTargetsActive ? botStateRefs.current.map((state,index)=>({type:'bot',index,state})) : []),
+      ...(trainingTargetStatesRef?.current || []).filter(t=>t.active && t.weapon==='rocket').map(t=>({...t,type:'training-target'})),
+      ...Object.entries(roomTargetStatesRef?.current || {}).map(([id,entry])=>({type:'room-player',id,state:entry?.state})),
+    ];
+    const range = leadFogRef.current ? (gameplayRulesRef.current?.weatherMode === 2 ? 45 : 65) : ROCKET_DETECTION_RANGE;
+    return candidates.filter(t=>t.state && !t.state.crashed && Math.hypot(t.state.x-source.x,t.state.y-source.y)<=range);
+  };
   const crashedRef = useRef(false);
   const ammoRef = useRef(MAX_BULLETS);
   const reloadingRef = useRef(false);
@@ -4988,7 +4999,7 @@ function PlayablePlane({
       playRocketSound();
 
       const mountPoint = rocketsRef.current === 2 ? { x: 0.34, y: 0.8 } : { x: 0.52, y: 0.73 };
-      const rocket = createRocketProjectile(stateRef.current, now, mountPoint, 'player-rocket', gameplayRulesRef.current);
+      const rocket = createRocketProjectile(stateRef.current, now, mountPoint, 'player-rocket', gameplayRulesRef.current, rocketCandidates(stateRef.current));
       onRoomProjectile?.('rocket', rocket);
 
       rocketProjectilesRef.current = [...rocketProjectilesRef.current, rocket];
@@ -5705,6 +5716,12 @@ function PlayablePlane({
           audio.filter.frequency.setTargetAtTime(520 + visibleThrust * 1350, t, 0.06);
         }
       }
+      if (rocketTargetBracketRef.current) {
+        const target = !planeState.crashed && planeState.hasLifted && !pausedRef.current && rocketsRef.current > 0
+          ? selectRocketTarget(planeState, rocketCandidates(planeState)) : null;
+        rocketTargetBracketRef.current.style.opacity = target ? '1' : '0';
+        if (target) setWorldTransformPosition(rocketTargetBracketRef.current, target.state.x, target.state.y);
+      }
       if (aimGuideDotRefs.current.length > 0) {
         if (planeState.crashed) {
           aimGuideDotRefs.current.forEach((dot) => {
@@ -5755,6 +5772,7 @@ function PlayablePlane({
         />
       </div>
       <div className="bullet-aim-guide" aria-hidden="true">
+        <i ref={rocketTargetBracketRef} className="rocket-target-bracket"><span>R</span></i>
         {Array.from({ length: AIM_GUIDE_DOT_COUNT }, (_, index) => (
           <i
             key={index}

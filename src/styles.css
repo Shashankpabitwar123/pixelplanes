@@ -8573,3 +8573,19 @@ label.flight-deck-rule-control input[type='range'] {
   background: #67ff83;
   box-shadow: 0 0 5px rgba(60, 255, 110, 0.7);
 }
+
+.rocket-target-bracket {
+  position: absolute; left: 0; bottom: calc(100% - 2px); opacity: 0;
+  width: clamp(44px, 5vw, 84px); height: clamp(28px, 3vw, 50px);
+  transform: translate3d(var(--world-x, 0vw), var(--world-y, 0vh), 0) translate(-50%, 50%);
+  background: linear-gradient(#ffc85b,#ffc85b) left top / 8px 2px no-repeat,
+    linear-gradient(#ffc85b,#ffc85b) left top / 2px 8px no-repeat,
+    linear-gradient(#ffc85b,#ffc85b) right top / 8px 2px no-repeat,
+    linear-gradient(#ffc85b,#ffc85b) right top / 2px 8px no-repeat,
+    linear-gradient(#ffc85b,#ffc85b) left bottom / 8px 2px no-repeat,
+    linear-gradient(#ffc85b,#ffc85b) left bottom / 2px 8px no-repeat,
+    linear-gradient(#ffc85b,#ffc85b) right bottom / 8px 2px no-repeat,
+    linear-gradient(#ffc85b,#ffc85b) right bottom / 2px 8px no-repeat;
+  pointer-events: none; filter: drop-shadow(0 1px 1px #172637);
+}
+.rocket-target-bracket span { position: absolute; right: -12px; top: -4px; color: #ffc85b; font: 700 10px monospace; }
