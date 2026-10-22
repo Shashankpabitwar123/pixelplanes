@@ -8636,3 +8636,6 @@ label.flight-deck-rule-control input[type='range'] {
 
 .training-practice-target .plane-visual { filter: drop-shadow(0 0 5px #ffcf54); }
 .academy-target-damage { position: absolute; top: 17px; left: 0; transform: translateX(-50%); color: #ffe18a; font-size: 9px; font-weight: 800; }
+
+.start-option.start-room-unavailable { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; opacity: 1; filter: none; }
+.room-coming-soon { padding: 2px 7px; border-radius: 4px; color: #3c2d08; background: #ffda6b; font-size: 9px; font-weight: 800; line-height: 1.1; letter-spacing: .04em; text-transform: uppercase; }

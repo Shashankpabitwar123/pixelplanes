@@ -2751,8 +2751,9 @@ function App() {
                   <button className="start-option" type="button" onClick={armTrainingStart}>
                     Training
                   </button>
-                  <button className="start-option" type="button" onClick={() => setStartScreen('room')}>
-                    Room
+                  <button className="start-option start-room-unavailable" type="button" disabled title="Multiplayer rooms are coming soon">
+                    <span>Room</span>
+                    <span className="room-coming-soon">Coming soon</span>
                   </button>
                 </div>
                 <div className="start-utility-actions" aria-label="Game settings and information">
