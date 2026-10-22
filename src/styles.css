@@ -8649,4 +8649,4 @@ label.flight-deck-rule-control input[type='range'] {
 @keyframes rocket-hint-lifetime { 0% { opacity: 0; transform: translateY(-4px); } 5%,90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .rocket-discovery, .rocket-discovery-hint { animation: none; } }
 
-.deck-choices.deck-theme { margin-top: 0; margin-bottom: 20px; }
+.deck-choices.deck-theme { margin-top: 20px; margin-bottom: 20px; }

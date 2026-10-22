@@ -36,13 +36,14 @@ export function FlightDeck({ rules, onRule, definitions, musicVolume, onMusic, e
       <div className="deck-body">
         <div className="deck-main">
           <section className="deck-section"><h3>Your flight</h3>
+
+            <div className="deck-bots"><div><strong>Enemy bots</strong><small>Choose your company in the sky</small></div>
+              <div className="deck-stepper"><button aria-label="Fewer enemy bots" disabled={rules.botCount <= 1} onClick={() => choose('botCount', rules.botCount - 1)}>−</button><output aria-live="polite">{rules.botCount}</output><button aria-label="More enemy bots" disabled={rules.botCount >= MAX_SOLO_BOTS} onClick={() => choose('botCount', rules.botCount + 1)}>+</button></div>
+            </div>
             <fieldset className="deck-choices deck-theme"><legend>World theme</legend><div>
               <button type="button" aria-pressed={theme === 'light'} onClick={() => onTheme('light')}>☀ Light</button>
               <button type="button" aria-pressed={theme === 'dark'} onClick={() => onTheme('dark')}>☾ Dark</button>
             </div></fieldset>
-            <div className="deck-bots"><div><strong>Enemy bots</strong><small>Choose your company in the sky</small></div>
-              <div className="deck-stepper"><button aria-label="Fewer enemy bots" disabled={rules.botCount <= 1} onClick={() => choose('botCount', rules.botCount - 1)}>−</button><output aria-live="polite">{rules.botCount}</output><button aria-label="More enemy bots" disabled={rules.botCount >= MAX_SOLO_BOTS} onClick={() => choose('botCount', rules.botCount + 1)}>+</button></div>
-            </div>
             <fieldset className="deck-choices"><legend>Difficulty</legend><div>{BOT_SKILL_LABELS.map((name, i) => <button key={name} aria-pressed={rules.botDifficulty === i + 1} onClick={() => choose('botDifficulty', i + 1)}>{name}</button>)}</div></fieldset>
             <fieldset className="deck-choices"><legend>Weather</legend><div>{WEATHER_LABELS.map((name, i) => <button key={name} aria-pressed={rules.weatherMode === i} onClick={() => choose('weatherMode', i)}>{name}</button>)}</div></fieldset>
             <p className="deck-note">Bots are for solo play. Training may override weather for a lesson.</p>
