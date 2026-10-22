@@ -3243,10 +3243,7 @@ function App() {
         <div className="map-edge-light map-edge-right" aria-hidden="true" />
 
         <div className="ground-band" aria-hidden="true">
-          {theme === 'dark' && <div className="night-ground-lights">
-            {hutPlacements.map((hut, index) => <span key={`house-${index}`} className="night-ground-light night-ground-light-house" style={{ left: `${hut.x}vw` }} />)}
-            {fuelTankPlacements.map((x, index) => <span key={`fuel-${index}`} className="night-ground-light night-ground-light-fuel" style={{ left: `${x}vw` }} />)}
-          </div>}
+          {theme === 'dark' && STREET_LAMP_POSITIONS.map(x => <StreetLamp key={x} x={x} />)}
           {hutPlacements.map((hut, index) => (
             <Hut key={index} className={`hut hut-${hut.variant}`} variant={hut.variant} style={{ left: `${hut.x}vw` }} />
           ))}
@@ -6749,6 +6746,34 @@ function Hut({ className, variant, style }) {
       <path className="hut-pixel" d="M57 31h36v5H57zM115 31h24v5h-24z" />
     </svg>
   );
+}
+
+// Stable irregular spacing; decorations never enter the collision system.
+const STREET_LAMP_POSITIONS = hutPlacements
+  .map((hut, index) => hut.x + 18 + (index * 7 % 9))
+  .filter(x => x < WORLD_WIDTH - 8 && fuelTankPlacements.every(fuel => Math.abs(x - fuel) > 8));
+
+function StreetLamp({ x }) {
+  return <div className="street-lamp" style={{ left: `${x}vw` }}>
+    <span className="street-lamp-pool" />
+    <span className="street-lamp-halo" />
+    <svg viewBox="0 0 56 100" shapeRendering="crispEdges">
+      <path fill="#423528" d="M7 2h9v7h33v7H16v78H5V4h2z" />
+      <path fill="#776044" d="M8 5h5v86H8zM16 10h29v4H16z" />
+      <path fill="#9b8056" d="M8 5h2v81H8zM17 10h27v2H17z" />
+      <path fill="#5c4933" d="M16 34 34 16h6L16 40z" />
+      <path fill="#89704a" d="m16 32 16-16h4L16 36z" />
+      <path fill="#3d3930" d="M41 8h3v13h-3zM36 24h16v22H36z" />
+      <path fill="#837456" d="M39 20h10v3h3v3H35v-3h4zM35 45h18v4H35z" />
+      <path fill="#b09a6c" d="M39 21h9v2h-9zM36 45h16v2H36z" />
+      <path fill="#b9782c" d="M39 27h10v17H39z" />
+      <path fill="#edb14e" d="M40 28h8v15h-8z" />
+      <path fill="#ffcf72" d="M42 29h4v13h-4z" />
+      <path fill="#48463f" d="M4 90h14v5h3v5H1v-5h3z" />
+      <path fill="#777363" d="M5 91h12v4H5zM3 96h16v2H3z" />
+      <path fill="#8e7955" d="M11 53h2v9h-2zM8 73h2v4H8z" />
+    </svg>
+  </div>;
 }
 
 function FuelTank({ style, active, className = '' }) {
