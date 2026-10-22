@@ -83,3 +83,23 @@ test('duck and restore ramps reach their target without changing selected volume
   assert.equal(audio.volume, 0.2);
   player.dispose();
 });
+test('master mute survives song, volume and duck changes and restores chosen volume', async () => {
+  const { player, audio } = setup();
+  player.setMuted(true);
+  await player.startDefault(song(15));
+  assert.equal(audio.volume, 0);
+  player.setVolume(0.4);
+  player.setDucked(true, 0);
+  await player.toggle(song(12));
+  assert.equal(audio.volume, 0);
+  player.setDucked(false, 0);
+  assert.equal(audio.volume, 0);
+  player.setMuted(false);
+  assert.equal(audio.volume, 0.4);
+  assert.equal(audio.src, song(12).src);
+  player.toggle(song(12));
+  player.setMuted(true);
+  player.setMuted(false);
+  assert.equal(audio.paused, true);
+  player.dispose();
+});

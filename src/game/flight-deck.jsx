@@ -51,7 +51,7 @@ export function FlightDeck({ rules, onRule, definitions, musicVolume, onMusic, e
           <section className="deck-section"><h3>Your sound</h3>
             <Slider label="Music" value={Math.round(musicVolume * 100)} onChange={onMusic} />
             <Slider label="Sound effects" value={Math.round(effectsVolume * 100)} onChange={onEffects} disabled={muted} />
-            <div className="deck-toggle"><span>Mute effects</span><button role="switch" aria-label="Mute sound effects" aria-checked={muted} onClick={onMute}>{muted ? 'Muted' : 'Off'}</button></div>
+            <div className="deck-toggle"><span>Mute all audio</span><button role="switch" aria-label="Mute all audio" aria-checked={muted} onClick={onMute}>{muted ? 'Muted' : 'Off'}</button></div>
             <div className="deck-toggle"><div><span>Pull-up audio</span><small>The red visual alert stays on</small></div><button role="switch" aria-label="Pull-up warning audio" aria-checked={warningEnabled} onClick={onWarning}>{warningEnabled ? 'On' : 'Off'}</button></div>
             <p className="deck-note">Music softens automatically during audible warnings.</p>
           </section>

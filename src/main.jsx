@@ -453,6 +453,10 @@ function App() {
     void musicPlayerRef.current.startDefault(MUSIC_TRACKS.find((track) => track.id === DEFAULT_MUSIC_TRACK_ID));
   }, []);
   useEffect(() => {
+    musicPlayerRef.current.setMuted(sfxMuted);
+  }, [sfxMuted]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => setMusicHintActive(false), 8000);
     return () => window.clearTimeout(timer);
   }, []);
@@ -2541,7 +2545,7 @@ function App() {
       <button
         className={`sfx-toggle${sfxMuted ? ' sfx-muted' : ''}`}
         type="button"
-        aria-label={sfxMuted ? 'Turn game sounds on' : 'Turn game sounds off'}
+        aria-label={sfxMuted ? 'Unmute all audio' : 'Mute all audio'}
         aria-pressed={sfxMuted}
         onClick={() => setSfxMuted((muted) => !muted)}
       >
@@ -3693,7 +3697,7 @@ function GuideNavigationPage() {
         <article><div className="gazette-console-mini gazette-console-mini-pause"><i /></div><div><h4>Pause / resume</h4><p>Click the orange control to freeze a started flight. Click it again, or press <PixelKey wide>SPACE</PixelKey> while paused, to continue.</p></div></article>
         <article><div className="gazette-console-mini"><img src="/assets/restart-icon.png" alt="Restart" draggable="false" /></div><div><h4>Restart</h4><p>Ends the local run, resets its score and supplies, and returns you to the Start screen. In a room, it also leaves the room.</p></div></article>
         <article><div className="gazette-console-mini"><img src="/assets/music-note-icon-transparent.png" alt="Music" draggable="false" /></div><div><h4>Music</h4><p>Opens ten songs. Choose a number to play it, then use the slider beneath the grid to set background-music volume.</p></div></article>
-        <article><div className="gazette-console-mini"><img src="/assets/sfx-speaker-icon.svg" alt="Speaker" draggable="false" /></div><div><h4>Game sound</h4><p>Mutes or restores engine, bullets, rockets, hits, crashes, and rain. Background music keeps playing.</p></div></article>
+        <article><div className="gazette-console-mini"><img src="/assets/sfx-speaker-icon.svg" alt="Speaker" draggable="false" /></div><div><h4>Game sound</h4><p>Mutes or restores all game audio, including music, sound effects, and pull-up warnings.</p></div></article>
         <article><div className="gazette-console-mini"><img src="/assets/help-question-icon.png" alt="Question mark" draggable="false" /></div><div><h4>Quick rules</h4><p>Opens the short in-game reference for keys, modes, landing, fuel, weapons, map dots, hits, and scoring. It does not pause the flight.</p></div></article>
         <article><div className="gazette-console-mini"><img src="/assets/exact-plane.png" alt="Plane" draggable="false" /></div><div><h4>Plane colours</h4><p>Opens six body colours—blue, red, yellow, purple, green, and cyan—and three blinking-beacon pairs.</p></div></article>
         <article><div className="gazette-console-mini"><img src="/assets/theme-lightbulb-icon.svg" alt="Light bulb" draggable="false" /></div><div><h4>Day / night</h4><p>Switches the world between light and dark. The moon, stars, fuel beacons, and navigation lights are strongest at night.</p></div></article>
