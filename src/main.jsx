@@ -1,3 +1,4 @@
+import { createWeatherCycle } from './game/weather.js';
 import { FlightDeck } from './game/flight-deck.jsx';
 import { createGroundWarningTracker, createPullUpAudio } from './game/ground-warning.js';
 import { AIRBORNE_THRUST_SCALE, applyFlightForces, flightTurnAuthority, interpolateFlightState } from './game/flight.js';
@@ -315,20 +316,10 @@ const COW_INSTANCES = cowOffsets.flatMap((offset) =>
   })),
 );
 
-const WEATHER_MODE_LABELS = ['Clear', 'Normal', 'Harsh', 'Random'];
 const SOLO_GAME_CONTROL_DEFINITIONS = [
-  // Flight tuning is first because it is the most immediately felt local rule.
-  // Every pace selector is deliberately capped at the stock 100% ceiling.
-  { key: 'flightPace', label: 'Flight speed', detail: 'Thrust + top speed', min: 70, max: 100, format: (value) => `${value}%` },
-  { key: 'turnPace', label: 'Turn speed', detail: 'Steering response', min: 65, max: 100, format: (value) => `${value}%` },
-  { key: 'bulletPace', label: 'Bullet speed', detail: 'Same aiming range', min: 70, max: 100, format: (value) => `${value}%` },
-  { key: 'rocketPace', label: 'Rocket speed', detail: '2 s track · 5 s life', min: 75, max: 100, format: (value) => `${value}%` },
-  { key: 'botCount', label: 'Enemy bots', detail: 'Start mode', min: 1, max: MAX_SOLO_BOTS, format: (value) => `${value}` },
-  { key: 'botDifficulty', label: 'Bot skill', detail: 'Easy to ace', min: 1, max: 5, format: (value) => BOT_SKILL_LABELS[value - 1] || 'Standard' },
-  { key: 'bulletCooldownMs', label: 'Shot interval', detail: 'SPACE burst', min: 45, max: 180, format: (value) => `${value} ms` },
-  { key: 'bulletReloadSeconds', label: 'Reload time', detail: 'Full magazine', min: 3, max: 10, format: (value) => `${value} s` },
-  { key: 'fuelSeconds', label: 'Fuel capacity', detail: 'Full refill capacity', min: 20, max: 60, format: (value) => `${value} s` },
-  { key: 'weatherMode', label: 'Weather', detail: 'Solo bot sky', min: 0, max: 3, format: getWeatherModeLabel },
+  { key: 'flightPace', label: 'Flight speed', min: 70, max: 100 },
+  { key: 'turnPace', label: 'Turn response', min: 65, max: 100 },
+  { key: 'fuelSeconds', label: 'Fuel capacity', min: 20, max: 60 },
 ];
 
 function getRulePace(rules, key) {
@@ -351,9 +342,6 @@ function getRuleBulletReloadMs(rules) {
   return Number.isFinite(seconds) ? seconds * 1000 : BULLET_RELOAD_MS;
 }
 
-function getWeatherModeLabel(value) {
-  return WEATHER_MODE_LABELS[clamp(Math.round(Number(value) || 0), 0, WEATHER_MODE_LABELS.length - 1)];
-}
 
 function getPlayerFlightTuning(rules) {
   const flightPace = clamp(getRulePace(rules, 'flightPace'), 0.7, 1);
@@ -536,7 +524,8 @@ function App() {
   const botStateRefs = useRef(createInitialBotStates([], MAX_SOLO_BOTS));
   const playerApiRef = useRef(null);
   const botApiRefs = useRef(Array.from({ length: MAX_SOLO_BOTS }, () => ({ current: null })));
-  const soloWeatherProfileRef = useRef(1);
+  const weatherPausedRef = useRef(paused);
+  weatherPausedRef.current = paused;
   const roomSocketRef = useRef(null);
   const roomSessionRef = useRef(readRoomSession());
   const roomReconnectTimerRef = useRef(0);
@@ -2564,7 +2553,7 @@ function App() {
 
   const updateSoundLevel = useCallback((kind, event) => {
     const nextLevel = Number(event.target.value) / 100;
-    setSoundLevels((levels) => ({ ...levels, [kind]: nextLevel }));
+    setSoundLevels((levels) => kind === 'combat' ? { ...levels, ammo: nextLevel, rocket: nextLevel, explosion: nextLevel } : { ...levels, [kind]: nextLevel });
     playFlightDeckTick(sfxMuted, effectsVolume);
   }, [sfxMuted, effectsVolume]);
 
@@ -2685,94 +2674,29 @@ function App() {
   }, [roomConnectionStatus, roomLobby?.weather?.seed, roomLobby?.weather?.startedAt]);
 
   useEffect(() => {
-    const selectedMode = clamp(Math.round(Number(soloGameRules.weatherMode) || 0), 0, WEATHER_MODE_LABELS.length - 1);
-    // Random picks a fresh complete sky profile when a local flight is armed;
-    // room weather never reads this value.
-    soloWeatherProfileRef.current = selectedMode === 3
-      ? Math.floor(Math.random() * 3)
-      : selectedMode;
-  }, [gameMode, gameStarted, soloGameRules.weatherMode]);
-
-  useEffect(() => {
-    if (roomLobby?.weather) {
-      return undefined;
+    if (roomLobby?.weather) return;
+    setFogActive(false); setRainActive(false); setFogAnimationsPaused(true);
+    if (!gameStarted) return;
+    if (trainingWeatherLessonActive) {
+      setFogActive(true); setRainActive(true); setFogAnimationsPaused(false);
+      return;
     }
-    // The final Training lesson is deliberately authored as a fog run. Outside
-    // that one lesson, Training uses the player's local sky rule like Bot mode.
-    if (gameMode === 'training' && trainingWeatherLessonActive) {
-      setFogActive(true);
-      setFogAnimationsPaused(false);
-      return undefined;
-    }
-    const weatherMode = soloWeatherProfileRef.current;
-    if (weatherMode === 0) {
-      setFogActive(false);
-      setFogAnimationsPaused(true);
-      return undefined;
-    }
-    const harshWeather = weatherMode === 2;
-    let stopped = false;
-    let timer = 0;
-
-    const scheduleFog = (delay) => {
-      timer = window.setTimeout(() => {
-        if (stopped) return;
-        setFogActive(true);
-        timer = window.setTimeout(() => {
-          if (stopped) return;
-          setFogActive(false);
-          scheduleFog(harshWeather ? 5000 + Math.random() * 7000 : 22000 + Math.random() * 28000);
-        }, harshWeather ? 18000 + Math.random() * 9000 : 13000 + Math.random() * 9000);
-      }, delay);
-    };
-
-    scheduleFog(harshWeather ? 1100 + Math.random() * 1800 : 4500 + Math.random() * 6500);
-    return () => {
-      stopped = true;
-      window.clearTimeout(timer);
-    };
-  }, [gameMode, roomLobby?.weather, trainingWeatherLessonActive, soloGameRules.weatherMode, gameStarted]);
-
-  useEffect(() => {
-    if (roomLobby?.weather) {
-      return undefined;
-    }
-    if (gameMode === 'training' && trainingWeatherLessonActive) {
-      setRainActive(true);
-      return undefined;
-    }
-    const weatherMode = soloWeatherProfileRef.current;
-    if (weatherMode === 0) {
-      setRainActive(false);
-      return undefined;
-    }
-    const harshWeather = weatherMode === 2;
-    let stopped = false;
-    let timer = 0;
-
-    const scheduleRain = (delay) => {
-      timer = window.setTimeout(() => {
-        if (stopped) return;
-        setRainActive(true);
-        timer = window.setTimeout(() => {
-          if (stopped) return;
-          setRainActive(false);
-          scheduleRain(harshWeather ? 7000 + Math.random() * 10000 : 36000 + Math.random() * 52000);
-        }, harshWeather ? 24000 + Math.random() * 12000 : 14000 + Math.random() * 11000);
-      }, delay);
-    };
-
-    scheduleRain(harshWeather ? 2200 + Math.random() * 3600 : 15000 + Math.random() * 17000);
-    return () => {
-      stopped = true;
-      window.clearTimeout(timer);
-    };
-  }, [gameMode, roomLobby?.weather, trainingWeatherLessonActive, soloGameRules.weatherMode, gameStarted]);
+    const cycle = createWeatherCycle(soloGameRules.weatherMode);
+    let last = performance.now();
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      const elapsed = Math.min(250, now - last); last = now;
+      if (weatherPausedRef.current) return;
+      const weather = cycle.advance(elapsed);
+      setFogActive(weather.fog); setRainActive(weather.rain);
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [gameMode, gameStarted, restartSignal, roomLobby?.weather, trainingWeatherLessonActive, soloGameRules.weatherMode]);
 
   useEffect(() => {
     window.clearTimeout(rainSoundStartTimerRef.current);
     rainSoundStartTimerRef.current = 0;
-    if (!rainActive || sfxMuted) {
+    if (!rainActive || sfxMuted || paused) {
       rainAudioRef.current?.stop();
       rainAudioRef.current = null;
       return;
@@ -2794,7 +2718,7 @@ function App() {
       window.clearTimeout(rainSoundStartTimerRef.current);
       rainSoundStartTimerRef.current = 0;
     };
-  }, [rainActive, sfxMuted, effectiveSoundLevels.rain]);
+  }, [rainActive, sfxMuted, paused, effectiveSoundLevels.rain]);
 
   useEffect(() => {
     const resumeFromPause = (event) => {
@@ -2893,7 +2817,7 @@ function App() {
     : [];
 
   return (
-    <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}${isTrainingGame ? ' scene-training' : ''}`} aria-label="PixelPlanes game world">
+    <main className={`scene scene-${theme}${paused ? ' scene-paused' : ''}${roomLobby?.weather ? '' : soloGameRules.weatherMode === 2 ? ' weather-harsh' : ' weather-normal'}${isTrainingGame ? ' scene-training' : ''}`} aria-label="PixelPlanes game world">
       <div className="sky-gradient" />
       {roomNotifications.length > 0 && (
         <div className="room-notification-stack" aria-live="polite" aria-atomic="false">
@@ -3777,7 +3701,7 @@ function App() {
       </div>
       {rainActive && (
         <div key={`rain-${theme}`} className="rain-layer rain-layer-active" aria-hidden="true">
-          {rainDrops.map((drop) => (
+          {(soloGameRules.weatherMode === 2 && !roomLobby?.weather ? [...rainDrops, ...rainDrops.map(drop => ({ ...drop, id: `heavy-${drop.id}`, left: (drop.left + 37) % 100 }))] : rainDrops).map((drop) => (
             <i
               key={drop.id}
               style={{
@@ -4629,7 +4553,7 @@ function PlayablePlane({
 
     playerApiRef.current = {
       playHitSound: () => {
-        playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current, audioSettingsRef.current?.master ?? 1);
+        playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current, audioSettingsRef.current?.ammo ?? 1);
       },
       hitByBullet: (options = {}) => {
         const current = stateRef.current;
@@ -4645,7 +4569,7 @@ function PlayablePlane({
         };
         stateRef.current = next;
         damageLevelRef.current = nextDamage;
-        if (!options.skipHitSound) playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current, audioSettingsRef.current?.master ?? 1);
+        if (!options.skipHitSound) playPlaneBulletHitSound(engineAudioRef.current?.context, sfxMutedRef.current, audioSettingsRef.current?.ammo ?? 1);
         setDamageLevel(nextDamage);
         onPlaneState(next);
       },
@@ -6318,6 +6242,8 @@ function RoomProjectilesLayer({
 
 function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, playerApiRef, botStateRefs, botApiRefs, onBotMove, sfxMuted, audioSettings, gameplayRules, fogActive, registerGameFrameCallback }) {
   const botRef = useRef(null);
+  const fogActiveRef = useRef(fogActive);
+  fogActiveRef.current = fogActive;
   const stateRef = useRef(createInitialBotState());
   const bulletsRef = useRef([]);
   const bulletElementRefs = useRef(new Map());
@@ -6400,7 +6326,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
     };
     stateRef.current = next;
     botDamageRef.current = nextDamage;
-    playPlaneBulletHitSound(null, sfxMuted, audioSettingsRef.current?.master ?? 1);
+    playPlaneBulletHitSound(null, sfxMuted, audioSettingsRef.current?.ammo ?? 1);
     setBotDamage(nextDamage);
     onBotMove(botIndex, next);
     return { killed: false };
@@ -6625,7 +6551,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
 
     const simulateBot = (current, dt, now) => {
       const next = { ...current };
-      const botFlightTuning = getBotFlightTuning(gameplayRulesRef.current);
+      const botFlightTuning = getBotFlightTuning(gameplayRulesRef.current, fogActiveRef.current);
       const targetCandidates = getTargetCandidates(next);
       const targetChoice = selectBotCombatTarget(
         next,
@@ -6652,7 +6578,9 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       const roamDirection = Math.abs(next.vx) > 1 ? Math.sign(next.vx) : next.x < WORLD_WIDTH / 2 ? 1 : -1;
       const roamPhase = now / 1900 + next.x * 0.025;
       const rawTarget = pursuing
-        ? getBotPursuitPoint(targetState, distance, botFlightTuning)
+        ? (distance < botFlightTuning.fireMaxDistance
+          ? getBotAimPoint(next, targetState, distance, now, botIndex, botFlightTuning, (window.innerWidth || 1440) / (window.innerHeight || 900), getRulePace(gameplayRulesRef.current, 'bulletPace'))
+          : getBotPursuitPoint(targetState, distance, botFlightTuning))
         : {
             x: clamp(next.x + roamDirection * (74 + Math.sin(roamPhase) * 16), 34, WORLD_WIDTH - 34),
             y: clamp(next.y + Math.sin(roamPhase) * 30 + 6, 30, WORLD_HEIGHT - 65),
@@ -6772,7 +6700,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       next.y = clamp(next.y, 0, WORLD_HEIGHT - 10);
 
       if (pursuing && targetState && next.airborne && next.y > 5) {
-        const aimPoint = getBotAimPoint(next, targetState, distance, now, botIndex, botFlightTuning);
+        const aimPoint = getBotAimPoint(next, targetState, distance, now, botIndex, botFlightTuning, (window.innerWidth || 1440) / (window.innerHeight || 900), getRulePace(gameplayRulesRef.current, 'bulletPace'));
         const aimAngle = angleToPoint(next, aimPoint);
         const aimError = Math.abs(normalizeAngle(aimAngle - next.angle));
         const aimRad = (next.angle * Math.PI) / 180;

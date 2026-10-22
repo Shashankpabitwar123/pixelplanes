@@ -1,3 +1,4 @@
+import { WEATHER_LABELS } from './weather.js';
 import React, { useEffect, useRef } from 'react';
 import { BOT_SKILL_LABELS } from './bot-ai.js';
 import { MAX_SOLO_BOTS } from './config.js';
@@ -39,7 +40,7 @@ export function FlightDeck({ rules, onRule, definitions, musicVolume, onMusic, e
               <div className="deck-stepper"><button aria-label="Fewer enemy bots" disabled={rules.botCount <= 1} onClick={() => choose('botCount', rules.botCount - 1)}>−</button><output aria-live="polite">{rules.botCount}</output><button aria-label="More enemy bots" disabled={rules.botCount >= MAX_SOLO_BOTS} onClick={() => choose('botCount', rules.botCount + 1)}>+</button></div>
             </div>
             <fieldset className="deck-choices"><legend>Difficulty</legend><div>{BOT_SKILL_LABELS.map((name, i) => <button key={name} aria-pressed={rules.botDifficulty === i + 1} onClick={() => choose('botDifficulty', i + 1)}>{name}</button>)}</div></fieldset>
-            <fieldset className="deck-choices"><legend>Weather</legend><div>{['Clear', 'Normal', 'Harsh', 'Random'].map((name, i) => <button key={name} aria-pressed={rules.weatherMode === i} onClick={() => choose('weatherMode', i)}>{name}</button>)}</div></fieldset>
+            <fieldset className="deck-choices"><legend>Weather</legend><div>{WEATHER_LABELS.map((name, i) => <button key={name} aria-pressed={rules.weatherMode === i} onClick={() => choose('weatherMode', i)}>{name}</button>)}</div></fieldset>
             <p className="deck-note">Bots are for solo play. Training may override weather for a lesson.</p>
           </section>
           <section className="deck-section"><h3>Your sound</h3>
@@ -50,12 +51,12 @@ export function FlightDeck({ rules, onRule, definitions, musicVolume, onMusic, e
             <p className="deck-note">Music softens automatically during audible warnings.</p>
           </section>
         </div>
-        <details className="deck-details"><summary>Advanced gameplay <span>Flight, weapons &amp; fuel</span></summary><div className="deck-advanced">
-          {definitions.filter(c => !['botCount', 'botDifficulty', 'weatherMode'].includes(c.key)).map(c => <Slider key={c.key} label={c.label} min={c.min} max={c.max} value={rules[c.key]} suffix={c.key === 'bulletCooldownMs' ? ' ms' : ['fuelSeconds','bulletReloadSeconds'].includes(c.key) ? ' s' : '%'} onChange={e => onRule(c.key,e)} />)}
-          <p className="deck-note">Solo and training only. Lower shot intervals mean faster firing.</p>
+        <details className="deck-details"><summary>Advanced gameplay <span>Handling &amp; fuel</span></summary><div className="deck-advanced">
+          {definitions.filter(c => ['flightPace', 'turnPace', 'fuelSeconds'].includes(c.key)).map(c => <Slider key={c.key} label={c.label} min={c.min} max={c.max} value={rules[c.key]} suffix={c.key === 'bulletCooldownMs' ? ' ms' : ['fuelSeconds','bulletReloadSeconds'].includes(c.key) ? ' s' : '%'} onChange={e => onRule(c.key,e)} />)}
+          <p className="deck-note">Solo and training only. Weapons use the standard balanced settings.</p>
         </div></details>
         <details className="deck-details"><summary>Sound mix &amp; appearance <span>Individual sounds &amp; lights</span></summary><div className="deck-advanced">
-          {[['engine','Propeller'],['ammo','Gunfire'],['rocket','Rockets'],['explosion','Explosions'],['rain','Rain']].map(([key,label]) => <Slider key={key} label={`${label} volume`} value={Math.round(levels[key]*100)} onChange={e => onLevel(key,e)} />)}
+          {[['engine','Propeller'],['combat','Combat sounds'],['rain','Rain']].map(([key,label]) => <Slider key={key} label={`${label} volume`} value={Math.round((key === 'combat' ? levels.ammo : levels[key])*100)} onChange={e => onLevel(key,e)} />)}
           <Slider label="Plane light brightness" value={Math.round(light*100)} onChange={onLight} />
           <p className="deck-note">Individual sound levels are scaled by the overall effects volume.</p>
         </div></details>

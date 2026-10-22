@@ -8543,3 +8543,12 @@ label.flight-deck-rule-control input[type='range'] {
   .deck-details summary > span { display: none; }
   .deck-choices button { font-size: 12px; padding: 10px 3px; }
 }
+
+/* Weather severity changes visibility, never flight physics. */
+.weather-normal .fog-layer-active { opacity: .6; }
+.weather-harsh .fog-layer-active { opacity: 1; }
+.weather-harsh .fog-bank { height: clamp(65px, calc(7vw * var(--fog-scale)), 170px); }
+.weather-harsh .fog-layer::before { background-color: rgba(160, 180, 194, .14); }
+.weather-normal .rain-layer-active { opacity: .65; }
+.weather-harsh .rain-layer-active { opacity: 1; }
+.scene-paused .rain-layer i, .scene-paused .fog-bank, .scene-paused .fog-layer::before { animation-play-state: paused; }

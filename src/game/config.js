@@ -27,7 +27,7 @@ export const SOLO_GAME_RULE_DEFAULTS = Object.freeze({
 
 const SOLO_GAME_RULE_LIMITS = Object.freeze({
   botCount: [1, MAX_SOLO_BOTS],
-  botDifficulty: [1, 5],
+  botDifficulty: [1, 3],
   flightPace: [70, 100],
   turnPace: [65, 100],
   bulletPace: [70, 100],
@@ -35,7 +35,7 @@ const SOLO_GAME_RULE_LIMITS = Object.freeze({
   bulletReloadSeconds: [3, 10],
   rocketPace: [75, 100],
   fuelSeconds: [20, 60],
-  weatherMode: [0, 3],
+  weatherMode: [0, 2],
 });
 
 function clampSoloRule(value, [minimum, maximum], fallback, integer = true) {

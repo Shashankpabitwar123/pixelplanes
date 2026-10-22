@@ -2,13 +2,14 @@ import {
   ACTIVE_GAMEPLAY_PACING,
   BOT_BULLET_COOLDOWN_MS,
   BULLET_LIFETIME_MS,
+  BULLET_FLIGHT_SECONDS,
   BULLET_RANGE,
 } from './config.js';
 
 const clampValue = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 const toRadians = (degrees) => (degrees * Math.PI) / 180;
 
-export const BOT_SKILL_LABELS = Object.freeze(['Easy', 'Casual', 'Standard', 'Hard', 'Ace']);
+export const BOT_SKILL_LABELS = Object.freeze(['Easy', 'Standard', 'Hard']);
 
 // Difficulty changes decision quality, not health or the player's physics.
 // Every profile uses the same collision rules and weapon damage; stronger bots
@@ -47,45 +48,9 @@ export const BOT_SKILL_PROFILES = Object.freeze([
     groundLookAheadSeconds: 0.72,
     groundEmergencyClearance: 1,
     groundRecoveryAltitude: 18,
-    groundRecoveryClimbSpeed: 4.2,
   }),
   Object.freeze({
     level: 2,
-    label: 'Casual',
-    wakeDistance: 84,
-    forgetDistance: 108,
-    decisionIntervalMs: 320,
-    pursuitLeadFactor: 0.62,
-    movementScale: 0.9,
-    speedScale: 0.93,
-    responseScale: 0.86,
-    bulletCooldownScale: 1.55,
-    aimLeadFactor: 0.58,
-    aimWobbleDegrees: 6,
-    aimWobblePeriodMs: 820,
-    fireAimError: 14,
-    fireMinDistance: 4,
-    fireMaxDistance: 96,
-    combatWeaveStrength: 2.5,
-    combatWeavePeriodMs: 1650,
-    evasionDurationMs: 620,
-    evasionStrength: 15,
-    targetLockMs: 2700,
-    targetRotationMs: 5600,
-    targetJudgmentNoise: 0.18,
-    finishTargetBias: 0.09,
-    retaliationDelayMs: 360,
-    retaliationMemoryMs: 1250,
-    collisionLookAheadSeconds: 0.52,
-    collisionClearance: 5,
-    collisionSidestep: 18,
-    groundLookAheadSeconds: 0.88,
-    groundEmergencyClearance: 1,
-    groundRecoveryAltitude: 20,
-    groundRecoveryClimbSpeed: 4.8,
-  }),
-  Object.freeze({
-    level: 3,
     label: 'Standard',
     wakeDistance: 98,
     forgetDistance: 124,
@@ -117,10 +82,9 @@ export const BOT_SKILL_PROFILES = Object.freeze([
     groundLookAheadSeconds: 1.02,
     groundEmergencyClearance: 1.05,
     groundRecoveryAltitude: 23,
-    groundRecoveryClimbSpeed: 5.5,
   }),
   Object.freeze({
-    level: 4,
+    level: 3,
     label: 'Hard',
     wakeDistance: 116,
     forgetDistance: 146,
@@ -152,55 +116,22 @@ export const BOT_SKILL_PROFILES = Object.freeze([
     groundLookAheadSeconds: 1.18,
     groundEmergencyClearance: 1.1,
     groundRecoveryAltitude: 26,
-    groundRecoveryClimbSpeed: 6.2,
   }),
-  Object.freeze({
-    level: 5,
-    label: 'Ace',
-    wakeDistance: 138,
-    forgetDistance: 172,
-    decisionIntervalMs: 70,
-    pursuitLeadFactor: 1,
-    movementScale: 1.24,
-    speedScale: 1.1,
-    responseScale: 1.28,
-    bulletCooldownScale: 0.52,
-    aimLeadFactor: 1,
-    aimWobbleDegrees: 0.35,
-    aimWobblePeriodMs: 1250,
-    fireAimError: 2.8,
-    fireMinDistance: 2.5,
-    fireMaxDistance: 120,
-    combatWeaveStrength: 12,
-    combatWeavePeriodMs: 1080,
-    evasionDurationMs: 1850,
-    evasionStrength: 46,
-    targetLockMs: 950,
-    targetRotationMs: 3200,
-    targetJudgmentNoise: 0.025,
-    finishTargetBias: 0.28,
-    retaliationDelayMs: 55,
-    retaliationMemoryMs: 2800,
-    collisionLookAheadSeconds: 0.92,
-    collisionClearance: 5.6,
-    collisionSidestep: 27,
-    groundLookAheadSeconds: 1.34,
-    groundEmergencyClearance: 1.15,
-    groundRecoveryAltitude: 29,
-    groundRecoveryClimbSpeed: 7,
-  }),
+
 ]);
 
-export function getBotSkillProfile(difficulty = 3) {
-  const index = Math.round(clampValue(Number(difficulty) || 3, 1, BOT_SKILL_PROFILES.length)) - 1;
+export function getBotSkillProfile(difficulty = 2) {
+  const index = Math.round(clampValue(Number(difficulty) || 2, 1, BOT_SKILL_PROFILES.length)) - 1;
   return BOT_SKILL_PROFILES[index];
 }
 
-export function getBotFlightTuning(rules) {
+export function getBotFlightTuning(rules, fog = false) {
   const profile = getBotSkillProfile(rules?.botDifficulty);
   const base = ACTIVE_GAMEPLAY_PACING.bot;
   return {
     ...profile,
+    visibilityDistance: fog ? (rules?.weatherMode === 2 ? 45 : 65) : Infinity,
+    fireMaxDistance: fog ? Math.min(profile.fireMaxDistance, rules?.weatherMode === 2 ? 45 : 65) : profile.fireMaxDistance,
     steeringGain: base.steeringGain * profile.movementScale,
     turnLimitBase: base.turnLimitBase * profile.movementScale,
     turnLimitSpeedBonus: base.turnLimitSpeedBonus * profile.movementScale,
@@ -210,8 +141,6 @@ export function getBotFlightTuning(rules) {
     cruiseThrottleResponse: base.cruiseThrottleResponse * profile.responseScale,
     thrustResponse: base.thrustResponse * profile.responseScale,
     runwayThrust: base.runwayThrust * profile.speedScale,
-    flightThrust: base.flightThrust * profile.speedScale,
-    maxSpeed: base.maxSpeed * profile.speedScale,
     bulletCooldownMs: Math.round(BOT_BULLET_COOLDOWN_MS * profile.bulletCooldownScale),
     fireAimDot: Math.cos(toRadians(profile.fireAimError + 3)),
   };
@@ -249,7 +178,7 @@ export function selectBotCombatTarget(bot, candidates, targetState, now, botInde
       ...candidate,
       key: getCandidateKey(candidate),
       distance: getCandidateDistance(bot, candidate),
-    }));
+    })).filter(candidate => candidate.distance <= (tuning.visibilityDistance ?? Infinity));
   const current = livingCandidates.find((candidate) => candidate.key === targetState?.key);
   const retaliation = livingCandidates.find((candidate) => candidate.key === targetState?.retaliationKey);
   const retaliationAge = now - (targetState?.retaliationAt ?? -Infinity);
@@ -378,11 +307,28 @@ export function getBotPursuitPoint(target, distance, tuning) {
   };
 }
 
-export function getBotAimPoint(bot, target, distance, now, botIndex, tuning) {
-  const projectileSpeed = BULLET_RANGE / (BULLET_LIFETIME_MS / 1000);
-  const leadTime = clampValue((distance / projectileSpeed) * tuning.aimLeadFactor, 0.08, 1.28);
-  const predictedX = target.x + (target.vx ?? 0) * leadTime;
-  const predictedY = target.y + (target.vy ?? 0) * leadTime + 1.1;
+export function getBotAimPoint(bot, target, distance, now, botIndex, tuning, aspect = 1, pace = 1) {
+  const life = BULLET_LIFETIME_MS / 1000 / pace;
+  const projectileSpeed = BULLET_RANGE / life;
+  const ratio = Math.max(0.1, aspect);
+  const inheritedX = (bot.vx ?? 0) * BULLET_FLIGHT_SECONDS / life;
+  const inheritedY = (bot.vy ?? 0) * BULLET_FLIGHT_SECONDS / life;
+  // Match the projectile's viewport aspect and inherited aircraft momentum.
+  const rx = target.x - bot.x, ry = (target.y + 1.1 - bot.y) / ratio;
+  const vx = (target.vx ?? 0) - inheritedX;
+  const vy = ((target.vy ?? 0) - inheritedY) / ratio;
+  const a = vx * vx + vy * vy - projectileSpeed * projectileSpeed;
+  const b = 2 * (rx * vx + ry * vy), c = rx * rx + ry * ry;
+  const discriminant = b * b - 4 * a * c;
+  let intercept = distance / projectileSpeed;
+  if (Math.abs(a) < 1e-8 && b < 0) intercept = -c / b;
+  else if (Math.abs(a) >= 1e-8 && discriminant >= 0) {
+    const roots = [(-b - Math.sqrt(discriminant)) / (2 * a), (-b + Math.sqrt(discriminant)) / (2 * a)].filter(t => t > 0);
+    if (roots.length) intercept = Math.min(...roots);
+  }
+  const leadTime = clampValue(intercept * tuning.aimLeadFactor, 0, life);
+  const predictedX = target.x + vx * leadTime;
+  const predictedY = bot.y + ry + vy * leadTime;
   const dx = predictedX - bot.x;
   const dy = predictedY - bot.y;
   const length = Math.max(0.1, Math.hypot(dx, dy));
