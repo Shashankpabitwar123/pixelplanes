@@ -1,3 +1,5 @@
+import { createSceneryCamera } from './game/scenery-window.js';
+import { ForestLayer, Pine } from './game/scenery.jsx';
 import { resumeGameAudio, setGameAudioPaused } from './game/audio-pause.js';
 import { useRocketHint } from './game/use-rocket-hint.js';
 import { planBotAltitude } from './game/bot-altitude.js';
@@ -391,6 +393,8 @@ function App() {
 
   const measuredFrameRate = useMeasuredFrameRate();
   const worldRef = useRef(null);
+  const sceneryCameraRef = useRef(null);
+  if (!sceneryCameraRef.current) sceneryCameraRef.current = createSceneryCamera({ x: getCameraX(START_X), y: getCameraY(0) });
   const mapPointerRef = useRef(null);
   const mapDotRef = useRef(null);
   const mapBotDotRefs = useRef([]);
@@ -2051,6 +2055,7 @@ function App() {
     });
   }, [roomVoiceEnabled, sendRoomMessage, unlockRoomAudio]);
   const updateCamera = useCallback((camera) => {
+    sceneryCameraRef.current.set(camera);
     if (worldRef.current) {
       worldRef.current.style.transform = `translate(${-camera.x}vw, ${camera.y}vh)`;
     }
@@ -3244,8 +3249,8 @@ function App() {
           ))}
         </div>
 
-        <ForestLayer className="forest forest-back" rows={980} />
-        <ForestLayer className="forest forest-front" rows={820} />
+        <ForestLayer className="forest forest-back" rows={980} cameraRef={sceneryCameraRef} />
+        <ForestLayer className="forest forest-front" rows={820} cameraRef={sceneryCameraRef} />
         <div className="map-edge-light map-edge-left" aria-hidden="true" />
         <div className="map-edge-light map-edge-right" aria-hidden="true" />
 
@@ -6676,31 +6681,6 @@ function Cloud({ x, y, s, speed, variant }) {
         <path d="M98 34c17-10 34-9 51 3" />
         <path d="M165 47c17-4 29-1 38 9" />
       </g>
-    </svg>
-  );
-}
-
-function ForestLayer({ className, rows }) {
-  const depth = className.includes('front') ? 'front' : 'back';
-
-  return (
-    <div className={className} aria-hidden="true">
-      {Array.from({ length: rows }, (_, index) => (
-        <Pine key={index} index={index} depth={depth} />
-      ))}
-    </div>
-  );
-}
-
-function Pine({ index, depth, style, className = '' }) {
-  const left = (index * 0.72 + (index % 7) * 0.22 + (index % 3) * 0.16) % WORLD_WIDTH;
-  const sizeNoise = ((index * 23) % 100) / 100;
-  const height = depth === 'front' ? 94 + sizeNoise * 82 : 72 + sizeNoise * 60;
-  const width = depth === 'front' ? 54 + sizeNoise * 26 : 44 + sizeNoise * 18;
-
-  return (
-    <svg className={`pine${className ? ` ${className}` : ''}`} style={{ left: `${left}vw`, width: `${width}px`, height: `${height}px`, ...style }} viewBox="0 0 70 160">
-      <path d="M35 2 13 48h14L8 84h18L3 126h26v30h12v-30h26L44 84h18L43 48h14L35 2z" />
     </svg>
   );
 }
