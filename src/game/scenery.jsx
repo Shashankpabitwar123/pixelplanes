@@ -31,31 +31,42 @@ export function Pine({ index, depth, style, className = '' }) {
   </svg>;
 }
 
+function syncTwinkle(animation, clock) {
+  if (!animation) return;
+  if (clock.paused) {
+    animation.pause();
+    animation.currentTime = clock.elapsed;
+  } else {
+    animation.play();
+    animation.startTime = clock.origin;
+  }
+}
+
 const Star = memo(function Star({ star, clock }) {
   const element = useRef(null);
   useLayoutEffect(() => {
-    // A returning star resumes its original twinkle phase, rather than starting
-    // over when the camera brings its section back into view.
-    const animation = element.current?.getAnimations()[0];
-    if (animation) animation.currentTime = clock.current.elapsed;
+    // All stars share one animation clock, while their original individual
+    // CSS delays remain intact. Returning stars never restart their twinkle.
+    syncTwinkle(element.current?.getAnimations()[0], clock.current);
   }, [clock]);
   return <i ref={element} style={{ left: `${star.x}vw`, bottom: `${star.y}vh`, width: `${star.size}px`, height: `${star.size}px`, animationDelay: star.delay }} />;
 });
 
-export const WorldStars = memo(function WorldStars({ cameraRef, registerFrame, paused }) {
+export const WorldStars = memo(function WorldStars({ cameraRef, paused }) {
   const window = useSceneryWindow(cameraRef);
-  const clock = useRef({ elapsed: 0, last: null, paused });
+  const element = useRef(null);
+  const clock = useRef(null);
+  if (!clock.current) clock.current = { origin: document.timeline.currentTime ?? performance.now(), elapsed: 0, paused };
   useLayoutEffect(() => {
     const now = document.timeline.currentTime ?? performance.now();
-    if (clock.current.last !== null && !clock.current.paused) clock.current.elapsed += now - clock.current.last;
-    clock.current.last = now;
+    if (paused && !clock.current.paused) clock.current.elapsed = now - clock.current.origin;
+    if (!paused && clock.current.paused) clock.current.origin = now - clock.current.elapsed;
     clock.current.paused = paused;
+    for (const animation of element.current.getAnimations({ subtree: true })) {
+      if (animation.animationName === 'twinkle') syncTwinkle(animation, clock.current);
+    }
   }, [paused]);
-  useLayoutEffect(() => registerFrame(0, now => {
-    if (clock.current.last !== null && !clock.current.paused) clock.current.elapsed += now - clock.current.last;
-    clock.current.last = now;
-  }), [registerFrame]);
-  return <div className="stars world-stars" aria-hidden="true">
+  return <div ref={element} className="stars world-stars" aria-hidden="true">
     {stars.filter(star => star.x >= window.left && star.x <= window.right && star.y >= window.bottom && star.y <= window.top)
       .map(star => <Star key={star.id} star={star} clock={clock} />)}
   </div>;

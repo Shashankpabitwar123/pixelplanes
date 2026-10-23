@@ -1,5 +1,5 @@
 import { createSceneryCamera } from './game/scenery-window.js';
-import { ForestLayer, Pine } from './game/scenery.jsx';
+import { ForestLayer, Pine, WorldStars } from './game/scenery.jsx';
 import { resumeGameAudio, setGameAudioPaused } from './game/audio-pause.js';
 import { useRocketHint } from './game/use-rocket-hint.js';
 import { planBotAltitude } from './game/bot-altitude.js';
@@ -3187,20 +3187,7 @@ function App() {
       </div>
 
       <div ref={worldRef} className="world" style={{ transform: `translate(${-getCameraX(START_X)}vw, 0vh)` }}>
-        <div className="stars world-stars" aria-hidden="true">
-          {stars.map((star) => (
-            <i
-              key={star.id}
-              style={{
-                left: `${star.x}vw`,
-                bottom: `${star.y}vh`,
-                width: `${star.size}px`,
-                height: `${star.size}px`,
-                animationDelay: star.delay,
-              }}
-            />
-          ))}
-        </div>
+        <WorldStars cameraRef={sceneryCameraRef} paused={paused} />
         <div className="shooting-stars" aria-hidden="true">
           {shootingStars.map((star) => (
             <i
