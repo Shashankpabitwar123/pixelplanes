@@ -11,6 +11,8 @@ export function createMusicPlayer({ createAudio = () => new Audio(), onChange = 
   let chosen = false;
   let currentTrackId = null;
   let request = 0;
+  let gameplayPaused = false;
+  let wantsPlayback = false;
 
   const play = (track, automatic = false) => {
     audio ??= createAudio();
@@ -18,11 +20,14 @@ export function createMusicPlayer({ createAudio = () => new Audio(), onChange = 
     audio.volume = muted ? 0 : volume * duck;
     if (currentTrackId !== track.id) audio.src = track.src;
     currentTrackId = track.id;
+    wantsPlayback = true;
     const attempt = ++request;
+    if (gameplayPaused) { audio.pause(); onChange(track.id); return Promise.resolve(); }
     return audio.play().then(() => {
       if (attempt === request) onChange(track.id);
     }).catch(() => {
       if (attempt !== request) return;
+      wantsPlayback = false;
       onChange(null);
       // A browser may block playback without a user gesture. Retry on a later
       // game-start gesture, but never override a deliberate selection or stop.
@@ -38,13 +43,23 @@ export function createMusicPlayer({ createAudio = () => new Audio(), onChange = 
     },
     toggle(track) {
       chosen = true;
-      if (audio && currentTrackId === track.id && !audio.paused) {
+      if (audio && currentTrackId === track.id && wantsPlayback) {
         ++request;
+        wantsPlayback = false;
         audio.pause();
         onChange(null);
         return;
       }
       return play(track);
+    },
+    setPaused(value) {
+      const next = Boolean(value);
+      if (next === gameplayPaused) return;
+      gameplayPaused = next;
+      if (next) { ++request; audio?.pause(); return; }
+      if (audio && wantsPlayback && currentTrackId !== null) {
+        return play({ id: currentTrackId, src: audio.src });
+      }
     },
     setMuted(value) {
       muted = Boolean(value);
@@ -71,6 +86,7 @@ export function createMusicPlayer({ createAudio = () => new Audio(), onChange = 
       audio?.pause();
       if (audio) audio.src = '';
       audio = null;
+      wantsPlayback = false;
     },
   };
 }

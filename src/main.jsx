@@ -457,6 +457,10 @@ function App() {
   }, [sfxMuted]);
 
   useEffect(() => {
+    void musicPlayerRef.current.setPaused(paused);
+  }, [paused]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => setMusicHintActive(false), 8000);
     return () => window.clearTimeout(timer);
   }, []);

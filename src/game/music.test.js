@@ -103,3 +103,38 @@ test('master mute survives song, volume and duck changes and restores chosen vol
   assert.equal(audio.paused, true);
   player.dispose();
 });
+test('gameplay pause resumes the same song and position, preserving mute', async () => {
+  const { player, audio } = setup();
+  await player.startDefault(song(15));
+  audio.currentTime = 42;
+  player.setMuted(true);
+  player.setPaused(true);
+  assert.equal(audio.paused, true);
+  await player.setPaused(false);
+  assert.equal(audio.paused, false);
+  assert.equal(audio.currentTime, 42);
+  assert.equal(audio.volume, 0);
+  player.dispose();
+});
+test('manual stop while gameplay is paused is respected on resume', async () => {
+  const { player, audio } = setup();
+  await player.startDefault(song(15));
+  player.setPaused(true);
+  player.toggle(song(15));
+  await player.setPaused(false);
+  assert.equal(audio.paused, true);
+  assert.equal(audio.plays, 1);
+  player.dispose();
+});
+test('changing songs during pause waits for gameplay to resume', async () => {
+  const { player, audio } = setup();
+  await player.startDefault(song(15));
+  player.setPaused(true);
+  await player.toggle(song(12));
+  assert.equal(audio.paused, true);
+  assert.equal(audio.plays, 1);
+  await player.setPaused(false);
+  assert.equal(audio.src, song(12).src);
+  assert.equal(audio.paused, false);
+  player.dispose();
+});
