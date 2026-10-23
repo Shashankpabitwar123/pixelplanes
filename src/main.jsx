@@ -4081,7 +4081,11 @@ function PlayablePlane({
     gameplayRulesRef.current = gameplayRules;
   }, [gameplayRules]);
 
+  const handledRestartRef = useRef(restartSignal);
   useEffect(() => {
+    // Callback updates (including pause/resume) must not replay an old restart.
+    if (handledRestartRef.current === restartSignal) return;
+    handledRestartRef.current = restartSignal;
     if (restartSignal === 0 || trainingSpawn) return;
     keysRef.current.clear();
     if (reloadTimerRef.current) {
