@@ -29,3 +29,6 @@ export function getPlayerFlightTuning(rules) {
     maxDiveThrustBonus: base.maxDiveThrustBonus * flightPace,
   };
 }
+
+// Fixed bot airspeed on the same meter as the player; independent of player settings.
+export const BOT_FLIGHT_TUNING = Object.freeze(getPlayerFlightTuning({ flightPace: 50 }));

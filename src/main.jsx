@@ -7,7 +7,7 @@ import { flashPlaneHit } from './game/hit-feedback.js';
 import { createRocketTrigger } from './game/rocket-trigger.js';
 import { selectRocketTarget } from './game/rocket-guidance.js';
 import { hasPredictedBulletHit } from './game/bullet-lead.js';
-import { getPlayerFlightTuning } from './game/flight-tuning.js';
+import { getPlayerFlightTuning, BOT_FLIGHT_TUNING } from './game/flight-tuning.js';
 import { createWeatherCycle } from './game/weather.js';
 import { FlightDeck } from './game/flight-deck.jsx';
 import { createGroundWarningTracker, createPullUpAudio } from './game/ground-warning.js';
@@ -6332,7 +6332,7 @@ function BotPlane({ botIndex, active, paused, restartSignal, playerStateRef, pla
       }
 
       if (next.airborne) {
-        const tuning = ACTIVE_GAMEPLAY_PACING.player;
+        const tuning = BOT_FLIGHT_TUNING;
         applyFlightForces(next, dt, { thrust: tuning.flightThrust * AIRBORNE_THRUST_SCALE, cruiseSpeed: tuning.maxLevelSpeed });
       }
 
