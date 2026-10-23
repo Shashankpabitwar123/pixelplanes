@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { resumeGameAudio, setGameAudioPaused } from './audio-pause.js';
+test('pause suspends existing effects and blocks input from restarting audio until resume', () => {
+  const make = () => ({state:'running',suspend(){this.state='suspended';return Promise.resolve();},resume(){this.state='running';return Promise.resolve();}});
+  const rotor=make(), explosion=make();
+  resumeGameAudio(rotor); resumeGameAudio(explosion);
+  setGameAudioPaused(true);
+  assert.equal(rotor.state,'suspended');
+  assert.equal(explosion.state,'suspended');
+  resumeGameAudio(rotor);
+  assert.equal(rotor.state,'suspended');
+  const lateEffect=make(); resumeGameAudio(lateEffect);
+  assert.equal(lateEffect.state,'suspended');
+  explosion.state='closed';
+  setGameAudioPaused(false);
+  assert.equal(rotor.state,'running');
+  assert.equal(lateEffect.state,'running');
+  assert.equal(explosion.state,'closed');
+  rotor.state=lateEffect.state='closed';
+  setGameAudioPaused(false);
+});

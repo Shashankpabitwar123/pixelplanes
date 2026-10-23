@@ -1,3 +1,4 @@
+import { resumeGameAudio } from './audio-pause.js';
 import { clamp } from './mechanics.js';
 
 let flightDeckTickContext = null;
@@ -18,7 +19,7 @@ export function playFlightDeckTick(muted = false, volume = 1) {
     flightDeckTickContext = new AudioContextClass();
   }
   const context = flightDeckTickContext;
-  context.resume?.();
+  resumeGameAudio(context);
 
   const t = context.currentTime;
   const tone = context.createOscillator();
@@ -48,7 +49,7 @@ export function createRainAudio() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return null;
   const context = new AudioContextClass();
-  context.resume?.();
+  resumeGameAudio(context);
   const duration = 2.4;
   const bufferLength = Math.floor(context.sampleRate * duration);
   const buffer = context.createBuffer(1, bufferLength, context.sampleRate);
@@ -114,7 +115,7 @@ export function playPlaneBulletHitSound(existingContext = null, muted = false, v
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   const context = existingContext && existingContext.state !== 'closed' ? existingContext : AudioContextClass ? new AudioContextClass() : null;
   if (!context) return;
-  context.resume?.();
+  resumeGameAudio(context);
 
   const t = context.currentTime;
   const limiter = context.createDynamicsCompressor();
@@ -207,7 +208,7 @@ export function playPlaneBlastSound(existingContext = null, impact = 1, muted = 
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   const context = existingContext && existingContext.state !== 'closed' ? existingContext : AudioContextClass ? new AudioContextClass() : null;
   if (!context) return;
-  context.resume?.();
+  resumeGameAudio(context);
 
   const t = context.currentTime;
   const amount = clamp(impact, 0.75, 1.8);

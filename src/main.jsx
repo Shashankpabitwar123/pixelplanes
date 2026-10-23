@@ -1,3 +1,4 @@
+import { resumeGameAudio, setGameAudioPaused } from './game/audio-pause.js';
 import { useRocketHint } from './game/use-rocket-hint.js';
 import { planBotAltitude } from './game/bot-altitude.js';
 import { useTraining } from './game/use-training.js';
@@ -457,6 +458,7 @@ function App() {
   }, [sfxMuted]);
 
   useEffect(() => {
+    setGameAudioPaused(paused);
     void musicPlayerRef.current.setPaused(paused);
   }, [paused]);
 
@@ -2374,7 +2376,7 @@ function App() {
       }
       const rainAudio = rainAudioRef.current;
       if (!rainAudio) return;
-      rainAudio.context.resume?.();
+      resumeGameAudio(rainAudio.context);
       const t = rainAudio.context.currentTime;
       rainAudio.gain.cancelScheduledValues(t);
       rainAudio.gain.setTargetAtTime(0.105 * effectiveSoundLevels.rain, t, 0.38);
@@ -4329,12 +4331,12 @@ function PlayablePlane({
     const ensureEngineAudio = () => {
       if (sfxMutedRef.current) return null;
       if (engineAudioRef.current) {
-        engineAudioRef.current.context.resume?.();
+        resumeGameAudio(engineAudioRef.current.context);
         return engineAudioRef.current;
       }
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return null;
-      const context = new AudioContextClass();
+      const context = resumeGameAudio(new AudioContextClass());
       const master = context.createGain();
       const rotor = context.createOscillator();
       const buzz = context.createOscillator();
@@ -4394,7 +4396,7 @@ function PlayablePlane({
       const existing = engineAudioRef.current?.context;
       const context = existing && existing.state !== 'closed' ? existing : AudioContextClass ? new AudioContextClass() : null;
       if (!context) return;
-      context.resume?.();
+      resumeGameAudio(context);
 
       const t = context.currentTime;
       const limiter = context.createDynamicsCompressor();
@@ -4497,7 +4499,7 @@ function PlayablePlane({
       const existing = engineAudioRef.current?.context;
       const context = existing && existing.state !== 'closed' ? existing : AudioContextClass ? new AudioContextClass() : null;
       if (!context) return;
-      context.resume?.();
+      resumeGameAudio(context);
 
       const t = context.currentTime;
       const limiter = context.createDynamicsCompressor();
@@ -4640,7 +4642,7 @@ function PlayablePlane({
       const existing = engineAudioRef.current?.context;
       const context = existing && existing.state !== 'closed' ? existing : AudioContextClass ? new AudioContextClass() : null;
       if (!context) return;
-      context.resume?.();
+      resumeGameAudio(context);
 
       const t = context.currentTime;
       const crashVolume = 2.05 * explosionLevel;
@@ -5346,7 +5348,7 @@ function PlayablePlane({
         const audio = engineAudioRef.current;
         if (audio) {
           const t = audio.context.currentTime;
-          const gain = planeState.crashed || sfxMutedRef.current
+          const gain = planeState.crashed || pausedRef.current || sfxMutedRef.current
             ? 0
             : Math.min(0.13, visibleThrust * 0.11) * (audioSettingsRef.current?.engine ?? 1);
           audio.master.gain.setTargetAtTime(gain, t, 0.045);
