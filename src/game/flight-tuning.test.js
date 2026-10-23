@@ -5,11 +5,13 @@ import { getPlayerFlightTuning, BOT_FLIGHT_TUNING } from './flight-tuning.js';
 import { ACTIVE_GAMEPLAY_PACING, createSoloGameRules } from './config.js';
 import { applyFlightForces, AIRBORNE_THRUST_SCALE } from './flight.js';
 
-test('70 defaults and room fallback preserve the original flight profile exactly', () => {
+test('new solo defaults apply while room fallback preserves the original profile', () => {
   const rules = createSoloGameRules();
-  assert.equal(rules.flightPace, 70);
-  assert.equal(rules.turnPace, 70);
-  assert.deepEqual(getPlayerFlightTuning(rules), ACTIVE_GAMEPLAY_PACING.player);
+  assert.equal(rules.flightPace, 60);
+  assert.equal(rules.turnPace, 100);
+  assert.deepEqual(getPlayerFlightTuning(rules), getPlayerFlightTuning({flightPace:60,turnPace:100}));
+  assert.ok(getPlayerFlightTuning(rules).maxLevelSpeed < ACTIVE_GAMEPLAY_PACING.player.maxLevelSpeed);
+  assert.equal(getPlayerFlightTuning(rules).turnBaseRate, ACTIVE_GAMEPLAY_PACING.player.turnBaseRate * 1.3);
   assert.deepEqual(getPlayerFlightTuning(null), ACTIVE_GAMEPLAY_PACING.player);
 });
 test('speed and turn boosts work independently and remain bounded', () => {

@@ -15,8 +15,8 @@ export const MAX_SOLO_BOTS = 6;
 export const SOLO_GAME_RULE_DEFAULTS = Object.freeze({
   botCount: BOT_COUNT,
   botDifficulty: 1,
-  flightPace: 70,
-  turnPace: 70,
+  flightPace: 60,
+  turnPace: 100,
   bulletPace: 100,
   bulletCooldownMs: 100,
   bulletReloadSeconds: 4,
