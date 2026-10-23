@@ -13,6 +13,7 @@ export function createMusicPlayer({ createAudio = () => new Audio(), onChange = 
   let request = 0;
   let gameplayPaused = false;
   let wantsPlayback = false;
+  let restartTrack = null;
 
   const play = (track, automatic = false) => {
     audio ??= createAudio();
@@ -37,11 +38,17 @@ export function createMusicPlayer({ createAudio = () => new Audio(), onChange = 
 
   return {
     startDefault(track) {
+      if (restartTrack) {
+        const selected = restartTrack;
+        restartTrack = null;
+        return play(selected);
+      }
       if (chosen || !track) return;
       chosen = true;
       return play(track, true);
     },
     toggle(track) {
+      restartTrack = null;
       chosen = true;
       if (audio && currentTrackId === track.id && wantsPlayback) {
         ++request;
@@ -51,6 +58,15 @@ export function createMusicPlayer({ createAudio = () => new Audio(), onChange = 
         return;
       }
       return play(track);
+    },
+    restart() {
+      // Keep the selection, but do not let clearing gameplay pause restart it.
+      if (audio && wantsPlayback) restartTrack = { id: currentTrackId, src: audio.src };
+      ++request;
+      wantsPlayback = false;
+      audio?.pause();
+      if (audio) audio.currentTime = 0;
+      onChange(null);
     },
     setPaused(value) {
       const next = Boolean(value);
@@ -87,6 +103,7 @@ export function createMusicPlayer({ createAudio = () => new Audio(), onChange = 
       if (audio) audio.src = '';
       audio = null;
       wantsPlayback = false;
+      restartTrack = null;
     },
   };
 }

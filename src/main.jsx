@@ -2156,6 +2156,7 @@ function App() {
     setRoomMutedPlayers((current) => ({ ...current, [playerId]: !current[playerId] }));
   }, []);
   const restartGame = useCallback(() => {
+    musicPlayerRef.current.restart();
     disconnectRoomSocket();
     setGameStarted(false);
     setPaused(false);
